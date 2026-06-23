@@ -19,7 +19,8 @@ pr:
             - .azuredevops/pull_request_template.md
 
 variables:
-    - group: revolt-acr
+    - name: AZURE_READY
+      value: "false"
     - name: IMAGE_TAG
       value: $(Build.SourceBranchName)-$(Build.BuildId)
 
@@ -36,6 +37,7 @@ stages:
       condition: >
           and(
               succeeded(),
+              eq(variables['AZURE_READY'], 'true'),
               or(
                   eq(variables['Build.SourceBranch'], 'refs/heads/dev'),
                   eq(variables['Build.SourceBranch'], 'refs/heads/main')
@@ -87,9 +89,6 @@ stages:
               succeeded(),
               eq(variables['Build.SourceBranch'], 'refs/heads/dev')
           )
-      variables:
-          - group: revolt-staging-env
-          - group: revolt-azure-deploy
       jobs:
           - job: deploy
             displayName: "Deploy to staging"
@@ -113,9 +112,6 @@ stages:
               succeeded(),
               eq(variables['Build.SourceBranch'], 'refs/heads/main')
           )
-      variables:
-          - group: revolt-prod-env
-          - group: revolt-azure-deploy
       jobs:
           - deployment: deploy
             displayName: "Deploy to production"
