@@ -1,0 +1,40 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+**/node_modules/
+dist/
+build/
+.pnpm-store/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+**/.tsc-out/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+**/.venv/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Claude context file
+CLAUDE.md

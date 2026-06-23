@@ -1,0 +1,27 @@
+{
+	"name": "revolt-gui",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"packageManager": "pnpm@9.15.9",
+	"scripts": {
+		"dev": "pnpm --filter @revolt/frontend dev",
+		"build": "pnpm --filter @revolt/shared-types build && pnpm --filter @revolt/frontend build",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
+		"format": "prettier --write \"**/*.{ts,tsx,css,md,json}\"",
+		"format:check": "prettier --check \"**/*.{ts,tsx,css,md,json}\"",
+		"typecheck": "tsc --build --force"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.0.0",
+		"@types/node": "^20.0.0",
+		"eslint": "^9.0.0",
+		"eslint-plugin-react": "^7.0.0",
+		"eslint-plugin-react-hooks": "^5.0.0",
+		"globals": "^16.0.0",
+		"prettier": "^3.0.0",
+		"typescript": "^5.0.0",
+		"typescript-eslint": "^8.0.0"
+	}
+}
