@@ -94,6 +94,23 @@ uv run ruff check .  # Python lint
 uv run ruff format . # Python format
 ```
 
+### Networking (Tailscale)
+
+The backend reaches the vessel over Tailscale. A Tailscale sidecar container runs alongside the backend and joins the existing tailnet — no Tailscale installation on the host is needed.
+
+**To connect to the vessel:**
+
+1. Generate an ephemeral auth key at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) (use *ephemeral* so the node is removed when the container stops)
+2. Add it to your `.env`:
+   ```
+   TAILSCALE_AUTHKEY=tskey-auth-...
+   VESSEL_HOST=revolt-onboard
+   ROS2_BRIDGE_PORT=9090
+   ```
+3. Run `docker compose up` — the sidecar joins the tailnet automatically and the backend resolves `revolt-onboard` whether you are on local WiFi or remote 5G. No code changes needed either way.
+
+Leave `TAILSCALE_AUTHKEY` empty to run without joining the tailnet (local development without the vessel).
+
 ### Environment variables
 
 See [.env.example](.env.example) for all required variables. Never commit `.env`.
