@@ -114,3 +114,57 @@ Leave `TAILSCALE_AUTHKEY` empty to run without joining the tailnet (local develo
 ### Environment variables
 
 See [.env.example](.env.example) for all required variables. Never commit `.env`.
+
+## CI/CD pipeline
+
+The pipeline is defined in `azure-pipelines.yml` and uses templates under `.azuredevops/templates/`.
+
+### What runs and when
+
+| Event | Stages |
+| ----- | ------ |
+| PR into `dev` or `main` | `ci` only (used as branch policy gate) |
+| Push to `dev` | `ci` → `push_images` → `deploy_staging` (stub) |
+| Push to `main` | `ci` → `push_images` → `deploy_prod` (manual approval required) |
+| Push to feature branches | nothing (pipeline fires only when a PR is opened) |
+
+The `push_images` and deploy stages are currently gated by `AZURE_READY: "false"` in `azure-pipelines.yml` and will be skipped until an Azure subscription and ACR are in place. Change the value to `"true"` to enable them.
+
+### CI stage
+
+Two jobs run in parallel on `ubuntu-latest`:
+
+**Frontend** — installs pnpm deps, then runs typecheck (tsc), ESLint, Prettier check, Vitest, and a production Vite build.
+
+**Backend** — installs Python deps via uv, then runs Ruff lint, Ruff format check, pytest, and a Docker build of the production image.
+
+Test results from both jobs are published to the Azure DevOps Tests tab (JUnit XML).
+
+### Azure DevOps setup required
+
+These steps are one-time portal configuration and are not in code:
+
+1. **Service connection** — create a Docker Registry connection pointing at your ACR. Name it exactly `revolt-acr-service-connection` (Project Settings → Service connections).
+
+2. **Variable groups** — create the following groups in Pipelines → Library and link them to the pipeline:
+
+   | Group | Variables |
+   | ----- | --------- |
+   | `revolt-acr` | `ACR_LOGIN_SERVER` |
+   | `revolt-staging-env` | `DATABASE_URL`, `SECRET_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+   | `revolt-prod-env` | same shape as staging, with production values |
+   | `revolt-azure-deploy` | `AZURE_SUBSCRIPTION`, `AZURE_RESOURCE_GROUP`, ARM service connection name |
+
+3. **Register the pipeline** — point Azure DevOps at `azure-pipelines.yml` in the repo root.
+
+4. **Branch policies** — on both `dev` and `main`, add a Build Validation policy that runs this pipeline. Mark it as required and set expiry to 12 hours.
+
+5. **Production environment** — create an Environment named `production` (Pipelines → Environments) and add an Approvals check with the relevant approvers. This is what gates the `deploy_prod` stage.
+
+### Staging deployment
+
+The `deploy_staging` stage is currently a stub. Once the deployment target is decided, fill in the deploy step in `azure-pipelines.yml`:
+
+- **Azure Container Apps:** `az containerapp update --name <app> --resource-group <rg> --image <acr>/revolt-api:<tag>`
+- **AKS:** `kubectl set image deployment/revolt-api revolt-api=<acr>/revolt-api:<tag>`
+- **VM:** `ssh user@host 'docker compose pull && docker compose up -d'`
