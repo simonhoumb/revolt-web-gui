@@ -128,6 +128,8 @@ The pipeline is defined in `azure-pipelines.yml` and uses templates under `.azur
 | Push to `main` | `ci` → `push_images` → `deploy_prod` (manual approval required) |
 | Push to feature branches | nothing (pipeline fires only when a PR is opened) |
 
+The `push_images` and deploy stages are currently gated by `AZURE_READY: "false"` in `azure-pipelines.yml` and will be skipped until an Azure subscription and ACR are in place. Change the value to `"true"` to enable them.
+
 ### CI stage
 
 Two jobs run in parallel on `ubuntu-latest`:
@@ -142,7 +144,7 @@ Test results from both jobs are published to the Azure DevOps Tests tab (JUnit X
 
 These steps are one-time portal configuration and are not in code:
 
-1. **Service connection** — create a Docker Registry connection pointing at your ACR. Name it exactly `revolt-acr-service-connection` (Pipelines → Service connections).
+1. **Service connection** — create a Docker Registry connection pointing at your ACR. Name it exactly `revolt-acr-service-connection` (Project Settings → Service connections).
 
 2. **Variable groups** — create the following groups in Pipelines → Library and link them to the pipeline:
 
