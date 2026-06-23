@@ -20,6 +20,24 @@ services:
             retries: 10
             start_period: 10s
 
+    tailscale:
+        image: tailscale/tailscale:latest
+        restart: unless-stopped
+        hostname: ${TS_HOSTNAME:-revolt-gui-dev}
+        environment:
+            TS_AUTHKEY: ${TAILSCALE_AUTHKEY:-}
+            TS_STATE_DIR: /var/lib/tailscale
+            TS_ACCEPT_DNS: "false"
+            TS_EXTRA_ARGS: "--accept-routes"
+        volumes:
+            - tailscale_data:/var/lib/tailscale
+            - /dev/net/tun:/dev/net/tun
+        cap_add:
+            - net_admin
+            - sys_module
+        ports:
+            - "8000:8000"
+
     backend:
         build:
             context: .
@@ -29,9 +47,10 @@ services:
         env_file: .env
         volumes:
             - ./apps/backend/src:/app/src:cached
-        ports:
-            - "8000:8000"
+        network_mode: "service:tailscale"
         depends_on:
+            tailscale:
+                condition: service_started
             db:
                 condition: service_healthy
         healthcheck:
@@ -48,7 +67,7 @@ services:
             target: dev
         restart: unless-stopped
         environment:
-            VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+            VITE_API_BASE_URL: http://tailscale:8000
         volumes:
             - ./apps/frontend/src:/app/apps/frontend/src:cached
             - ./apps/frontend/index.html:/app/apps/frontend/index.html:cached
@@ -63,6 +82,8 @@ services:
 volumes:
     pgdata:
         name: revolt-pgdata
+    tailscale_data:
+        name: revolt-tailscale-data
     frontend_nm:
         name: revolt-frontend-nm
     frontend_app_nm:
