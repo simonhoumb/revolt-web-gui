@@ -1,0 +1,15 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"rootDir": "./src",
+		"outDir": "./dist",
+		"composite": true,
+		"jsx": "react-jsx",
+		"useDefineForClassFields": true
+	},
+	"include": ["src"],
+	"references": [
+		{ "path": "../../packages/shared-types" }
+	]
+}
