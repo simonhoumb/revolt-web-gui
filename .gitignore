@@ -35,3 +35,6 @@ __pycache__/
 
 # OS
 Thumbs.db
+
+# Claude context file
+CLAUDE.md
