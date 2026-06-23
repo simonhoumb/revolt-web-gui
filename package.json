@@ -11,7 +11,9 @@
 		"lint:fix": "eslint . --fix",
 		"format": "prettier --write \"**/*.{ts,tsx,css,md,json}\"",
 		"format:check": "prettier --check \"**/*.{ts,tsx,css,md,json}\"",
-		"typecheck": "tsc --build --force"
+		"typecheck": "tsc --build --force",
+		"test": "pnpm --filter @revolt/frontend test",
+		"test:ci": "pnpm --filter @revolt/frontend test:ci"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.0.0",

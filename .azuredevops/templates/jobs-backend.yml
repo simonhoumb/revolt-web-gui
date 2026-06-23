@@ -1,0 +1,53 @@
+jobs:
+    - job: backend
+      displayName: "Backend — lint, test, docker build"
+      pool:
+          vmImage: ubuntu-latest
+
+      steps:
+          - bash: |
+                curl -LsSf https://astral.sh/uv/install.sh | sh
+                echo "##vso[task.prependpath]$HOME/.local/bin"
+            displayName: "Install uv"
+
+          - task: Cache@2
+            displayName: "Cache uv package store"
+            inputs:
+                key: 'uv | "$(Agent.OS)" | $(Build.SourcesDirectory)/apps/backend/uv.lock'
+                path: $(Pipeline.Workspace)/.uv-cache
+                restoreKeys: 'uv | "$(Agent.OS)"'
+
+          - bash: uv sync --frozen --cache-dir $(Pipeline.Workspace)/.uv-cache
+            displayName: "Install Python dependencies"
+            workingDirectory: $(Build.SourcesDirectory)/apps/backend
+
+          - bash: uv run ruff check .
+            displayName: "Lint (Ruff)"
+            workingDirectory: $(Build.SourcesDirectory)/apps/backend
+
+          - bash: uv run ruff format --check .
+            displayName: "Format check (Ruff)"
+            workingDirectory: $(Build.SourcesDirectory)/apps/backend
+
+          - bash: |
+                mkdir -p $(Build.SourcesDirectory)/test-results
+                uv run pytest --tb=short --junitxml=$(Build.SourcesDirectory)/test-results/pytest.xml
+            displayName: "Test (pytest)"
+            workingDirectory: $(Build.SourcesDirectory)/apps/backend
+
+          - task: PublishTestResults@2
+            displayName: "Publish test results"
+            condition: always()
+            inputs:
+                testResultsFormat: JUnit
+                testResultsFiles: "$(Build.SourcesDirectory)/test-results/pytest.xml"
+                testRunTitle: "Backend — pytest"
+
+          - bash: |
+                docker build \
+                    --target prod \
+                    --file apps/backend/Dockerfile \
+                    --tag revolt-api:$(Build.BuildId) \
+                    .
+            displayName: "Docker build (backend prod image)"
+            workingDirectory: $(Build.SourcesDirectory)

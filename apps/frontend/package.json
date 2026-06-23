@@ -7,7 +7,9 @@
 		"dev": "vite",
 		"build": "tsc --build && vite build",
 		"preview": "vite preview",
-		"typecheck": "tsc --build --noEmit"
+		"typecheck": "tsc --build --noEmit",
+		"test": "vitest",
+		"test:ci": "vitest run --reporter=junit --outputFile=../../test-results/vitest.xml"
 	},
 	"dependencies": {
 		"@revolt/shared-types": "workspace:*",
@@ -15,9 +17,15 @@
 		"react-dom": "^18.3.0"
 	},
 	"devDependencies": {
+		"@testing-library/jest-dom": "^6.0.0",
+		"@testing-library/react": "^16.0.0",
+		"@testing-library/user-event": "^14.0.0",
 		"@types/react": "^18.3.0",
 		"@types/react-dom": "^18.3.0",
 		"@vitejs/plugin-react": "^4.0.0",
-		"vite": "^5.0.0"
+		"@vitest/coverage-v8": "^3.0.0",
+		"jsdom": "^26.0.0",
+		"vite": "^5.0.0",
+		"vitest": "^3.0.0"
 	}
 }
