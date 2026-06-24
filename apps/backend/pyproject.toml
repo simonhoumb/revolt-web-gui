@@ -13,6 +13,7 @@ dependencies = [
     "geoalchemy2>=0.15",
     "alembic>=1.13",
     "structlog>=24.0",
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]

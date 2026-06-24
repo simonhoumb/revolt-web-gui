@@ -1,0 +1,307 @@
+"""Unit tests for RosBridgeClient._transform().
+
+No network required — exercises the topic→contract mapping for every known
+physical vessel topic. Each test asserts the correct contract type is returned
+and that key fields are populated correctly.
+"""
+
+import pytest
+
+from revolt_api.bridge.client import RosBridgeClient
+
+
+@pytest.fixture
+def client() -> RosBridgeClient:
+	return RosBridgeClient("ws://unused:9090", "physical")
+
+
+@pytest.fixture
+def sim_client() -> RosBridgeClient:
+	return RosBridgeClient(
+		"ws://unused:9090",
+		"simulation",
+		gnss_origin_lat=59.9083,
+		gnss_origin_lon=10.7512,
+	)
+
+
+def test_battery_voltage(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/battery_voltage", {"data": 23.8})
+	assert result is not None
+	assert result["type"] == "battery"
+	assert result["v"] == "1"
+	assert result["voltage_v"] == 23.8
+	assert isinstance(result["timestamp_ms"], int)
+
+
+def test_stern_port_current(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/port/current", {"data": 512})
+	assert result is not None
+	assert result["type"] == "current"
+	assert result["location"] == "stern_port"
+	assert result["raw_adc"] == 512
+	assert round(result["amperes"], 1) == pytest.approx(15.0, abs=0.2)
+
+
+def test_stern_star_current(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/star/current", {"data": 256})
+	assert result is not None
+	assert result["type"] == "current"
+	assert result["location"] == "stern_star"
+	assert result["raw_adc"] == 256
+
+
+def test_bow_current(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/bow/current", {"data": 100})
+	assert result is not None
+	assert result["type"] == "current"
+	assert result["location"] == "bow"
+
+
+def test_stern_temperature(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/DHT22/temperature", {"data": 22.5})
+	assert result is not None
+	assert result["type"] == "temperature"
+	assert result["location"] == "stern"
+	assert result["value_c"] == 22.5
+
+
+def test_stern_humidity(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/DHT22/humidity", {"data": 65.0})
+	assert result is not None
+	assert result["type"] == "humidity"
+	assert result["location"] == "stern"
+	assert result["value_pct"] == 65.0
+
+
+def test_bow_temperature(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/bow/DHT22/temperature", {"data": 19.0})
+	assert result is not None
+	assert result["type"] == "temperature"
+	assert result["location"] == "bow"
+
+
+def test_bow_humidity(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/bow/DHT22/humidity", {"data": 70.0})
+	assert result is not None
+	assert result["type"] == "humidity"
+	assert result["location"] == "bow"
+
+
+def test_emergency_stop_inactive(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/emergency_stop_status", {"data": 0})
+	assert result is not None
+	assert result["type"] == "emergency_stop"
+	assert result["active"] is False
+
+
+def test_emergency_stop_active(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/stern/emergency_stop_status", {"data": 1})
+	assert result is not None
+	assert result["active"] is True
+
+
+def test_linear_actuator_retracted(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/bow/linear_actuator_retract_state", {"data": 1})
+	assert result is not None
+	assert result["type"] == "linear_actuator"
+	assert result["retracted"] is True
+
+
+def test_linear_actuator_extended(client: RosBridgeClient) -> None:
+	result = client._transform("/arduino/bow/linear_actuator_retract_state", {"data": 0})
+	assert result is not None
+	assert result["retracted"] is False
+
+
+@pytest.mark.parametrize(
+	"raw,expected_mode",
+	[
+		(0, "manual"),
+		(1, "manual_assisted"),
+		(2, "autonomous"),
+		(3, "miscommunication"),
+		(99, "miscommunication"),  # unknown value falls back to miscommunication
+	],
+)
+def test_control_mode(client: RosBridgeClient, raw: int, expected_mode: str) -> None:
+	result = client._transform("/control_mode", {"data": raw})
+	assert result is not None
+	assert result["type"] == "control_mode"
+	assert result["mode"] == expected_mode
+
+
+def test_unknown_topic_returns_none(client: RosBridgeClient) -> None:
+	assert client._transform("/some/unknown/topic", {"data": 42}) is None
+
+
+def test_all_results_have_version(client: RosBridgeClient) -> None:
+	topics_and_msgs = [
+		("/arduino/stern/battery_voltage", {"data": 24.0}),
+		("/arduino/stern/port/current", {"data": 500}),
+		("/arduino/stern/star/current", {"data": 500}),
+		("/arduino/bow/current", {"data": 500}),
+		("/arduino/stern/DHT22/temperature", {"data": 20.0}),
+		("/arduino/stern/DHT22/humidity", {"data": 60.0}),
+		("/arduino/bow/DHT22/temperature", {"data": 20.0}),
+		("/arduino/bow/DHT22/humidity", {"data": 60.0}),
+		("/arduino/stern/emergency_stop_status", {"data": 0}),
+		("/arduino/bow/linear_actuator_retract_state", {"data": 1}),
+		("/control_mode", {"data": 0}),
+	]
+	for topic, msg in topics_and_msgs:
+		result = client._transform(topic, msg)
+		assert result is not None, f"_transform returned None for {topic}"
+		assert result["v"] == "1", f"Missing version for {topic}"
+		assert "timestamp_ms" in result, f"Missing timestamp_ms for {topic}"
+
+
+# Simulation topic tests
+
+_TWIST = {"linear": {"x": 1.1, "y": 2.2, "z": 3.3}, "angular": {"x": 4.4, "y": 5.5, "z": 6.6}}
+_POSE_STAMPED = {
+	"header": {"seq": 0, "stamp": {"secs": 0, "nsecs": 0}, "frame_id": "map"},
+	"pose": {
+		"position": {"x": 10.0, "y": 20.0, "z": 0.5},
+		"orientation": {"x": 0.0, "y": 0.0, "z": 0.707, "w": 0.707},
+	},
+}
+_POINT_STAMPED = {
+	"header": {"seq": 0, "stamp": {"secs": 0, "nsecs": 0}, "frame_id": "map"},
+	"point": {"x": 59.0, "y": 10.5, "z": 2.0},
+}
+_FLOAT32MA_2 = {"data": [1.5, 0.785], "layout": {"dim": [], "data_offset": 0}}
+_WAYPOINT_LIST = {
+	"waypoints": [
+		{
+			"id": 1,
+			"pose": {
+				"header": {"seq": 0, "stamp": {"secs": 0, "nsecs": 0}, "frame_id": "map"},
+				"pose": {"position": {"x": 59.001, "y": 10.501, "z": 0.0}, "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
+			},
+			"switch_radius": 5.0,
+			"desired_speed": 1.5,
+			"heading_mode": 1,
+			"heading": 0.785,
+		}
+	]
+}
+
+
+def test_sim_hull_position(client: RosBridgeClient) -> None:
+	result = client._transform("/revolt/sim/stc/position/hull", _POSE_STAMPED)
+	assert result is not None
+	assert result["type"] == "sim_hull_position"
+	assert result["v"] == "1"
+	assert result["pos_x"] == pytest.approx(10.0)
+	assert result["pos_y"] == pytest.approx(20.0)
+	assert result["pos_z"] == pytest.approx(0.5)
+	assert result["orient_x"] == pytest.approx(0.0)
+	assert result["orient_y"] == pytest.approx(0.0)
+	assert result["orient_z"] == pytest.approx(0.707)
+	assert result["orient_w"] == pytest.approx(0.707)
+
+
+def test_sim_hull_velocity(client: RosBridgeClient) -> None:
+	result = client._transform("/revolt/sim/stc/position/velocity", _TWIST)
+	assert result is not None
+	assert result["type"] == "sim_hull_velocity"
+	assert result["vel_x"] == pytest.approx(1.1)
+	assert result["ang_vel_z"] == pytest.approx(6.6)
+
+
+def test_sim_gnss_antenna1_produces_gnss_fix(sim_client: RosBridgeClient) -> None:
+	result = sim_client._transform("/revolt/sim/stc/gnss/antenna1/position", _POINT_STAMPED)
+	assert result is not None
+	assert result["type"] == "gnss_fix"
+	assert result["v"] == "1"
+	# _POINT_STAMPED has point.x=59.0 (East) and point.y=10.5 (North)
+	# lat = origin_lat + y_m / 111320.0
+	assert result["latitude"] == pytest.approx(59.9083 + 10.5 / 111320.0, abs=1e-6)
+	assert result["altitude_m"] == pytest.approx(2.0)
+
+
+def test_sim_gnss_antenna2_returns_none(client: RosBridgeClient) -> None:
+	assert client._transform("/revolt/sim/stc/gnss/antenna2/position", _POINT_STAMPED) is None
+
+
+def test_physical_gnss_fix(client: RosBridgeClient) -> None:
+	msg = {"latitude": 59.9083, "longitude": 10.7512, "altitude": 5.2,
+	       "status": {}, "position_covariance": [], "position_covariance_type": 0}
+	result = client._transform("/fix", msg)
+	assert result is not None
+	assert result["type"] == "gnss_fix"
+	assert result["latitude"] == pytest.approx(59.9083)
+	assert result["longitude"] == pytest.approx(10.7512)
+	assert result["altitude_m"] == pytest.approx(5.2)
+
+
+def test_sim_gnss_velocity(client: RosBridgeClient) -> None:
+	result = client._transform("/revolt/sim/stc/gnss/velocity_vector", _FLOAT32MA_2)
+	assert result is not None
+	assert result["type"] == "sim_gnss_velocity"
+	assert result["speed"] == pytest.approx(1.5)
+	assert result["heading_rad"] == pytest.approx(0.785)
+
+
+def test_sim_imu(client: RosBridgeClient) -> None:
+	result = client._transform("/revolt/sim/stc/imu/data", _TWIST)
+	assert result is not None
+	assert result["type"] == "sim_imu"
+	assert result["accel_x"] == pytest.approx(1.1)
+	assert result["ang_vel_x"] == pytest.approx(4.4)
+
+
+@pytest.mark.parametrize("topic,expected_thruster", [
+	("/thruster/bow", "bow"),
+	("/thruster/port", "port"),
+	("/thruster/starboard", "starboard"),
+])
+def test_sim_thruster_feedback(client: RosBridgeClient, topic: str, expected_thruster: str) -> None:
+	result = client._transform(topic, _FLOAT32MA_2)
+	assert result is not None
+	assert result["type"] == "sim_thruster_feedback"
+	assert result["thruster"] == expected_thruster
+	assert result["force"] == pytest.approx(1.5)
+	assert result["angle"] == pytest.approx(0.785)
+
+
+def test_sim_waypoint_list(client: RosBridgeClient) -> None:
+	result = client._transform("/waypoint_list", _WAYPOINT_LIST)
+	assert result is not None
+	assert result["type"] == "sim_waypoint_list"
+	assert len(result["waypoints"]) == 1
+	wp = result["waypoints"][0]
+	assert wp["id"] == 1
+	assert wp["pos_x"] == pytest.approx(59.001)
+	assert wp["pos_y"] == pytest.approx(10.501)
+	assert wp["switch_radius"] == pytest.approx(5.0)
+	assert wp["desired_speed"] == pytest.approx(1.5)
+	assert wp["heading_mode"] == 1
+	assert wp["heading_rad"] == pytest.approx(0.785)
+
+
+def test_sim_waypoint_list_empty(client: RosBridgeClient) -> None:
+	result = client._transform("/waypoint_list", {"waypoints": []})
+	assert result is not None
+	assert result["type"] == "sim_waypoint_list"
+	assert result["waypoints"] == []
+
+
+def test_all_sim_results_have_version(sim_client: RosBridgeClient) -> None:
+	sim_topics = [
+		("/revolt/sim/stc/position/hull", _POSE_STAMPED),
+		("/revolt/sim/stc/position/velocity", _TWIST),
+		("/revolt/sim/stc/gnss/antenna1/position", _POINT_STAMPED),
+		("/revolt/sim/stc/gnss/velocity_vector", _FLOAT32MA_2),
+		("/revolt/sim/stc/imu/data", _TWIST),
+		("/thruster/bow", _FLOAT32MA_2),
+		("/thruster/port", _FLOAT32MA_2),
+		("/thruster/starboard", _FLOAT32MA_2),
+		("/waypoint_list", _WAYPOINT_LIST),
+	]
+	for topic, msg in sim_topics:
+		result = sim_client._transform(topic, msg)
+		assert result is not None, f"_transform returned None for {topic}"
+		assert result["v"] == "1", f"Missing version for {topic}"
+		assert "timestamp_ms" in result, f"Missing timestamp_ms for {topic}"
