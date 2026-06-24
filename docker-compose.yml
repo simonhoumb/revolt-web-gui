@@ -47,6 +47,8 @@ services:
         env_file: .env
         volumes:
             - ./apps/backend/src:/app/src:cached
+            - ./apps/backend/migrations:/app/migrations:cached
+            - ./apps/backend/alembic.ini:/app/alembic.ini:cached
         network_mode: "service:tailscale"
         depends_on:
             tailscale:
