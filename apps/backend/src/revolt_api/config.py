@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 	secret_key: str = "dev-insecure-change-in-prod"
 	environment: str = "development"
 
+	# Logging
+	log_level: str = "INFO"
+
 	# Vessel connection — resolved via Tailscale sidecar in Docker
 	vessel_host: str = "revolt-onboard"
 	ros2_bridge_port: int = 9090
