@@ -12,6 +12,8 @@
 		"test:ci": "vitest run --reporter=junit --outputFile=../../test-results/vitest.xml"
 	},
 	"dependencies": {
+		"@oicl/openbridge-webcomponents": "^1.0.1",
+		"@oicl/openbridge-webcomponents-react": "^1.0.1",
 		"@revolt/shared-types": "workspace:*",
 		"react": "^18.3.0",
 		"react-dom": "^18.3.0"
