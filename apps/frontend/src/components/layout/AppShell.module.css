@@ -1,0 +1,14 @@
+.shell {
+	display: grid;
+	grid-template-rows: auto 1fr;
+	grid-template-columns: 1fr;
+	height: 100%;
+	width: 100%;
+}
+
+.content {
+	display: flex;
+	flex-direction: row;
+	overflow: hidden;
+	min-height: 0;
+}

@@ -36,5 +36,8 @@ __pycache__/
 # OS
 Thumbs.db
 
+# Test reporter output
+test-results/
+
 # Claude context file
 CLAUDE.md
