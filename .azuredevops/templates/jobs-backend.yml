@@ -17,7 +17,7 @@ jobs:
                 path: $(Pipeline.Workspace)/.uv-cache
                 restoreKeys: 'uv | "$(Agent.OS)"'
 
-          - bash: uv sync --frozen --cache-dir $(Pipeline.Workspace)/.uv-cache
+          - bash: uv sync --extra dev --frozen --cache-dir $(Pipeline.Workspace)/.uv-cache
             displayName: "Install Python dependencies"
             workingDirectory: $(Build.SourcesDirectory)/apps/backend
 
