@@ -78,6 +78,35 @@ services:
         depends_on:
             - backend
 
+    # Local dev rosbridge mock — emits fake vessel telemetry so the bridge client
+    # can be developed and tested without a physical vessel or active Tailscale connection.
+    # Usage: docker compose --profile mock up
+    # Set VESSEL_HOST=rosbridge-mock and BRIDGE_TARGET=physical in .env.
+    rosbridge-mock:
+        build:
+            context: ./infra/rosbridge_mock
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        ports:
+            - "9090:9090"
+        profiles:
+            - mock
+
+    # Socat proxy for physical vessel connectivity via Tailscale.
+    # Shares the tailscale container's network namespace so it can reach revolt-onboard
+    # on the tailnet, then exposes port 9090 to the compose network as vessel-proxy:9090.
+    # Usage: docker compose --profile vessel up
+    # Set VESSEL_HOST=vessel-proxy, BRIDGE_TARGET=physical, and TAILSCALE_AUTHKEY in .env.
+    vessel-proxy:
+        image: alpine/socat:latest
+        network_mode: "service:tailscale"
+        command: "TCP-LISTEN:9090,fork,reuseaddr TCP:revolt-onboard:9090"
+        restart: unless-stopped
+        profiles:
+            - vessel
+        depends_on:
+            - tailscale
+
 volumes:
     pgdata:
         name: revolt-pgdata
