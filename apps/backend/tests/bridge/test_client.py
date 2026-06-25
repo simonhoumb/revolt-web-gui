@@ -13,6 +13,8 @@ from websockets.asyncio.server import serve
 
 from revolt_api.bridge.client import RosBridgeClient
 
+DEAD_URL = "ws://127.0.0.1:19999"  # nothing listening here
+
 
 async def _mock_server(websocket) -> None:
 	"""Minimal rosbridge mock: subscribe → emit one message → wait for client to disconnect."""
@@ -116,3 +118,80 @@ async def test_client_unsubscribe_removes_queue(mock_bridge_url: str) -> None:
 	assert len(client._subscribers) == 0
 	await client.start()
 	await client.stop()
+
+
+async def test_exponential_backoff_on_failed_connection() -> None:
+	"""_backoff_s doubles after each failed connection attempt.
+
+	Connection refused on localhost is near-instant, so after one failed attempt
+	the client should have doubled the delay from 1 s to 2 s before sleeping to
+	retry. The 0.3 s wait gives the attempt time to fail without waiting for the
+	full retry sleep.
+	"""
+	client = RosBridgeClient(DEAD_URL, "physical")
+	assert client._backoff_s == 1.0
+
+	await client.start()
+	try:
+		await asyncio.sleep(0.3)
+		assert client._backoff_s == 2.0, f"Expected 2.0 after first failure, got {client._backoff_s}"
+	finally:
+		await client.stop()
+
+
+async def test_backoff_resets_on_successful_connection(mock_bridge_url: str) -> None:
+	"""_backoff_s resets to 1.0 when the connection succeeds."""
+	client = RosBridgeClient(mock_bridge_url, "physical")
+	q = client.subscribe()
+	await client.start()
+
+	try:
+		# Drain until we see a successful bridge_status or any telemetry message.
+		msg = await asyncio.wait_for(q.get(), timeout=5.0)
+		assert msg["v"] == "1"
+		assert client._backoff_s == 1.0, f"Expected backoff reset to 1.0, got {client._backoff_s}"
+	finally:
+		await client.stop()
+
+
+async def test_frontend_throttle_drops_within_window() -> None:
+	"""Two dispatches of a high-freq topic within the throttle window produce one queue entry.
+
+	The IMU topic has frontend_throttle_ms=100. Two _dispatch() calls in the same
+	event loop turn have near-zero elapsed time between them, so the second is dropped.
+	"""
+	client = RosBridgeClient(DEAD_URL, "physical")
+	q = client.subscribe()
+
+	imu_msg = json.dumps({
+		"op": "publish",
+		"topic": "/revolt/sim/stc/imu/data",
+		"msg": {
+			"linear": {"x": 0.1, "y": 0.0, "z": 0.0},
+			"angular": {"x": 0.0, "y": 0.0, "z": 0.0},
+		},
+	})
+
+	client._dispatch(imu_msg)
+	client._dispatch(imu_msg)  # within throttle window — should be dropped
+
+	assert q.qsize() == 1, "Second dispatch within throttle window should be dropped"
+	client.unsubscribe(q)
+
+
+async def test_unthrottled_topic_passes_every_dispatch() -> None:
+	"""Topics with no frontend_throttle_ms=0 let every message through."""
+	client = RosBridgeClient(DEAD_URL, "physical")
+	q = client.subscribe()
+
+	battery_msg = json.dumps({
+		"op": "publish",
+		"topic": "/arduino/stern/battery_voltage",
+		"msg": {"data": 24.1},
+	})
+
+	client._dispatch(battery_msg)
+	client._dispatch(battery_msg)
+
+	assert q.qsize() == 2, "Battery topic has no throttle — both dispatches should reach the queue"
+	client.unsubscribe(q)

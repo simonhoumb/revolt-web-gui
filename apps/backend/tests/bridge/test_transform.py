@@ -226,8 +226,10 @@ def test_sim_gnss_antenna2_returns_none(client: RosBridgeClient) -> None:
 
 
 def test_physical_gnss_fix(client: RosBridgeClient) -> None:
-	msg = {"latitude": 59.9083, "longitude": 10.7512, "altitude": 5.2,
-	       "status": {}, "position_covariance": [], "position_covariance_type": 0}
+	msg = {
+		"latitude": 59.9083, "longitude": 10.7512, "altitude": 5.2,
+		"status": {}, "position_covariance": [], "position_covariance_type": 0,
+	}
 	result = client._transform("/fix", msg)
 	assert result is not None
 	assert result["type"] == "gnss_fix"

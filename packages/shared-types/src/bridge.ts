@@ -66,6 +66,12 @@ export interface BridgeStatusMsg {
 	target: string;       // "physical" or "simulation"
 }
 
+export interface PingMsg {
+	v: "1";
+	type: "ping";
+	server_ms: number;    // backend unix epoch ms; compute Date.now() - server_ms for latency
+}
+
 // Simulation (pygemini/STC) message contracts
 
 export interface SimHullPositionMsg {
@@ -158,6 +164,7 @@ export type BridgeMessage =
 	| EmergencyStopMsg
 	| LinearActuatorMsg
 	| BridgeStatusMsg
+	| PingMsg
 	| GnssFixMsg
 	| SimHullPositionMsg
 	| SimHullVelocityMsg

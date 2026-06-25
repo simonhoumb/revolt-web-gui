@@ -28,7 +28,13 @@ from revolt_api.bridge.contracts import (
 	SimWaypointListMsg,
 	TemperatureMsg,
 )
-from revolt_api.bridge.protocol import RosBridgePublishOut, RosBridgeSubscribe, get_subscribe_topics
+from revolt_api.bridge.protocol import (
+	PHYSICAL_SUBSCRIBE_TOPICS,
+	SIMULATION_SUBSCRIBE_TOPICS,
+	RosBridgePublishOut,
+	RosBridgeSubscribe,
+	get_subscribe_topics,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -56,6 +62,17 @@ class RosBridgeClient:
 		self._receive_task: asyncio.Task[None] | None = None
 		self._heartbeat_task: asyncio.Task[None] | None = None
 		self._connected = False
+		self._backoff_s: float = 1.0
+
+		# Build a topic → throttle-seconds lookup covering both target inventories so that
+		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
+		all_specs = [*PHYSICAL_SUBSCRIBE_TOPICS, *SIMULATION_SUBSCRIBE_TOPICS]
+		self._topic_throttle: dict[str, float] = {
+			spec.topic: spec.frontend_throttle_ms / 1000.0
+			for spec in all_specs
+			if spec.frontend_throttle_ms > 0
+		}
+		self._topic_last_emit: dict[str, float] = {}
 
 	async def start(self) -> None:
 		self._receive_task = asyncio.create_task(self._run(), name="rosbridge_receive")
@@ -73,6 +90,9 @@ class RosBridgeClient:
 	def subscribe(self) -> "asyncio.Queue[BridgeMessage]":
 		q: asyncio.Queue[BridgeMessage] = asyncio.Queue(maxsize=100)
 		self._subscribers.add(q)
+		# Push current status immediately so new clients don't have to wait for the next
+		# connect/disconnect event to learn whether the backend is connected to rosbridge.
+		self._push_status_to(q)
 		return q
 
 	def unsubscribe(self, q: "asyncio.Queue[BridgeMessage]") -> None:
@@ -93,8 +113,11 @@ class RosBridgeClient:
 
 	async def _run(self) -> None:
 		while True:
+			connected_this_attempt = False
 			try:
 				async with connect(self._url) as ws:
+					connected_this_attempt = True
+					self._backoff_s = 1.0  # reset on successful connect
 					self._conn = ws
 					self._connected = True
 					self._broadcast_status()
@@ -110,7 +133,10 @@ class RosBridgeClient:
 				self._conn = None
 				self._connected = False
 				self._broadcast_status()
-			await asyncio.sleep(2)
+			if not connected_this_attempt:
+				self._backoff_s = min(self._backoff_s * 2, 60.0)
+			logger.info("rosbridge_reconnect_backoff", delay_s=self._backoff_s, url=self._url)
+			await asyncio.sleep(self._backoff_s)
 
 	async def _send_subscriptions(self, ws) -> None:
 		for spec in get_subscribe_topics(self._target):
@@ -130,7 +156,14 @@ class RosBridgeClient:
 			return
 		if data.get("op") != "publish":
 			return
-		msg = self._transform(data.get("topic", ""), data.get("msg", {}))
+		topic = data.get("topic", "")
+		throttle_s = self._topic_throttle.get(topic, 0.0)
+		if throttle_s:
+			now = time.monotonic()
+			if now - self._topic_last_emit.get(topic, 0.0) < throttle_s:
+				return
+			self._topic_last_emit[topic] = now
+		msg = self._transform(topic, data.get("msg", {}))
 		if msg is None:
 			return
 		dropped = 0
@@ -140,7 +173,7 @@ class RosBridgeClient:
 			except asyncio.QueueFull:
 				dropped += 1
 		if dropped:
-			logger.warning("rosbridge_queue_full", dropped=dropped, topic=data.get("topic"))
+			logger.warning("rosbridge_queue_full", dropped=dropped, topic=topic)
 
 	def _transform(self, topic: str, msg: dict) -> BridgeMessage | None:
 		now = int(time.time() * 1000)
@@ -366,8 +399,8 @@ class RosBridgeClient:
 		lon = self._gnss_origin_lon + x_m / (111320.0 * math.cos(math.radians(self._gnss_origin_lat)))
 		return lat, lon
 
-	def _broadcast_status(self) -> None:
-		msg = BridgeStatusMsg(
+	def _make_status_msg(self) -> BridgeStatusMsg:
+		return BridgeStatusMsg(
 			v="1",
 			type="bridge_status",
 			timestamp_ms=int(time.time() * 1000),
@@ -375,6 +408,13 @@ class RosBridgeClient:
 			bridge_url=self._url,
 			target=self._target,
 		)
+
+	def _push_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
+		with contextlib.suppress(asyncio.QueueFull):
+			q.put_nowait(self._make_status_msg())
+
+	def _broadcast_status(self) -> None:
+		msg = self._make_status_msg()
 		for q in list(self._subscribers):
 			with contextlib.suppress(asyncio.QueueFull):
 				q.put_nowait(msg)

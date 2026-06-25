@@ -8,7 +8,8 @@ from typing_extensions import TypedDict
 class TopicSpec:
 	topic: str
 	ros_type: str
-	throttle_rate_ms: int = 0
+	throttle_rate_ms: int = 0        # rosbridge inbound throttle: drops messages before they reach the backend
+	frontend_throttle_ms: int = 0    # backend fan-out throttle: drops messages before they reach browser queues
 	description: str = ""
 
 
@@ -96,6 +97,7 @@ SIMULATION_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/revolt/sim/stc/position/hull",
 		"geometry_msgs/PoseStamped",
+		frontend_throttle_ms=100,
 		description=(
 			"Hull position: pose.position={x,y,z} (frame_id='map', coordinate TBD: NED or WGS84), "
 			"pose.orientation={x,y,z,w} quaternion (ZYX extrinsic from DDS radians)"
@@ -104,6 +106,7 @@ SIMULATION_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/revolt/sim/stc/position/velocity",
 		"geometry_msgs/Twist",
+		frontend_throttle_ms=100,
 		description="Hull velocity: linear={x,y,z} m/s, angular={x,y,z} rad/s",
 	),
 	TopicSpec(
@@ -127,21 +130,25 @@ SIMULATION_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/revolt/sim/stc/imu/data",
 		"geometry_msgs/Twist",
+		frontend_throttle_ms=100,
 		description="IMU: linear={accel_x,y,z} m/s², angular={ang_vel_x,y,z} rad/s",
 	),
 	TopicSpec(
 		"/thruster/bow",
 		"std_msgs/Float32MultiArray",
+		frontend_throttle_ms=100,
 		description="Bow thruster feedback from sim: data[0]=force, data[1]=angle",
 	),
 	TopicSpec(
 		"/thruster/port",
 		"std_msgs/Float32MultiArray",
+		frontend_throttle_ms=100,
 		description="Port thruster feedback from sim: data[0]=force, data[1]=angle",
 	),
 	TopicSpec(
 		"/thruster/starboard",
 		"std_msgs/Float32MultiArray",
+		frontend_throttle_ms=100,
 		description="Starboard thruster feedback from sim: data[0]=force, data[1]=angle",
 	),
 	TopicSpec(
