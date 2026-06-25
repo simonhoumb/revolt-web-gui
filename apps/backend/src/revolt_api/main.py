@@ -34,7 +34,7 @@ app = FastAPI(title="ReVolt API", lifespan=lifespan)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["http://localhost:5173", "http://tailscale:8000"],
+	allow_origins=settings.allowed_origins,
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
