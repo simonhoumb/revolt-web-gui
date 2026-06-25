@@ -113,11 +113,9 @@ class RosBridgeClient:
 
 	async def _run(self) -> None:
 		while True:
-			connected_this_attempt = False
+			exited_cleanly = False
 			try:
 				async with connect(self._url) as ws:
-					connected_this_attempt = True
-					self._backoff_s = 1.0  # reset on successful connect
 					self._conn = ws
 					self._connected = True
 					self._broadcast_status()
@@ -125,6 +123,7 @@ class RosBridgeClient:
 					await self._send_subscriptions(ws)
 					async for raw in ws:
 						self._dispatch(str(raw))
+					exited_cleanly = True
 			except asyncio.CancelledError:
 				return
 			except Exception:
@@ -133,7 +132,9 @@ class RosBridgeClient:
 				self._conn = None
 				self._connected = False
 				self._broadcast_status()
-			if not connected_this_attempt:
+			if exited_cleanly:
+				self._backoff_s = 1.0
+			else:
 				self._backoff_s = min(self._backoff_s * 2, 60.0)
 			logger.info("rosbridge_reconnect_backoff", delay_s=self._backoff_s, url=self._url)
 			await asyncio.sleep(self._backoff_s)
@@ -163,7 +164,12 @@ class RosBridgeClient:
 			if now - self._topic_last_emit.get(topic, 0.0) < throttle_s:
 				return
 			self._topic_last_emit[topic] = now
-		msg = self._transform(topic, data.get("msg", {}))
+		raw_msg = data.get("msg") or {}
+		try:
+			msg = self._transform(topic, raw_msg)
+		except Exception:
+			logger.warning("rosbridge_transform_error", topic=topic, exc_info=True)
+			return
 		if msg is None:
 			return
 		dropped = 0
@@ -310,15 +316,25 @@ class RosBridgeClient:
 			case "/revolt/sim/stc/gnss/antenna2/position":
 				return None  # antenna2 not forwarded; antenna1 is the primary position source
 			case "/fix":
+				lat = msg.get("latitude")
+				lon = msg.get("longitude")
+				alt = msg.get("altitude")
+				if lat is None or lon is None or alt is None:
+					logger.warning("rosbridge_gnss_fix_missing_fields", keys=list(msg.keys()))
+					return None
 				raw_status = msg.get("status", {})
-				fix_status = int(raw_status["status"]) if "status" in raw_status else -1
+				fix_status = (
+					int(raw_status["status"])
+					if isinstance(raw_status, dict) and "status" in raw_status
+					else -1
+				)
 				return GnssFixMsg(
 					v="1",
 					type="gnss_fix",
 					timestamp_ms=now,
-					latitude=float(msg["latitude"]),
-					longitude=float(msg["longitude"]),
-					altitude_m=float(msg["altitude"]),
+					latitude=float(lat),
+					longitude=float(lon),
+					altitude_m=float(alt),
 					fix_status=fix_status,
 				)
 			case "/revolt/sim/stc/gnss/velocity_vector":
@@ -400,7 +416,9 @@ class RosBridgeClient:
 	def _cartesian_to_latlon(self, x_m: float, y_m: float) -> tuple[float, float]:
 		"""Convert local Cartesian metres (X=East, Y=North) to WGS84 degrees."""
 		lat = self._gnss_origin_lat + y_m / 111320.0
-		lon = self._gnss_origin_lon + x_m / (111320.0 * math.cos(math.radians(self._gnss_origin_lat)))
+		lon = self._gnss_origin_lon + x_m / (
+			111320.0 * math.cos(math.radians(self._gnss_origin_lat))
+		)
 		return lat, lon
 
 	def _make_status_msg(self) -> BridgeStatusMsg:

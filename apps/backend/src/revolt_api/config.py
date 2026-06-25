@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 	# Logging
 	log_level: str = "INFO"
 
+	# CORS — comma-separated browser origins allowed to call the API.
+	# Add the Tailscale frontend URL (e.g. http://revolt-gui-dev:5173) when accessing via tailnet.
+	allowed_origins: list[str] = ["http://localhost:5173"]
+
 	# Vessel connection — resolved via Tailscale sidecar in Docker
 	vessel_host: str = "revolt-onboard"
 	ros2_bridge_port: int = 9090
