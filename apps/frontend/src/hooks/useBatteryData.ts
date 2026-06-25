@@ -1,4 +1,5 @@
 import { useBridgeData } from "../context/BridgeDataContext.js";
+import { ON_CURRENT_THRESHOLD_A } from "../lib/thresholds.js";
 
 const BATTERY_FULL_V = 14.4;   // Trad/Gel charge voltage (charger spec)
 const BATTERY_EMPTY_V = 10.0;  // Arduino firmware emergency floor (critical_battery_voltage_level)
@@ -6,7 +7,7 @@ const BATTERY_ALARM_V = 11.0;  // GUI alarm — warn operator before Arduino eme
 const BATTERY_WARN_V = 11.5;   // GUI warning — early advisory
 const BATTERY_OVERVOLT_V = 16.0; // hardware guide "Over Voltage" threshold
 
-export type VoltageStatus = "normal" | "warning" | "alarm" | "overvolt";
+export type VoltageStatus = "normal" | "warning" | "alarm" | "overvolt" | "unknown";
 
 export interface CurrentReadingData {
 	amperes: number | null;
@@ -24,13 +25,13 @@ export interface BatteryData {
 	};
 }
 
-const ON_CURRENT_THRESHOLD_A = 0.5; // tune once tested on physical hardware
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
 }
 
-export function voltageStatus(v: number): VoltageStatus {
+export function voltageStatus(v: number | null): VoltageStatus {
+	if (v === null) return "unknown";
 	if (v > BATTERY_OVERVOLT_V) return "overvolt";
 	if (v < BATTERY_ALARM_V) return "alarm";
 	if (v < BATTERY_WARN_V) return "warning";
@@ -60,7 +61,7 @@ export function useBatteryData(): BatteryData {
 	return {
 		voltageV,
 		voltagePercent,
-		voltageStatus: voltageV !== null ? voltageStatus(voltageV) : "normal",
+		voltageStatus: voltageStatus(voltageV),
 		current: {
 			stern_port: toCurrentData(current.stern_port?.amperes ?? null),
 			stern_star: toCurrentData(current.stern_star?.amperes ?? null),

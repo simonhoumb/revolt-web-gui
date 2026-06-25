@@ -1,6 +1,5 @@
 import { useBridgeData } from "../context/BridgeDataContext.js";
-
-const ON_CURRENT_THRESHOLD_A = 0.5; // tune once tested on physical hardware
+import { ON_CURRENT_THRESHOLD_A } from "../lib/thresholds.js";
 
 export interface ThrusterStatus {
 	isOn: boolean;

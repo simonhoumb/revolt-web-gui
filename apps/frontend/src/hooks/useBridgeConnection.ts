@@ -10,7 +10,6 @@ export interface BridgeConnectionState {
 	wsConnected: boolean;
 	bridgeConnected: boolean;
 	latencyMs: number | null;
-	lastMessage: BridgeMessage | null;
 }
 
 const BACKOFF_INITIAL_MS = 1_000;
@@ -29,11 +28,9 @@ function buildWsUrl(): string {
  * wsConnected     — the native WebSocket is open
  * bridgeConnected — backend has a live connection to rosbridge (from BridgeStatusMsg)
  * latencyMs       — end-to-end latency estimate from the last PingMsg (Date.now() - server_ms)
- * lastMessage     — most recent non-ping, non-status message for downstream consumers
  *
  * onMessage callback (optional): called for every non-ping message including bridge_status.
- * Stored in a ref so BridgeDataContext can dispatch to per-type state without the batching
- * race that would occur if it watched lastMessage through a useEffect.
+ * Stored in a ref so callers can dispatch without causing stale closure issues.
  */
 export function useBridgeConnection(
 	options: BridgeConnectionOptions = {},
@@ -41,7 +38,6 @@ export function useBridgeConnection(
 	const [wsConnected, setWsConnected] = useState(false);
 	const [bridgeConnected, setBridgeConnected] = useState(false);
 	const [latencyMs, setLatencyMs] = useState<number | null>(null);
-	const [lastMessage, setLastMessage] = useState<BridgeMessage | null>(null);
 
 	const wsRef = useRef<WebSocket | null>(null);
 	const backoffRef = useRef(BACKOFF_INITIAL_MS);
@@ -92,7 +88,6 @@ export function useBridgeConnection(
 						// Every telemetry message carries timestamp_ms (set at backend receive time).
 						// Use it for latency so the reading stays fresh whenever data is flowing.
 						setLatencyMs(Date.now() - msg.timestamp_ms);
-						setLastMessage(msg);
 						onMessageRef.current?.(msg);
 						break;
 				}
@@ -128,5 +123,5 @@ export function useBridgeConnection(
 		};
 	}, []);
 
-	return { wsConnected, bridgeConnected, latencyMs, lastMessage };
+	return { wsConnected, bridgeConnected, latencyMs };
 }
