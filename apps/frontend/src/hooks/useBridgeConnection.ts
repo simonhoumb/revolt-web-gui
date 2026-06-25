@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { BridgeMessage } from "@revolt/shared-types";
 import { getSessionId } from "../session.js";
 
+export interface BridgeConnectionOptions {
+	onMessage?: (msg: BridgeMessage) => void;
+}
+
 export interface BridgeConnectionState {
 	wsConnected: boolean;
 	bridgeConnected: boolean;
@@ -22,12 +26,18 @@ function buildWsUrl(): string {
  * Manages the WebSocket connection to /api/ws for the lifetime of the component
  * that mounts it. Reconnects with exponential backoff on close or error.
  *
- * wsConnected   — the native WebSocket is open
+ * wsConnected     — the native WebSocket is open
  * bridgeConnected — backend has a live connection to rosbridge (from BridgeStatusMsg)
- * latencyMs     — end-to-end latency estimate from the last PingMsg (Date.now() - server_ms)
- * lastMessage   — most recent non-ping, non-status message for downstream consumers
+ * latencyMs       — end-to-end latency estimate from the last PingMsg (Date.now() - server_ms)
+ * lastMessage     — most recent non-ping, non-status message for downstream consumers
+ *
+ * onMessage callback (optional): called for every non-ping message including bridge_status.
+ * Stored in a ref so BridgeDataContext can dispatch to per-type state without the batching
+ * race that would occur if it watched lastMessage through a useEffect.
  */
-export function useBridgeConnection(): BridgeConnectionState {
+export function useBridgeConnection(
+	options: BridgeConnectionOptions = {},
+): BridgeConnectionState {
 	const [wsConnected, setWsConnected] = useState(false);
 	const [bridgeConnected, setBridgeConnected] = useState(false);
 	const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -37,6 +47,10 @@ export function useBridgeConnection(): BridgeConnectionState {
 	const backoffRef = useRef(BACKOFF_INITIAL_MS);
 	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const unmountedRef = useRef(false);
+	const onMessageRef = useRef(options.onMessage);
+	useEffect(() => {
+		onMessageRef.current = options.onMessage;
+	});
 
 	useEffect(() => {
 		unmountedRef.current = false;
@@ -67,6 +81,7 @@ export function useBridgeConnection(): BridgeConnectionState {
 				switch (msg.type) {
 					case "bridge_status":
 						setBridgeConnected(msg.connected);
+						onMessageRef.current?.(msg);
 						break;
 					case "ping":
 						// Ping fires when the queue is idle (no telemetry for 30 s).
@@ -78,6 +93,7 @@ export function useBridgeConnection(): BridgeConnectionState {
 						// Use it for latency so the reading stays fresh whenever data is flowing.
 						setLatencyMs(Date.now() - msg.timestamp_ms);
 						setLastMessage(msg);
+						onMessageRef.current?.(msg);
 						break;
 				}
 			};

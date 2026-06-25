@@ -219,6 +219,7 @@ def test_sim_gnss_antenna1_produces_gnss_fix(sim_client: RosBridgeClient) -> Non
 	# lat = origin_lat + y_m / 111320.0
 	assert result["latitude"] == pytest.approx(59.9083 + 10.5 / 111320.0, abs=1e-6)
 	assert result["altitude_m"] == pytest.approx(2.0)
+	assert result["fix_status"] == 0  # simulation always treated as FIX
 
 
 def test_sim_gnss_antenna2_returns_none(client: RosBridgeClient) -> None:
@@ -236,6 +237,18 @@ def test_physical_gnss_fix(client: RosBridgeClient) -> None:
 	assert result["latitude"] == pytest.approx(59.9083)
 	assert result["longitude"] == pytest.approx(10.7512)
 	assert result["altitude_m"] == pytest.approx(5.2)
+	assert result["fix_status"] == -1  # "status": {} has no "status" key → fallback -1
+
+
+def test_physical_gnss_fix_with_status(client: RosBridgeClient) -> None:
+	msg = {
+		"latitude": 59.9083, "longitude": 10.7512, "altitude": 5.2,
+		"status": {"status": 0, "service": 1},
+		"position_covariance": [], "position_covariance_type": 0,
+	}
+	result = client._transform("/fix", msg)
+	assert result is not None
+	assert result["fix_status"] == 0  # FIX
 
 
 def test_sim_gnss_velocity(client: RosBridgeClient) -> None:

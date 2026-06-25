@@ -305,10 +305,13 @@ class RosBridgeClient:
 					latitude=lat,
 					longitude=lon,
 					altitude_m=float(pt["z"]),
+					fix_status=0,  # simulation always has a fix; no NavSatFix status field available
 				)
 			case "/revolt/sim/stc/gnss/antenna2/position":
 				return None  # antenna2 not forwarded; antenna1 is the primary position source
 			case "/fix":
+				raw_status = msg.get("status", {})
+				fix_status = int(raw_status["status"]) if "status" in raw_status else -1
 				return GnssFixMsg(
 					v="1",
 					type="gnss_fix",
@@ -316,6 +319,7 @@ class RosBridgeClient:
 					latitude=float(msg["latitude"]),
 					longitude=float(msg["longitude"]),
 					altitude_m=float(msg["altitude"]),
+					fix_status=fix_status,
 				)
 			case "/revolt/sim/stc/gnss/velocity_vector":
 				data = msg["data"]

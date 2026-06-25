@@ -1,12 +1,8 @@
-.connectionStatus {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	font-size: 12px;
-	font-weight: 500;
-	white-space: nowrap;
+.navWrapper {
+	position: relative;
 }
 
-.connectionLabel {
-	line-height: 1;
+.alertsAnchor {
+	position: relative;
+	display: inline-block;
 }

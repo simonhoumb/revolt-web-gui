@@ -61,8 +61,14 @@ def _make_msg(topic: str) -> dict:
 	match topic:
 		# Physical vessel topics
 		case "/arduino/stern/battery_voltage":
-			# Oscillates 22-25 V with slow drift
-			return {"data": round(23.5 + 1.5 * math.sin(t / 30), 2)}
+			# Cycles through all four GUI voltage states, 15 s each (60 s total loop):
+			#   0-15 s : normal   ~13.0 V  (between WARN 11.5 V and FULL 14.4 V)
+			#  15-30 s : warning  ~11.3 V  (between ALARM 11.0 V and WARN 11.5 V)
+			#  30-45 s : alarm    ~10.5 V  (below ALARM 11.0 V, above EMPTY 10.0 V)
+			#  45-60 s : overvolt ~17.0 V  (above OVERVOLT 16.0 V)
+			phase = int(t / 15) % 4
+			base = [13.0, 11.3, 10.5, 17.0][phase]
+			return {"data": round(base + random.gauss(0, 0.05), 2)}
 		case "/arduino/stern/port/current" | "/arduino/bow/current":
 			return {"data": max(0, min(1023, int(500 + random.gauss(0, 40))))}
 		case "/arduino/stern/star/current":
@@ -72,9 +78,11 @@ def _make_msg(topic: str) -> dict:
 		case "/arduino/stern/DHT22/humidity" | "/arduino/bow/DHT22/humidity":
 			return {"data": round(60.0 + random.gauss(0, 1.0), 1)}
 		case "/arduino/stern/emergency_stop_status":
-			return {"data": 0}
+			# Toggles active every 5 s for easy testing (change to longer for demos)
+			return {"data": int(t / 5) % 2}
 		case "/arduino/bow/linear_actuator_retract_state":
-			return {"data": 1}
+			# Alternates retracted/deployed every 20 s
+			return {"data": int(t / 20) % 2}
 		case "/control_mode":
 			# Cycles through all four modes every 40 s so UI state changes are visible
 			return {"data": int(t / 10) % 4}
