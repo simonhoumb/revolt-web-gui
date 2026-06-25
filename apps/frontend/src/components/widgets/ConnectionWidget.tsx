@@ -1,7 +1,5 @@
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
-import { ObcAlertIcon } from "@oicl/openbridge-webcomponents-react/components/alert-icon/alert-icon.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
-import { AlertType } from "@oicl/openbridge-webcomponents/dist/types.js";
 import { useVesselHealth } from "../../hooks/useVesselHealth.js";
 import styles from "./ConnectionWidget.module.css";
 
@@ -15,7 +13,9 @@ export function ConnectionWidget() {
 				<div className={styles.statusRow}>
 					<ObcStatusIndicator
 						status={
-							wsConnected ? StatusIndicatorStatus.active : StatusIndicatorStatus.alarm
+							wsConnected
+								? StatusIndicatorStatus.running
+								: StatusIndicatorStatus.alarm
 						}
 					/>
 					<span className={styles.statusLabel}>WebSocket</span>
@@ -24,7 +24,7 @@ export function ConnectionWidget() {
 					<ObcStatusIndicator
 						status={
 							bridgeConnected
-								? StatusIndicatorStatus.active
+								? StatusIndicatorStatus.running
 								: wsConnected
 									? StatusIndicatorStatus.warning
 									: StatusIndicatorStatus.inactive
@@ -39,12 +39,14 @@ export function ConnectionWidget() {
 					</span>
 				</div>
 				<div className={styles.statusRow}>
-					<ObcAlertIcon
-						type={AlertType.Alarm}
-						active={emergencyStopActive}
-						acknowledged={false}
+					<ObcStatusIndicator
+						status={
+							emergencyStopActive
+								? StatusIndicatorStatus.alarm
+								: StatusIndicatorStatus.inactive
+						}
 					/>
-					<span className={styles.statusLabel}>E-STOP</span>
+					<span className={styles.statusLabel}>Emergency Stop</span>
 				</div>
 			</div>
 		</section>

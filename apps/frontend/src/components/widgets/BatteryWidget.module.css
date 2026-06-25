@@ -32,6 +32,7 @@
 .voltage {
 	font-size: 1.1rem;
 	font-weight: 600;
+	white-space: nowrap;
 	color: var(--element-active-color, #eaa75e);
 }
 

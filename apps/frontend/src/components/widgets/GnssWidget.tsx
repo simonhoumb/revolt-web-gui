@@ -6,7 +6,7 @@ import styles from "./GnssWidget.module.css";
 function fixIndicatorStatus(fixStatus: number | null): StatusIndicatorStatus {
 	if (fixStatus === null) return StatusIndicatorStatus.inactive;
 	if (fixStatus < 0) return StatusIndicatorStatus.alarm;
-	if (fixStatus === 0) return StatusIndicatorStatus.active;
+	if (fixStatus === 0) return StatusIndicatorStatus.running;
 	return StatusIndicatorStatus.running; // SBAS or GBAS augmented — better than basic fix
 }
 

@@ -17,7 +17,7 @@ function ThrusterRow({ label, status, isSimulation, bowExtra }: ThrusterRowProps
 			<div className={styles.thrusterHeader}>
 				<ObcStatusIndicator
 					status={
-						status.isOn ? StatusIndicatorStatus.active : StatusIndicatorStatus.inactive
+						status.isOn ? StatusIndicatorStatus.running : StatusIndicatorStatus.inactive
 					}
 				/>
 				<span className={styles.thrusterLabel}>{label}</span>
@@ -38,7 +38,7 @@ function ThrusterRow({ label, status, isSimulation, bowExtra }: ThrusterRowProps
 							bowExtra.retracted === null
 								? StatusIndicatorStatus.inactive
 								: bowExtra.retracted
-									? StatusIndicatorStatus.active
+									? StatusIndicatorStatus.inactive
 									: StatusIndicatorStatus.running
 						}
 					/>

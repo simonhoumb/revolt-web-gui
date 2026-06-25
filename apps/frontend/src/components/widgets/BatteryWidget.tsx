@@ -18,7 +18,12 @@ export function BatteryWidget() {
 		<section className={styles.widget}>
 			<h2 className={styles.header}>Battery</h2>
 			<div className={styles.batteryRow}>
-				<ObcBatteryIcon level={voltagePercent ?? 0} charging={false} horizontal={false} />
+				<ObcBatteryIcon
+					level={voltagePercent ?? 0}
+					charging={false}
+					horizontal={false}
+					notification={voltageStatus !== "normal"}
+				/>
 				<div className={styles.voltageBlock}>
 					<span className={styles.voltage}>
 						{voltageV !== null ? `${voltageV.toFixed(2)} V` : "— V"}
@@ -39,7 +44,7 @@ export function BatteryWidget() {
 							<ObcStatusIndicator
 								status={
 									reading.isOn
-										? StatusIndicatorStatus.active
+										? StatusIndicatorStatus.running
 										: StatusIndicatorStatus.inactive
 								}
 							/>
