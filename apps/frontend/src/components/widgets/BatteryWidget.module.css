@@ -1,0 +1,60 @@
+.widget {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px;
+	background-color: var(--container-section-color, #111);
+	border: 1px solid var(--border-divider-color, #271b10);
+	border-radius: 4px;
+}
+
+.header {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+}
+
+.batteryRow {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.voltageBlock {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.voltage {
+	font-size: 1.1rem;
+	font-weight: 600;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.currentList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.currentRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.currentLabel {
+	flex: 1;
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.currentValue {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+}

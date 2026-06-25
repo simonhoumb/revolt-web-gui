@@ -103,9 +103,10 @@ export interface GnssFixMsg {
 	v: "1";
 	type: "gnss_fix";
 	timestamp_ms: number;
-	latitude: number;   // degrees, WGS84
-	longitude: number;  // degrees, WGS84
-	altitude_m: number; // metres above WGS84 ellipsoid
+	latitude: number;    // degrees, WGS84
+	longitude: number;   // degrees, WGS84
+	altitude_m: number;  // metres above WGS84 ellipsoid
+	fix_status: number;  // NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
 }
 
 export interface SimGnssVelocityMsg {

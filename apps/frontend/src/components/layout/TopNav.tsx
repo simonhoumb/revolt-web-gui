@@ -1,44 +1,17 @@
 import { useState, useCallback } from "react";
 import { ObcTopBar } from "@oicl/openbridge-webcomponents-react/components/top-bar/top-bar.js";
-import { ObiComputerServer } from "@oicl/openbridge-webcomponents-react/icons/icon-computer-server.js";
-import styles from "./TopNav.module.css";
+import { ObcAlertButton } from "@oicl/openbridge-webcomponents-react/components/alert-button/alert-button.js";
+import { AlertType } from "@oicl/openbridge-webcomponents/dist/types.js";
+import { useVesselHealth, type AlertLevel } from "../../hooks/useVesselHealth.js";
 
-interface ConnectionStatusProps {
-	wsConnected: boolean;
-	bridgeConnected: boolean;
-	latencyMs: number | null;
+function toObcAlertType(level: AlertLevel | null): AlertType | undefined {
+	if (level === "alarm") return AlertType.Alarm;
+	if (level === "warning") return AlertType.Warning;
+	if (level === "caution") return AlertType.Caution;
+	return undefined;
 }
 
-function ConnectionStatus({ wsConnected, bridgeConnected, latencyMs }: ConnectionStatusProps) {
-	let colorVar: string;
-	let label: string;
-
-	if (!wsConnected) {
-		colorVar = "var(--alert-alarm-color)";
-		label = "Offline";
-	} else if (!bridgeConnected) {
-		colorVar = "var(--alert-caution-color)";
-		label = "ROS offline";
-	} else {
-		colorVar = "var(--alert-success-color)";
-		label = latencyMs !== null ? `${latencyMs.toFixed(0)} ms` : "Connected";
-	}
-
-	return (
-		<span className={styles.connectionStatus} style={{ color: colorVar }}>
-			<ObiComputerServer />
-			<span className={styles.connectionLabel}>{label}</span>
-		</span>
-	);
-}
-
-interface TopNavProps {
-	wsConnected: boolean;
-	bridgeConnected: boolean;
-	latencyMs: number | null;
-}
-
-export function TopNav({ wsConnected, bridgeConnected, latencyMs }: TopNavProps) {
+export function TopNav() {
 	const [dusk, setDusk] = useState(true);
 
 	const toggleTheme = useCallback(() => {
@@ -46,6 +19,8 @@ export function TopNav({ wsConnected, bridgeConnected, latencyMs }: TopNavProps)
 		document.documentElement.setAttribute("data-obc-theme", next ? "dusk" : "day");
 		setDusk(next);
 	}, [dusk]);
+
+	const { alertCount, highestAlertLevel, emergencyStopActive } = useVesselHealth();
 
 	return (
 		<ObcTopBar
@@ -58,10 +33,11 @@ export function TopNav({ wsConnected, bridgeConnected, latencyMs }: TopNavProps)
 		>
 			{/* slot="alerts" must be on a real DOM element, not a React component */}
 			<span slot="alerts">
-				<ConnectionStatus
-					wsConnected={wsConnected}
-					bridgeConnected={bridgeConnected}
-					latencyMs={latencyMs}
+				<ObcAlertButton
+					nAlerts={alertCount}
+					alertType={toObcAlertType(highestAlertLevel)}
+					counter={true}
+					blinking={emergencyStopActive}
 				/>
 			</span>
 		</ObcTopBar>

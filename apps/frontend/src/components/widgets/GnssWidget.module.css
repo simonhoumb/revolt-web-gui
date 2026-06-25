@@ -1,0 +1,54 @@
+.widget {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px;
+	background-color: var(--container-section-color, #111);
+	border: 1px solid var(--border-divider-color, #271b10);
+	border-radius: 4px;
+}
+
+.header {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+}
+
+.fixRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.fixLabel {
+	font-size: 0.85rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.dataList {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 0;
+}
+
+.dataRow {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+}
+
+.dataRow dt {
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.dataRow dd {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+	margin: 0;
+}

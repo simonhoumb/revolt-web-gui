@@ -106,9 +106,10 @@ class GnssFixMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["gnss_fix"]
 	timestamp_ms: int
-	latitude: float   # degrees, WGS84
-	longitude: float  # degrees, WGS84
+	latitude: float    # degrees, WGS84
+	longitude: float   # degrees, WGS84
 	altitude_m: float  # metres above WGS84 ellipsoid
+	fix_status: int    # NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
 
 
 class SimGnssVelocityMsg(TypedDict):

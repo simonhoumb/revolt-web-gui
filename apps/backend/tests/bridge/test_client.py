@@ -162,6 +162,7 @@ async def test_frontend_throttle_drops_within_window() -> None:
 	"""
 	client = RosBridgeClient(DEAD_URL, "physical")
 	q = client.subscribe()
+	q.get_nowait()  # drain initial BridgeStatusMsg pushed by subscribe()
 
 	imu_msg = json.dumps({
 		"op": "publish",
@@ -183,6 +184,7 @@ async def test_unthrottled_topic_passes_every_dispatch() -> None:
 	"""Topics with no frontend_throttle_ms=0 let every message through."""
 	client = RosBridgeClient(DEAD_URL, "physical")
 	q = client.subscribe()
+	q.get_nowait()  # drain initial BridgeStatusMsg pushed by subscribe()
 
 	battery_msg = json.dumps({
 		"op": "publish",
