@@ -7,3 +7,5 @@ async def test_health_returns_ok(client: AsyncClient) -> None:
 	data = response.json()
 	assert data["status"] == "ok"
 	assert "environment" in data
+	assert "bridge_connected" in data
+	assert isinstance(data["bridge_connected"], bool)

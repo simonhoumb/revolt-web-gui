@@ -68,6 +68,12 @@ class BridgeStatusMsg(TypedDict):
 	target: str       # "physical" or "simulation"
 
 
+class PingMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["ping"]
+	server_ms: int    # backend unix epoch ms; frontend computes Date.now() - server_ms for latency
+
+
 # Simulation (pygemini/STC) message contracts
 
 
@@ -161,6 +167,7 @@ BridgeMessage = (
 	| EmergencyStopMsg
 	| LinearActuatorMsg
 	| BridgeStatusMsg
+	| PingMsg
 	| GnssFixMsg
 	| SimHullPositionMsg
 	| SimHullVelocityMsg

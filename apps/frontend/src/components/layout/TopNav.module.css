@@ -1,0 +1,12 @@
+.connectionStatus {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.connectionLabel {
+	line-height: 1;
+}
