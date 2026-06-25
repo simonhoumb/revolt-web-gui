@@ -30,7 +30,7 @@ function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
 }
 
-function voltageStatus(v: number): VoltageStatus {
+export function voltageStatus(v: number): VoltageStatus {
 	if (v > BATTERY_OVERVOLT_V) return "overvolt";
 	if (v < BATTERY_ALARM_V) return "alarm";
 	if (v < BATTERY_WARN_V) return "warning";
