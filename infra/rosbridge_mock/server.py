@@ -25,30 +25,32 @@ BRIDGE_TARGET = os.environ.get("BRIDGE_TARGET", "physical")
 
 
 def _make_camera_frame(t: float) -> str:
-    """Generate a 320×240 JPEG test frame using Pillow. Returns base64-encoded bytes."""
-    from PIL import Image, ImageDraw
+    """Generate a 1280×720 JPEG test frame matching RealSense D456 resolution."""
+    from PIL import Image, ImageDraw, ImageFont
 
-    W, H = 320, 240
+    W, H = 1280, 720
     img = Image.new("RGB", (W, H), color=(5, 10, 20))
     draw = ImageDraw.Draw(img)
 
-    # Animated sweep line that rotates with time
+    cx, cy = W // 2, H // 2
+    radius = min(cx, cy) - 40  # 320 px — scales with the larger canvas
+
+    # Animated sweep line
     angle = t * 60 % 360
     rad = math.radians(angle)
-    cx, cy = W // 2, H // 2
-    radius = min(cx, cy) - 20
     end_x = int(cx + radius * math.cos(rad))
     end_y = int(cy - radius * math.sin(rad))
-    draw.line([(cx, cy), (end_x, end_y)], fill=(34, 211, 238), width=2)
+    draw.line([(cx, cy), (end_x, end_y)], fill=(34, 211, 238), width=6)
 
     # Outer ring
-    draw.ellipse([(cx - radius, cy - radius), (cx + radius, cy + radius)], outline=(30, 50, 80), width=1)
+    draw.ellipse([(cx - radius, cy - radius), (cx + radius, cy + radius)], outline=(30, 50, 80), width=3)
 
     # Centre dot
-    draw.ellipse([(cx - 3, cy - 3), (cx + 3, cy + 3)], fill=(245, 158, 11))
+    draw.ellipse([(cx - 10, cy - 10), (cx + 10, cy + 10)], fill=(245, 158, 11))
 
-    # Label
-    draw.text((8, 8), "CAM MOCK", fill=(100, 120, 140))
+    # Label — load_default(size=) requires Pillow >= 10
+    font = ImageFont.load_default(size=32)
+    draw.text((20, 20), "CAM MOCK  1280×720", fill=(100, 120, 140), font=font)
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=60)
