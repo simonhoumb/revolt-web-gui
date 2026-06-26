@@ -1,0 +1,48 @@
+.container {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 100%;
+	height: 100%;
+}
+
+.header {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+	padding: 10px 10px 0;
+}
+
+.viewport {
+	position: relative;
+	flex: 1;
+	background-color: #050a14;
+	overflow: hidden;
+}
+
+.feed {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	display: block;
+}
+
+.overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #050a14;
+	z-index: 1;
+}
+
+.overlayText {
+	font-size: 0.9rem;
+	color: var(--element-inactive-color, #9c6a34);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}

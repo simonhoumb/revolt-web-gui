@@ -1,0 +1,25 @@
+.widget {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px;
+	background-color: var(--container-section-color, #262626);
+	border: 1px solid var(--border-divider-color, #434343);
+	border-radius: 4px;
+}
+
+.header {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--element-inactive-color, #8c8c8c);
+	margin: 0;
+}
+
+.canvas {
+	display: block;
+	width: 260px;
+	height: 260px;
+	align-self: center;
+}

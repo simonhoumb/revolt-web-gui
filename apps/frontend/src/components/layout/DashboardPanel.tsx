@@ -3,6 +3,7 @@ import { BatteryWidget } from "../widgets/BatteryWidget.js";
 import { GnssWidget } from "../widgets/GnssWidget.js";
 import { ThrusterWidget } from "../widgets/ThrusterWidget.js";
 import { ConnectionWidget } from "../widgets/ConnectionWidget.js";
+import { LidarWidget } from "../widgets/LidarWidget.js";
 
 export function DashboardPanel() {
 	return (
@@ -11,6 +12,7 @@ export function DashboardPanel() {
 			<GnssWidget />
 			<ThrusterWidget />
 			<ConnectionWidget />
+			<LidarWidget />
 		</aside>
 	);
 }
