@@ -139,7 +139,7 @@ class RosBridgeClient:
 			if exited_cleanly:
 				self._backoff_s = 1.0
 			else:
-				self._backoff_s = min(self._backoff_s * 2, 60.0)
+				self._backoff_s = min(self._backoff_s * 2, 10.0)
 			logger.info("rosbridge_reconnect_backoff", delay_s=self._backoff_s, url=self._url)
 			await asyncio.sleep(self._backoff_s)
 
