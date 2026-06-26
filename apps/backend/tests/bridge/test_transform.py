@@ -303,6 +303,75 @@ def test_sim_waypoint_list_empty(client: RosBridgeClient) -> None:
 	assert result["waypoints"] == []
 
 
+def test_lidar_scan_basic(client: RosBridgeClient) -> None:
+	import math
+
+	msg = {
+		"angle_min": 0.0,
+		"angle_max": round(2 * math.pi, 6),
+		"angle_increment": round(2 * math.pi / 360, 6),
+		"range_min": 0.9,
+		"range_max": 10.0,
+		"ranges": [5.0] * 360,
+		"intensities": [],
+	}
+	result = client._transform("/scan", msg)
+	assert result is not None
+	assert result["type"] == "lidar_scan"
+	assert result["v"] == "1"
+	assert "timestamp_ms" in result
+	assert result["angle_min"] == pytest.approx(0.0)
+	assert result["range_max"] == pytest.approx(10.0)
+	assert len(result["ranges"]) == 360
+	assert result["ranges"][0] == pytest.approx(5.0)
+
+
+def test_lidar_scan_replaces_inf_with_range_max(client: RosBridgeClient) -> None:
+	import math
+
+	msg = {
+		"angle_min": 0.0,
+		"angle_max": math.pi,
+		"angle_increment": math.pi / 2,
+		"range_min": 0.1,
+		"range_max": 25.0,
+		"ranges": [float("inf"), 3.0, float("nan")],
+	}
+	result = client._transform("/scan", msg)
+	assert result is not None
+	assert result["ranges"][0] == pytest.approx(25.0)
+	assert result["ranges"][1] == pytest.approx(3.0)
+	assert result["ranges"][2] == pytest.approx(25.0)
+
+
+def test_camera_frame_stores_bytes_and_returns_none(client: RosBridgeClient) -> None:
+	import base64
+
+	fake_jpeg = base64.b64encode(b"\xff\xd8\xff\xd9").decode()  # minimal JPEG SOI+EOI
+	result = client._transform(
+		"/camera/color/image_raw/compressed",
+		{"format": "jpeg", "data": fake_jpeg},
+	)
+	assert result is None  # not forwarded via WebSocket
+	assert client.latest_camera_frames.get("main") == b"\xff\xd8\xff\xd9"
+	assert client._camera_frame_counters.get("main") == 1
+
+
+def test_camera_frame_counter_increments(client: RosBridgeClient) -> None:
+	import base64
+
+	payload = {"format": "jpeg", "data": base64.b64encode(b"\xff\xd8\xff\xd9").decode()}
+	client._transform("/camera/color/image_raw/compressed", payload)
+	client._transform("/camera/color/image_raw/compressed", payload)
+	assert client._camera_frame_counters.get("main") == 2
+
+
+def test_camera_empty_data_returns_none(client: RosBridgeClient) -> None:
+	result = client._transform("/camera/color/image_raw/compressed", {"format": "jpeg", "data": ""})
+	assert result is None
+	assert "main" not in client.latest_camera_frames
+
+
 def test_all_sim_results_have_version(sim_client: RosBridgeClient) -> None:
 	sim_topics = [
 		("/revolt/sim/stc/position/hull", _POSE_STAMPED),

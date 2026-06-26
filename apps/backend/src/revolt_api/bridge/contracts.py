@@ -159,6 +159,18 @@ class SimWaypointListMsg(TypedDict):
 	waypoints: list[SimWaypoint]
 
 
+class LidarScanMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["lidar_scan"]
+	timestamp_ms: int
+	angle_min: float        # radians, first scan angle
+	angle_max: float        # radians, last scan angle
+	angle_increment: float  # radians between consecutive measurements
+	range_min: float        # metres, minimum valid range
+	range_max: float        # metres, maximum valid range
+	ranges: list[float]     # metres per step; inf/NaN replaced with range_max
+
+
 BridgeMessage = (
 	BatteryMsg
 	| CurrentMsg
@@ -176,6 +188,7 @@ BridgeMessage = (
 	| SimImuMsg
 	| SimThrusterFeedbackMsg
 	| SimWaypointListMsg
+	| LidarScanMsg
 )
 
 _CONTROL_MODE_MAP: dict[int, str] = {
