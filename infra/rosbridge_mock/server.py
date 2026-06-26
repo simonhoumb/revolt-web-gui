@@ -228,23 +228,23 @@ def _make_msg(topic: str) -> dict:
 				"data": _make_camera_frame(t),
 			}
 		case "/scan":
-			num_points = 360
+			num_points = 1800  # VLP-16 at 600 RPM ≈ 0.2° resolution
 			angle_inc = (2 * math.pi) / num_points
 			ranges = []
 			for i in range(num_points):
 				angle = i * angle_inc
-				# Obstacle ring at ~4 m with animated bumps, gaps at cardinal sectors
+				# Obstacle ring at ~40 m with animated bumps, gaps at cardinal sectors
 				if (angle % (math.pi / 2)) < 0.2:
-					r = 9.5 + random.gauss(0, 0.1)  # gap (far reading)
+					r = 125.0 + random.gauss(0, 0.5)  # gap (far reading)
 				else:
-					r = 4.0 + 2.0 * math.sin(angle * 3 + t) + random.gauss(0, 0.15)
-				ranges.append(round(max(0.9, min(r, 9.9)), 3))
+					r = 40.0 + 20.0 * math.sin(angle * 3 + t) + random.gauss(0, 0.5)
+				ranges.append(round(max(0.9, min(r, 129.9)), 3))
 			return {
 				"angle_min": 0.0,
 				"angle_max": round(2 * math.pi, 6),
 				"angle_increment": round(angle_inc, 6),
 				"range_min": 0.9,
-				"range_max": 10.0,
+				"range_max": 130.0,
 				"ranges": ranges,
 				"intensities": [],
 				"header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "velodyne"},
