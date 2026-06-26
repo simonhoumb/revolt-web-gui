@@ -25,11 +25,6 @@ export function CameraWidget() {
 		<div className={styles.container}>
 			<h2 className={styles.header}>Camera</h2>
 			<div className={styles.viewport}>
-				{showOverlay ? (
-					<div className={styles.overlay}>
-						<span className={styles.overlayText}>No signal</span>
-					</div>
-				) : null}
 				<img
 					key={streamKey}
 					className={styles.feed}
@@ -38,6 +33,11 @@ export function CameraWidget() {
 					onError={() => setStreamError(true)}
 					onLoad={() => setStreamError(false)}
 				/>
+				{showOverlay ? (
+					<div className={styles.overlay}>
+						<span className={styles.overlayText}>No signal</span>
+					</div>
+				) : null}
 			</div>
 		</div>
 	);
