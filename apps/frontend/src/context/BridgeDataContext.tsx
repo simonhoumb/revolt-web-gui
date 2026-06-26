@@ -14,6 +14,7 @@ import type {
 	CurrentMsg,
 	EmergencyStopMsg,
 	GnssFixMsg,
+	LidarScanMsg,
 	LinearActuatorMsg,
 	SimGnssVelocityMsg,
 	SimThrusterFeedbackMsg,
@@ -42,6 +43,7 @@ export interface BridgeData {
 	linearActuator: LinearActuatorMsg | null;
 	bridgeStatus: BridgeStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
+	lidarScan: LidarScanMsg | null;
 	wsConnected: boolean;
 	bridgeConnected: boolean;
 	latencyMs: number | null;
@@ -60,6 +62,7 @@ const initialData: BridgeData = {
 	linearActuator: null,
 	bridgeStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
+	lidarScan: null,
 	wsConnected: false,
 	bridgeConnected: false,
 	latencyMs: null,
@@ -91,6 +94,8 @@ function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 				...state,
 				thrusterFeedback: { ...state.thrusterFeedback, [msg.thruster]: msg },
 			};
+		case "lidar_scan":
+			return { ...state, lidarScan: msg };
 		default:
 			return state;
 	}

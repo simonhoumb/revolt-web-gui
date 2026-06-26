@@ -78,7 +78,27 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"Topic name TBD — verify with `ros2 topic list` on the physical vessel."
 		),
 	),
-	# IMU, camera, lidar, radar: discover topic names on the vessel and add here.
+	TopicSpec(
+		"/camera/color/image_raw/compressed",
+		"sensor_msgs/CompressedImage",
+		throttle_rate_ms=100,
+		description=(
+			"Intel RealSense D456 color camera, JPEG-compressed via image_transport "
+			"(realsense2_camera v4.56.4). Frame stored by bridge client; served via "
+			"MJPEG HTTP endpoint, not forwarded through WebSocket."
+		),
+	),
+	TopicSpec(
+		"/scan",
+		"sensor_msgs/LaserScan",
+		throttle_rate_ms=100,
+		frontend_throttle_ms=100,
+		description=(
+			"2D LaserScan (ring 8, horizontal mid-layer) derived from Velodyne VLP-16 "
+			"PointCloud2 by velodyne_laserscan node. ~1800 points per 360° sweep at 10 Hz."
+		),
+	),
+	# IMU, radar: discover topic names on the vessel and add here.
 ]
 
 PHYSICAL_PUBLISH_TOPICS: list[TopicSpec] = [

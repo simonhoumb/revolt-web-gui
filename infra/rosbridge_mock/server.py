@@ -7,6 +7,8 @@ Emulates a subset of rosbridge_suite sufficient for the backend bridge client:
 """
 
 import asyncio
+import base64
+import io
 import json
 import logging
 import math
@@ -20,6 +22,39 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("rosbridge_mock")
 
 BRIDGE_TARGET = os.environ.get("BRIDGE_TARGET", "physical")
+
+
+def _make_camera_frame(t: float) -> str:
+    """Generate a 1280×720 JPEG test frame matching RealSense D456 resolution."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    W, H = 1280, 720
+    img = Image.new("RGB", (W, H), color=(5, 10, 20))
+    draw = ImageDraw.Draw(img)
+
+    cx, cy = W // 2, H // 2
+    radius = min(cx, cy) - 40  # 320 px — scales with the larger canvas
+
+    # Animated sweep line
+    angle = t * 60 % 360
+    rad = math.radians(angle)
+    end_x = int(cx + radius * math.cos(rad))
+    end_y = int(cy - radius * math.sin(rad))
+    draw.line([(cx, cy), (end_x, end_y)], fill=(34, 211, 238), width=6)
+
+    # Outer ring
+    draw.ellipse([(cx - radius, cy - radius), (cx + radius, cy + radius)], outline=(30, 50, 80), width=3)
+
+    # Centre dot
+    draw.ellipse([(cx - 10, cy - 10), (cx + 10, cy + 10)], fill=(245, 158, 11))
+
+    # Label — load_default(size=) requires Pillow >= 10
+    font = ImageFont.load_default(size=32)
+    draw.text((20, 20), "CAM MOCK  1280×720", fill=(100, 120, 140), font=font)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=60)
+    return base64.b64encode(buf.getvalue()).decode()
 
 # Emit intervals in seconds per topic — physical vessel topics
 INTERVALS_PHYSICAL: dict[str, float] = {
@@ -35,6 +70,8 @@ INTERVALS_PHYSICAL: dict[str, float] = {
 	"/arduino/bow/linear_actuator_retract_state": 2.0,
 	"/control_mode": 1.0,
 	"/fix": 1.0,
+	"/camera/color/image_raw/compressed": 0.2,   # 5 fps
+	"/scan": 0.1,                                 # 10 Hz
 }
 
 # Emit intervals for simulation topics
@@ -183,6 +220,34 @@ def _make_msg(topic: str) -> dict:
 						"heading": 0.0,
 					},
 				]
+			}
+		case "/camera/color/image_raw/compressed":
+			return {
+				"header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "camera_color_frame"},
+				"format": "jpeg",
+				"data": _make_camera_frame(t),
+			}
+		case "/scan":
+			num_points = 1800  # VLP-16 at 600 RPM ≈ 0.2° resolution
+			angle_inc = (2 * math.pi) / num_points
+			ranges = []
+			for i in range(num_points):
+				angle = i * angle_inc
+				# Obstacle ring at ~40 m with animated bumps, gaps at cardinal sectors
+				if (angle % (math.pi / 2)) < 0.2:
+					r = 125.0 + random.gauss(0, 0.5)  # gap (far reading)
+				else:
+					r = 40.0 + 20.0 * math.sin(angle * 3 + t) + random.gauss(0, 0.5)
+				ranges.append(round(max(0.9, min(r, 129.9)), 3))
+			return {
+				"angle_min": 0.0,
+				"angle_max": round(2 * math.pi, 6),
+				"angle_increment": round(angle_inc, 6),
+				"range_min": 0.9,
+				"range_max": 130.0,
+				"ranges": ranges,
+				"intensities": [],
+				"header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "velodyne"},
 			}
 		case _:
 			return {"data": 0}

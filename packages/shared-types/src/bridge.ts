@@ -156,6 +156,18 @@ export interface SimWaypointListMsg {
 	waypoints: SimWaypoint[];
 }
 
+export interface LidarScanMsg {
+	v: "1";
+	type: "lidar_scan";
+	timestamp_ms: number;
+	angle_min: number;       // radians, first scan angle
+	angle_max: number;       // radians, last scan angle
+	angle_increment: number; // radians between consecutive measurements
+	range_min: number;       // metres, minimum valid range
+	range_max: number;       // metres, maximum valid range
+	ranges: number[];        // metres per step; inf/NaN replaced with range_max
+}
+
 export type BridgeMessage =
 	| BatteryMsg
 	| CurrentMsg
@@ -172,4 +184,5 @@ export type BridgeMessage =
 	| SimGnssVelocityMsg
 	| SimImuMsg
 	| SimThrusterFeedbackMsg
-	| SimWaypointListMsg;
+	| SimWaypointListMsg
+	| LidarScanMsg;

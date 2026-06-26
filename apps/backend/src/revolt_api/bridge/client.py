@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import contextlib
 import json
 import math
@@ -18,6 +19,7 @@ from revolt_api.bridge.contracts import (
 	EmergencyStopMsg,
 	GnssFixMsg,
 	HumidityMsg,
+	LidarScanMsg,
 	LinearActuatorMsg,
 	SimGnssVelocityMsg,
 	SimHullPositionMsg,
@@ -63,6 +65,8 @@ class RosBridgeClient:
 		self._heartbeat_task: asyncio.Task[None] | None = None
 		self._connected = False
 		self._backoff_s: float = 1.0
+		self.latest_camera_frames: dict[str, bytes] = {}
+		self._camera_frame_counters: dict[str, int] = {}
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
@@ -135,7 +139,7 @@ class RosBridgeClient:
 			if exited_cleanly:
 				self._backoff_s = 1.0
 			else:
-				self._backoff_s = min(self._backoff_s * 2, 60.0)
+				self._backoff_s = min(self._backoff_s * 2, 10.0)
 			logger.info("rosbridge_reconnect_backoff", delay_s=self._backoff_s, url=self._url)
 			await asyncio.sleep(self._backoff_s)
 
@@ -409,6 +413,33 @@ class RosBridgeClient:
 					type="sim_waypoint_list",
 					timestamp_ms=now,
 					waypoints=waypoints,
+				)
+			case "/camera/color/image_raw/compressed":
+				data_b64 = msg.get("data", "")
+				if not data_b64:
+					return None
+				try:
+					self.latest_camera_frames["main"] = base64.b64decode(data_b64)
+					self._camera_frame_counters["main"] = (
+						self._camera_frame_counters.get("main", 0) + 1
+					)
+				except Exception:
+					logger.warning("camera_frame_decode_error")
+				return None  # served via MJPEG endpoint, not forwarded through WebSocket
+			case "/scan":
+				range_max = float(msg.get("range_max", 25.0))
+				raw_ranges: list[float] = msg.get("ranges", [])
+				ranges = [r if math.isfinite(r) else range_max for r in raw_ranges]
+				return LidarScanMsg(
+					v="1",
+					type="lidar_scan",
+					timestamp_ms=now,
+					angle_min=float(msg.get("angle_min", 0.0)),
+					angle_max=float(msg.get("angle_max", 2 * math.pi)),
+					angle_increment=float(msg.get("angle_increment", 0.0)),
+					range_min=float(msg.get("range_min", 0.1)),
+					range_max=range_max,
+					ranges=ranges,
 				)
 			case _:
 				return None

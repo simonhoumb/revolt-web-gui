@@ -21,6 +21,7 @@ const base: BridgeData = {
 	linearActuator: null,
 	bridgeStatus: { v: "1", type: "bridge_status", timestamp_ms: 0, connected: true, bridge_url: "", target: "physical" },
 	thrusterFeedback: { bow: null, port: null, starboard: null },
+	lidarScan: null,
 	wsConnected: true,
 	bridgeConnected: true,
 	latencyMs: null,
