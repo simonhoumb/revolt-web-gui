@@ -25,6 +25,7 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
+.coverage
 
 # Editor
 .vscode/settings.json
@@ -38,6 +39,7 @@ Thumbs.db
 
 # Test reporter output
 test-results/
+coverage/
 
 # Claude context file
 CLAUDE.md
