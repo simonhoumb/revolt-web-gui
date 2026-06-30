@@ -10,6 +10,7 @@ import type {
 	BatteryMsg,
 	BridgeMessage,
 	BridgeStatusMsg,
+	CameraStatusMsg,
 	ControlModeMsg,
 	CurrentMsg,
 	EmergencyStopMsg,
@@ -42,6 +43,7 @@ export interface BridgeData {
 	emergencyStop: EmergencyStopMsg | null;
 	linearActuator: LinearActuatorMsg | null;
 	bridgeStatus: BridgeStatusMsg | null;
+	cameraStatus: CameraStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
 	lidarScan: LidarScanMsg | null;
 	wsConnected: boolean;
@@ -61,6 +63,7 @@ const initialData: BridgeData = {
 	emergencyStop: null,
 	linearActuator: null,
 	bridgeStatus: null,
+	cameraStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
 	lidarScan: null,
 	wsConnected: false,
@@ -96,6 +99,8 @@ function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 			};
 		case "lidar_scan":
 			return { ...state, lidarScan: msg };
+		case "camera_status":
+			return { ...state, cameraStatus: msg };
 		default:
 			return state;
 	}
