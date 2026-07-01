@@ -434,7 +434,7 @@ class RosBridgeClient:
 			case "/scan":
 				range_max = float(msg.get("range_max", 25.0))
 				raw_ranges: list[float] = msg.get("ranges", [])
-				ranges = [r if math.isfinite(r) else range_max for r in raw_ranges]
+				ranges = [r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges]
 				return LidarScanMsg(
 					v="1",
 					type="lidar_scan",
