@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLidarData } from "../../hooks/useLidarData.js";
 import styles from "./LidarWidget.module.css";
 
@@ -10,10 +10,19 @@ function cssVar(name: string): string {
 	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+const ZOOM_STEPS = [2, 5, 10, 20, 50, 100, 130];
+const DEFAULT_ZOOM_IDX = 2; // 10 m
+
 export function LidarWidget() {
 	const { scan, points } = useLidarData();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const drawRef = useRef<() => void>(() => {});
+	const [zoomIdx, setZoomIdx] = useState(DEFAULT_ZOOM_IDX);
+
+	const displayRange = ZOOM_STEPS[zoomIdx];
+
+	const zoomIn = () => setZoomIdx((i) => Math.max(0, i - 1));
+	const zoomOut = () => setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
 
 	useEffect(() => {
 		drawRef.current = () => {
@@ -49,10 +58,9 @@ export function LidarWidget() {
 			ctx.arc(CENTER, CENTER, RADIUS, 0, 2 * Math.PI);
 			ctx.clip();
 
-			const scale = RADIUS / scan.range_max;
+			const scale = RADIUS / displayRange;
 
-			// Three inner range rings at 25 / 50 / 75 % of range_max.
-			// The outer border IS the 100 % ring, so no fourth ring needed.
+			// Three inner range rings at 25 / 50 / 75 % of displayRange.
 			ctx.strokeStyle = cssVar("--instrument-frame-tertiary-color");
 			ctx.lineWidth = 0.5;
 			for (let i = 1; i <= 3; i++) {
@@ -67,7 +75,7 @@ export function LidarWidget() {
 			ctx.font = "9px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
-			ctx.fillText(`${scan.range_max.toFixed(0)} m`, CENTER + 4, CENTER - RADIUS + 4);
+			ctx.fillText(`${displayRange} m`, CENTER + 4, CENTER - RADIUS + 4);
 
 			// Scan returns — enhanced-primary contrasts with both day and dusk backgrounds.
 			ctx.fillStyle = cssVar("--instrument-enhanced-primary-color");
@@ -87,7 +95,7 @@ export function LidarWidget() {
 		};
 
 		drawRef.current();
-	}, [scan, points]);
+	}, [scan, points, displayRange]);
 
 	// Redraw when brilliance changes — registered once, always calls the latest closure.
 	useEffect(() => {
@@ -111,6 +119,11 @@ export function LidarWidget() {
 				height={CANVAS_SIZE}
 				aria-label="2D lidar scan view"
 			/>
+			<div className={styles.controls}>
+				<button className={styles.zoomBtn} onClick={zoomIn} disabled={zoomIdx === 0} aria-label="Zoom in">+</button>
+				<span className={styles.rangeLabel}>{displayRange} m</span>
+				<button className={styles.zoomBtn} onClick={zoomOut} disabled={zoomIdx === ZOOM_STEPS.length - 1} aria-label="Zoom out">−</button>
+			</div>
 		</section>
 	);
 }
