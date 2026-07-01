@@ -10,6 +10,11 @@ function cssVar(name: string): string {
 	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Rotate the scan cloud so the vessel bow points up.
+// Measure: place an object straight ahead of the bow, note how many degrees
+// clockwise it appears from the top of the widget, then set that value here.
+const MOUNTING_YAW_DEG = -80;
+
 const ZOOM_STEPS = [2, 5, 10, 20, 50, 100, 130];
 const DEFAULT_ZOOM_IDX = 2; // 10 m
 
@@ -19,7 +24,7 @@ export function LidarWidget() {
 	const drawRef = useRef<() => void>(() => {});
 	const [zoomIdx, setZoomIdx] = useState(DEFAULT_ZOOM_IDX);
 
-	const displayRange = ZOOM_STEPS[zoomIdx];
+	const displayRange = ZOOM_STEPS[zoomIdx] ?? 10;
 
 	const zoomIn = () => setZoomIdx((i) => Math.max(0, i - 1));
 	const zoomOut = () => setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
@@ -77,6 +82,12 @@ export function LidarWidget() {
 			ctx.textBaseline = "top";
 			ctx.fillText(`${displayRange} m`, CENTER + 4, CENTER - RADIUS + 4);
 
+			// Rotate scan cloud so bow faces up. Positive = clockwise correction.
+			ctx.save();
+			ctx.translate(CENTER, CENTER);
+			ctx.rotate(MOUNTING_YAW_DEG * (Math.PI / 180));
+			ctx.translate(-CENTER, -CENTER);
+
 			// Scan returns — enhanced-primary contrasts with both day and dusk backgrounds.
 			ctx.fillStyle = cssVar("--instrument-enhanced-primary-color");
 			for (const { x, y } of points) {
@@ -91,7 +102,8 @@ export function LidarWidget() {
 			ctx.arc(CENTER, CENTER, 4, 0, 2 * Math.PI);
 			ctx.fill();
 
-			ctx.restore();
+			ctx.restore(); // undo rotation
+			ctx.restore(); // undo clip
 		};
 
 		drawRef.current();
