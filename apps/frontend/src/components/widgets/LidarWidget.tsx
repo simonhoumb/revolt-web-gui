@@ -75,8 +75,19 @@ export function LidarWidget() {
 				ctx.stroke();
 			}
 
-			// Range label just inside the top of the circle.
+			// Ring distance labels — placed at right of center, vertically at each ring.
+			const fmtDist = (v: number) =>
+				v >= 10 ? `${Math.round(v)} m` : `${parseFloat(v.toFixed(1))} m`;
 			ctx.fillStyle = cssVar("--instrument-tick-mark-label-secondary-color");
+			ctx.font = "8px monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "middle";
+			for (let i = 1; i <= 3; i++) {
+				const r = (i / 4) * RADIUS;
+				ctx.fillText(fmtDist(displayRange * (i / 4)), CENTER + 4, CENTER - r);
+			}
+
+			// Outer range label just inside the top of the circle.
 			ctx.font = "9px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
@@ -102,7 +113,8 @@ export function LidarWidget() {
 			ctx.arc(CENTER, CENTER, 4, 0, 2 * Math.PI);
 			ctx.fill();
 
-			ctx.restore(); // undo rotation
+			ctx.restore(); // undo rotation — back to clip-only space
+
 			ctx.restore(); // undo clip
 		};
 
