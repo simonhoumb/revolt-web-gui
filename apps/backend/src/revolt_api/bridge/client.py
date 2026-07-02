@@ -204,7 +204,7 @@ class RosBridgeClient:
 					timestamp_ms=now,
 					location="stern_port",
 					raw_adc=raw,
-					amperes=round(raw * _ADC_TO_AMPS, 2),
+					amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
 				)
 			case "/arduino/stern/starboard/current":
 				raw = int(msg["data"])
@@ -214,7 +214,7 @@ class RosBridgeClient:
 					timestamp_ms=now,
 					location="stern_star",
 					raw_adc=raw,
-					amperes=round(raw * _ADC_TO_AMPS, 2),
+					amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
 				)
 			case "/arduino/bow/current":
 				raw = int(msg["data"])
