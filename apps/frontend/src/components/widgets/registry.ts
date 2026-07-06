@@ -95,7 +95,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		icon: ObiChart,
 		defaultW: 6,
 		defaultH: 8,
-		minW: 4,
+		minW: 3,
 		minH: 5,
 	},
 };

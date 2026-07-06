@@ -6,16 +6,33 @@ function cssVar(name: string): string {
 	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Rotate the scan cloud so the vessel bow points up.
+// Measure: place an object straight ahead of the bow, note how many degrees
+// clockwise it appears from the top of the widget, then set that value here.
+const MOUNTING_YAW_DEG = -80;
+
+const ZOOM_STEPS = [5, 10, 20, 50, 100, 130];
+const DEFAULT_ZOOM_IDX = 3; // 50 m
+
 export function LidarWidget() {
 	const { scan, points } = useLidarData();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const containerRef = useRef<HTMLDivElement>(null);
-	const drawRef = useRef<() => void>(() => { return; });
+	const canvasAreaRef = useRef<HTMLDivElement>(null);
+	const drawRef = useRef<() => void>(() => {
+		return;
+	});
 	const [canvasSize, setCanvasSize] = useState(260);
+	const [zoomIdx, setZoomIdx] = useState(DEFAULT_ZOOM_IDX);
 
-	// Observe container width and keep canvas square within it
+	const displayRange = ZOOM_STEPS[zoomIdx] ?? 10;
+
+	const zoomIn = () => setZoomIdx((i) => Math.max(0, i - 1));
+	const zoomOut = () => setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
+
+	// Observe only the canvas area (above the controls) so the zoom buttons
+	// never eat into the space used for sizing the canvas.
 	useEffect(() => {
-		const el = containerRef.current;
+		const el = canvasAreaRef.current;
 		if (!el) return;
 		const observer = new ResizeObserver((entries) => {
 			const entry = entries[0];
@@ -24,7 +41,9 @@ export function LidarWidget() {
 			if (side > 0) setCanvasSize(side);
 		});
 		observer.observe(el);
-		return () => { observer.disconnect(); };
+		return () => {
+			observer.disconnect();
+		};
 	}, []);
 
 	useEffect(() => {
@@ -65,9 +84,9 @@ export function LidarWidget() {
 			ctx.arc(center, center, radius, 0, 2 * Math.PI);
 			ctx.clip();
 
-			const scale = radius / scan.range_max;
+			const scale = radius / displayRange;
 
-			// Three inner range rings at 25 / 50 / 75 % of range_max.
+			// Three inner range rings at 25 / 50 / 75 % of displayRange.
 			ctx.strokeStyle = cssVar("--instrument-frame-tertiary-color");
 			ctx.lineWidth = 0.5;
 			for (let i = 1; i <= 3; i++) {
@@ -77,12 +96,29 @@ export function LidarWidget() {
 				ctx.stroke();
 			}
 
-			// Range label just inside the top of the circle.
+			// Ring distance labels — placed at right of center, vertically at each ring.
+			const fmtDist = (v: number) =>
+				v >= 10 ? `${Math.round(v)} m` : `${parseFloat(v.toFixed(1))} m`;
 			ctx.fillStyle = cssVar("--instrument-tick-mark-label-secondary-color");
+			ctx.font = "8px monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "middle";
+			for (let i = 1; i <= 3; i++) {
+				const r = (i / 4) * radius;
+				ctx.fillText(fmtDist(displayRange * (i / 4)), center + 4, center - r);
+			}
+
+			// Outer range label just inside the top of the circle.
 			ctx.font = "9px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
-			ctx.fillText(`${scan.range_max.toFixed(0)} m`, center + 4, center - radius + 4);
+			ctx.fillText(`${displayRange} m`, center + 4, center - radius + 4);
+
+			// Rotate scan cloud so bow faces up. Positive = clockwise correction.
+			ctx.save();
+			ctx.translate(center, center);
+			ctx.rotate(MOUNTING_YAW_DEG * (Math.PI / 180));
+			ctx.translate(-center, -center);
 
 			// Scan returns.
 			ctx.fillStyle = cssVar("--instrument-enhanced-primary-color");
@@ -98,31 +134,58 @@ export function LidarWidget() {
 			ctx.arc(center, center, 4, 0, 2 * Math.PI);
 			ctx.fill();
 
-			ctx.restore();
+			ctx.restore(); // undo rotation — back to clip-only space
+
+			ctx.restore(); // undo clip
 		};
 
 		drawRef.current();
-	}, [scan, points, canvasSize]);
+	}, [scan, points, canvasSize, displayRange]);
 
 	// Redraw when theme changes — registered once, always calls the latest closure.
 	useEffect(() => {
-		const observer = new MutationObserver(() => { drawRef.current(); });
+		const observer = new MutationObserver(() => {
+			drawRef.current();
+		});
 		observer.observe(document.documentElement, {
 			attributes: true,
 			attributeFilter: ["data-obc-theme"],
 		});
-		return () => { observer.disconnect(); };
+		return () => {
+			observer.disconnect();
+		};
 	}, []);
 
 	return (
-		<div ref={containerRef} className={styles.container}>
-			<canvas
-				ref={canvasRef}
-				className={styles.canvas}
-				width={canvasSize}
-				height={canvasSize}
-				aria-label="2D lidar scan view"
-			/>
+		<div className={styles.container}>
+			<div ref={canvasAreaRef} className={styles.canvasArea}>
+				<canvas
+					ref={canvasRef}
+					className={styles.canvas}
+					width={canvasSize}
+					height={canvasSize}
+					aria-label="2D lidar scan view"
+				/>
+			</div>
+			<div className={styles.controls}>
+				<button
+					className={styles.zoomBtn}
+					onClick={zoomIn}
+					disabled={zoomIdx === 0}
+					aria-label="Zoom in"
+				>
+					+
+				</button>
+				<span className={styles.rangeLabel}>{displayRange} m</span>
+				<button
+					className={styles.zoomBtn}
+					onClick={zoomOut}
+					disabled={zoomIdx === ZOOM_STEPS.length - 1}
+					aria-label="Zoom out"
+				>
+					−
+				</button>
+			</div>
 		</div>
 	);
 }

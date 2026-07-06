@@ -23,6 +23,7 @@ const base: BridgeData = {
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	cameraStatus: null,
 	wsConnected: true,
 	bridgeConnected: true,
 	latencyMs: null,
