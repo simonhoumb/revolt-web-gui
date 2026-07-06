@@ -60,7 +60,7 @@ describe("useLidarData", () => {
 		const scan = makeScan({ angle_min: 0, angle_increment: Math.PI / 2, ranges: [5] });
 		mockUseBridgeData.mockReturnValue({ ...base, lidarScan: scan });
 		const { result } = renderHook(() => useLidarData());
-		const p = result.current.points[0]!;
+		const p = result.current.points[0] as { x: number; y: number };
 		expect(p.x).toBeCloseTo(5, 5);
 		expect(p.y).toBeCloseTo(0, 5);
 	});
@@ -69,7 +69,7 @@ describe("useLidarData", () => {
 		const scan = makeScan({ angle_min: Math.PI / 2, angle_increment: Math.PI / 2, ranges: [3] });
 		mockUseBridgeData.mockReturnValue({ ...base, lidarScan: scan });
 		const { result } = renderHook(() => useLidarData());
-		const p = result.current.points[0]!;
+		const p = result.current.points[0] as { x: number; y: number };
 		expect(p.x).toBeCloseTo(0, 5);
 		expect(p.y).toBeCloseTo(3, 5);
 	});
