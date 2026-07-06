@@ -1,16 +1,15 @@
-import styles from "./AppShell.module.css";
+import { LayoutProvider } from "../../context/LayoutContext.js";
 import { TopNav } from "./TopNav.js";
-import { DashboardPanel } from "./DashboardPanel.js";
-import { MapArea } from "./MapArea.js";
+import { TileGrid } from "./TileGrid.js";
+import styles from "./AppShell.module.css";
 
 export function AppShell() {
 	return (
-		<div className={styles.shell}>
-			<TopNav />
-			<div className={styles.content}>
-				<DashboardPanel />
-				<MapArea />
+		<LayoutProvider>
+			<div className={styles.shell}>
+				<TopNav />
+				<TileGrid />
 			</div>
-		</div>
+		</LayoutProvider>
 	);
 }
