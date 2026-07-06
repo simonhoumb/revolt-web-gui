@@ -40,11 +40,11 @@ def test_stern_port_current(client: RosBridgeClient) -> None:
 	assert result["type"] == "current"
 	assert result["location"] == "stern_port"
 	assert result["raw_adc"] == 512
-	assert round(result["amperes"], 1) == pytest.approx(15.0, abs=0.2)
+	assert result["amperes"] == pytest.approx(512.0)
 
 
 def test_stern_star_current(client: RosBridgeClient) -> None:
-	result = client._transform("/arduino/stern/star/current", {"data": 256})
+	result = client._transform("/arduino/stern/starboard/current", {"data": 256})
 	assert result is not None
 	assert result["type"] == "current"
 	assert result["location"] == "stern_star"
@@ -59,7 +59,7 @@ def test_bow_current(client: RosBridgeClient) -> None:
 
 
 def test_stern_temperature(client: RosBridgeClient) -> None:
-	result = client._transform("/arduino/stern/DHT22/temperature", {"data": 22.5})
+	result = client._transform("/arduino/stern/dht22/temperature", {"data": 22.5})
 	assert result is not None
 	assert result["type"] == "temperature"
 	assert result["location"] == "stern"
@@ -67,7 +67,7 @@ def test_stern_temperature(client: RosBridgeClient) -> None:
 
 
 def test_stern_humidity(client: RosBridgeClient) -> None:
-	result = client._transform("/arduino/stern/DHT22/humidity", {"data": 65.0})
+	result = client._transform("/arduino/stern/dht22/humidity", {"data": 65.0})
 	assert result is not None
 	assert result["type"] == "humidity"
 	assert result["location"] == "stern"
@@ -75,14 +75,14 @@ def test_stern_humidity(client: RosBridgeClient) -> None:
 
 
 def test_bow_temperature(client: RosBridgeClient) -> None:
-	result = client._transform("/arduino/bow/DHT22/temperature", {"data": 19.0})
+	result = client._transform("/arduino/bow/dht22/temperature", {"data": 19.0})
 	assert result is not None
 	assert result["type"] == "temperature"
 	assert result["location"] == "bow"
 
 
 def test_bow_humidity(client: RosBridgeClient) -> None:
-	result = client._transform("/arduino/bow/DHT22/humidity", {"data": 70.0})
+	result = client._transform("/arduino/bow/dht22/humidity", {"data": 70.0})
 	assert result is not None
 	assert result["type"] == "humidity"
 	assert result["location"] == "bow"
@@ -139,12 +139,12 @@ def test_all_results_have_version(client: RosBridgeClient) -> None:
 	topics_and_msgs = [
 		("/arduino/stern/battery_voltage", {"data": 24.0}),
 		("/arduino/stern/port/current", {"data": 500}),
-		("/arduino/stern/star/current", {"data": 500}),
+		("/arduino/stern/starboard/current", {"data": 500}),
 		("/arduino/bow/current", {"data": 500}),
-		("/arduino/stern/DHT22/temperature", {"data": 20.0}),
-		("/arduino/stern/DHT22/humidity", {"data": 60.0}),
-		("/arduino/bow/DHT22/temperature", {"data": 20.0}),
-		("/arduino/bow/DHT22/humidity", {"data": 60.0}),
+		("/arduino/stern/dht22/temperature", {"data": 20.0}),
+		("/arduino/stern/dht22/humidity", {"data": 60.0}),
+		("/arduino/bow/dht22/temperature", {"data": 20.0}),
+		("/arduino/bow/dht22/humidity", {"data": 60.0}),
 		("/arduino/stern/emergency_stop_status", {"data": 0}),
 		("/arduino/bow/linear_actuator_retract_state", {"data": 1}),
 		("/control_mode", {"data": 0}),
@@ -349,7 +349,7 @@ def test_camera_frame_stores_bytes_and_returns_none(client: RosBridgeClient) -> 
 
 	fake_jpeg = base64.b64encode(b"\xff\xd8\xff\xd9").decode()  # minimal JPEG SOI+EOI
 	result = client._transform(
-		"/camera/color/image_raw/compressed",
+		"/camera/camera/color/image_raw/compressed",
 		{"format": "jpeg", "data": fake_jpeg},
 	)
 	assert result is None  # not forwarded via WebSocket
@@ -361,13 +361,13 @@ def test_camera_frame_counter_increments(client: RosBridgeClient) -> None:
 	import base64
 
 	payload = {"format": "jpeg", "data": base64.b64encode(b"\xff\xd8\xff\xd9").decode()}
-	client._transform("/camera/color/image_raw/compressed", payload)
-	client._transform("/camera/color/image_raw/compressed", payload)
+	client._transform("/camera/camera/color/image_raw/compressed", payload)
+	client._transform("/camera/camera/color/image_raw/compressed", payload)
 	assert client._camera_frame_counters.get("main") == 2
 
 
 def test_camera_empty_data_returns_none(client: RosBridgeClient) -> None:
-	result = client._transform("/camera/color/image_raw/compressed", {"format": "jpeg", "data": ""})
+	result = client._transform("/camera/camera/color/image_raw/compressed", {"format": "jpeg", "data": ""})
 	assert result is None
 	assert "main" not in client.latest_camera_frames
 
