@@ -14,6 +14,7 @@ from revolt_api.bridge.contracts import (
 	BatteryMsg,
 	BridgeMessage,
 	BridgeStatusMsg,
+	CameraStatusMsg,
 	ControlModeMsg,
 	CurrentMsg,
 	EmergencyStopMsg,
@@ -67,6 +68,8 @@ class RosBridgeClient:
 		self._backoff_s: float = 1.0
 		self.latest_camera_frames: dict[str, bytes] = {}
 		self._camera_frame_counters: dict[str, int] = {}
+		self._camera_last_frame_time: dict[str, float] = {}
+		self._camera_connected: dict[str, bool] = {}
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
@@ -97,6 +100,7 @@ class RosBridgeClient:
 		# Push current status immediately so new clients don't have to wait for the next
 		# connect/disconnect event to learn whether the backend is connected to rosbridge.
 		self._push_status_to(q)
+		self._push_camera_status_to(q)
 		return q
 
 	def unsubscribe(self, q: "asyncio.Queue[BridgeMessage]") -> None:
@@ -200,9 +204,9 @@ class RosBridgeClient:
 					timestamp_ms=now,
 					location="stern_port",
 					raw_adc=raw,
-					amperes=round(raw * _ADC_TO_AMPS, 2),
+					amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
 				)
-			case "/arduino/stern/star/current":
+			case "/arduino/stern/starboard/current":
 				raw = int(msg["data"])
 				return CurrentMsg(
 					v="1",
@@ -210,7 +214,7 @@ class RosBridgeClient:
 					timestamp_ms=now,
 					location="stern_star",
 					raw_adc=raw,
-					amperes=round(raw * _ADC_TO_AMPS, 2),
+					amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
 				)
 			case "/arduino/bow/current":
 				raw = int(msg["data"])
@@ -222,7 +226,7 @@ class RosBridgeClient:
 					raw_adc=raw,
 					amperes=round(raw * _ADC_TO_AMPS, 2),
 				)
-			case "/arduino/stern/DHT22/temperature":
+			case "/arduino/stern/dht22/temperature":
 				return TemperatureMsg(
 					v="1",
 					type="temperature",
@@ -230,7 +234,7 @@ class RosBridgeClient:
 					location="stern",
 					value_c=float(msg["data"]),
 				)
-			case "/arduino/stern/DHT22/humidity":
+			case "/arduino/stern/dht22/humidity":
 				return HumidityMsg(
 					v="1",
 					type="humidity",
@@ -238,7 +242,7 @@ class RosBridgeClient:
 					location="stern",
 					value_pct=float(msg["data"]),
 				)
-			case "/arduino/bow/DHT22/temperature":
+			case "/arduino/bow/dht22/temperature":
 				return TemperatureMsg(
 					v="1",
 					type="temperature",
@@ -246,7 +250,7 @@ class RosBridgeClient:
 					location="bow",
 					value_c=float(msg["data"]),
 				)
-			case "/arduino/bow/DHT22/humidity":
+			case "/arduino/bow/dht22/humidity":
 				return HumidityMsg(
 					v="1",
 					type="humidity",
@@ -414,7 +418,7 @@ class RosBridgeClient:
 					timestamp_ms=now,
 					waypoints=waypoints,
 				)
-			case "/camera/color/image_raw/compressed":
+			case "/camera/camera/color/image_raw/compressed":
 				data_b64 = msg.get("data", "")
 				if not data_b64:
 					return None
@@ -423,13 +427,14 @@ class RosBridgeClient:
 					self._camera_frame_counters["main"] = (
 						self._camera_frame_counters.get("main", 0) + 1
 					)
+					self._camera_last_frame_time["main"] = time.monotonic()
 				except Exception:
 					logger.warning("camera_frame_decode_error")
 				return None  # served via MJPEG endpoint, not forwarded through WebSocket
 			case "/scan":
 				range_max = float(msg.get("range_max", 25.0))
 				raw_ranges: list[float] = msg.get("ranges", [])
-				ranges = [r if math.isfinite(r) else range_max for r in raw_ranges]
+				ranges = [r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges]
 				return LidarScanMsg(
 					v="1",
 					type="lidar_scan",
@@ -466,14 +471,46 @@ class RosBridgeClient:
 		with contextlib.suppress(asyncio.QueueFull):
 			q.put_nowait(self._make_status_msg())
 
-	def _broadcast_status(self) -> None:
-		msg = self._make_status_msg()
+	def _push_camera_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
+		now_ms = int(time.time() * 1000)
+		now = time.monotonic()
+		for camera_id, connected in self._camera_connected.items():
+			last = self._camera_last_frame_time.get(camera_id, 0.0)
+			current = (now - last) < 3.0
+			with contextlib.suppress(asyncio.QueueFull):
+				q.put_nowait(CameraStatusMsg(
+					v="1",
+					type="camera_status",
+					timestamp_ms=now_ms,
+					camera_id=camera_id,
+					connected=current,
+				))
+
+	def _broadcast(self, msg: BridgeMessage) -> None:
 		for q in list(self._subscribers):
 			with contextlib.suppress(asyncio.QueueFull):
 				q.put_nowait(msg)
 
+	def _broadcast_status(self) -> None:
+		self._broadcast(self._make_status_msg())
+
 	async def _heartbeat_loop(self) -> None:
+		_CAMERA_TIMEOUT_S = 3.0
 		while True:
 			await asyncio.sleep(1.0)
+			now = time.monotonic()
+			now_ms = int(time.time() * 1000)
 			if self._connected:
-				await self.publish("/ROS_heartbeat", "std_msgs/Bool", {"data": True})
+				await self.publish("/heartbeat", "std_msgs/Bool", {"data": True})
+			for camera_id in {"main"}:
+				last = self._camera_last_frame_time.get(camera_id, 0.0)
+				connected = (now - last) < _CAMERA_TIMEOUT_S
+				if connected != self._camera_connected.get(camera_id):
+					self._camera_connected[camera_id] = connected
+					self._broadcast(CameraStatusMsg(
+						v="1",
+						type="camera_status",
+						timestamp_ms=now_ms,
+						camera_id=camera_id,
+						connected=connected,
+					))

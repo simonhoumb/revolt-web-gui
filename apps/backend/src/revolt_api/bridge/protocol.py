@@ -17,7 +17,7 @@ class TopicSpec:
 PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/arduino/stern/battery_voltage",
-		"std_msgs/Float64",
+		"std_msgs/Float32",
 		description="Raw battery voltage in volts",
 	),
 	TopicSpec(
@@ -26,7 +26,7 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		description="Port motor ADC reading 0-1023 (0-30 A via ACS712)",
 	),
 	TopicSpec(
-		"/arduino/stern/star/current",
+		"/arduino/stern/starboard/current",
 		"std_msgs/Int16",
 		description="Starboard motor ADC reading 0-1023 (0-30 A via ACS712)",
 	),
@@ -36,33 +36,33 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		description="Bow motor ADC reading 0-1023 (0-30 A via ACS712)",
 	),
 	TopicSpec(
-		"/arduino/stern/DHT22/temperature",
-		"std_msgs/Float64",
+		"/arduino/stern/dht22/temperature",
+		"std_msgs/Float32",
 		description="Stern enclosure temperature in °C",
 	),
 	TopicSpec(
-		"/arduino/stern/DHT22/humidity",
-		"std_msgs/Float64",
+		"/arduino/stern/dht22/humidity",
+		"std_msgs/Float32",
 		description="Stern enclosure relative humidity in %",
 	),
 	TopicSpec(
-		"/arduino/bow/DHT22/temperature",
-		"std_msgs/Float64",
+		"/arduino/bow/dht22/temperature",
+		"std_msgs/Float32",
 		description="Bow enclosure temperature in °C",
 	),
 	TopicSpec(
-		"/arduino/bow/DHT22/humidity",
-		"std_msgs/Float64",
+		"/arduino/bow/dht22/humidity",
+		"std_msgs/Float32",
 		description="Bow enclosure relative humidity in %",
 	),
 	TopicSpec(
 		"/arduino/stern/emergency_stop_status",
-		"std_msgs/UInt8",
+		"std_msgs/UInt16",
 		description="Emergency stop state: 0=running, non-zero=stopped",
 	),
 	TopicSpec(
 		"/arduino/bow/linear_actuator_retract_state",
-		"std_msgs/UInt8",
+		"std_msgs/UInt16",
 		description="Bow linear actuator retract state: 1=retracted",
 	),
 	TopicSpec(
@@ -79,13 +79,13 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		),
 	),
 	TopicSpec(
-		"/camera/color/image_raw/compressed",
+		"/camera/camera/color/image_raw/compressed",
 		"sensor_msgs/CompressedImage",
 		throttle_rate_ms=100,
 		description=(
 			"Intel RealSense D456 color camera, JPEG-compressed via image_transport "
-			"(realsense2_camera v4.56.4). Frame stored by bridge client; served via "
-			"MJPEG HTTP endpoint, not forwarded through WebSocket."
+			"(realsense2_camera v4.x — namespace is /camera/camera/). Frame stored by "
+			"bridge client; served via MJPEG HTTP endpoint, not forwarded through WebSocket."
 		),
 	),
 	TopicSpec(
@@ -109,7 +109,7 @@ PHYSICAL_PUBLISH_TOPICS: list[TopicSpec] = [
 	),
 	TopicSpec("/bow_control", "revolt_msgs/BowControl"),
 	TopicSpec("/control_mode", "std_msgs/UInt8"),
-	TopicSpec("/ROS_heartbeat", "std_msgs/Bool", description="Must publish at 1 Hz"),
+	TopicSpec("/heartbeat", "std_msgs/Bool", description="Must publish at 1 Hz"),
 ]
 
 # Topics published by the pygemini/STC simulation environment (discovered via ros2 topic list -v).

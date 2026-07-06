@@ -66,6 +66,14 @@ export interface BridgeStatusMsg {
 	target: string;       // "physical" or "simulation"
 }
 
+export interface CameraStatusMsg {
+	v: "1";
+	type: "camera_status";
+	timestamp_ms: number;
+	camera_id: string;   // e.g. "main"
+	connected: boolean;  // true when a frame was received within the last 3 seconds
+}
+
 export interface PingMsg {
 	v: "1";
 	type: "ping";
@@ -177,6 +185,7 @@ export type BridgeMessage =
 	| EmergencyStopMsg
 	| LinearActuatorMsg
 	| BridgeStatusMsg
+	| CameraStatusMsg
 	| PingMsg
 	| GnssFixMsg
 	| SimHullPositionMsg

@@ -68,6 +68,14 @@ class BridgeStatusMsg(TypedDict):
 	target: str       # "physical" or "simulation"
 
 
+class CameraStatusMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["camera_status"]
+	timestamp_ms: int
+	camera_id: str   # e.g. "main"
+	connected: bool  # true when a frame was received within the last 3 seconds
+
+
 class PingMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["ping"]
@@ -180,6 +188,7 @@ BridgeMessage = (
 	| EmergencyStopMsg
 	| LinearActuatorMsg
 	| BridgeStatusMsg
+	| CameraStatusMsg
 	| PingMsg
 	| GnssFixMsg
 	| SimHullPositionMsg

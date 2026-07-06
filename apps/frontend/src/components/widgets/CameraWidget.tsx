@@ -1,25 +1,23 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBridgeData } from "../../context/BridgeDataContext.js";
 import styles from "./CameraWidget.module.css";
 
 export function CameraWidget() {
-	const { wsConnected, bridgeConnected } = useBridgeData();
-	const [streamError, setStreamError] = useState(false);
+	const { wsConnected, bridgeConnected, cameraStatus } = useBridgeData();
+	const cameraConnected = cameraStatus?.connected ?? false;
 	const [streamKey, setStreamKey] = useState(0);
-	const prevBridgeConnected = useRef(bridgeConnected);
+	const prevCameraConnected = useRef(cameraConnected);
 
-	// When the bridge reconnects after being down, the browser holds a dead
-	// MJPEG stream and shows a frozen last frame. Changing the key unmounts and
-	// remounts the <img>, forcing a fresh HTTP request to the stream endpoint.
+	// When the camera comes online after being absent, remount the <img> to
+	// force a fresh MJPEG request — the browser may hold a stale connection.
 	useEffect(() => {
-		if (bridgeConnected && !prevBridgeConnected.current) {
-			setStreamKey((k) => k + 1);
-			setStreamError(false);
+		if (cameraConnected && !prevCameraConnected.current) {
+			setStreamKey((k: number) => k + 1);
 		}
-		prevBridgeConnected.current = bridgeConnected;
-	}, [bridgeConnected]);
+		prevCameraConnected.current = cameraConnected;
+	}, [cameraConnected]);
 
-	const showOverlay = !wsConnected || !bridgeConnected || streamError;
+	const showOverlay = !wsConnected || !bridgeConnected || !cameraConnected;
 
 	return (
 		<div className={styles.container}>
@@ -30,8 +28,6 @@ export function CameraWidget() {
 					className={styles.feed}
 					src="/api/camera/main/stream"
 					alt="Live camera feed"
-					onError={() => setStreamError(true)}
-					onLoad={() => setStreamError(false)}
 				/>
 				{showOverlay ? (
 					<div className={styles.overlay}>

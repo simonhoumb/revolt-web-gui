@@ -17,12 +17,10 @@ export function useLidarData(): LidarData {
 
 	const points = useMemo(() => {
 		if (!lidarScan) return [];
-		return lidarScan.ranges.map((range, i) => {
+		return lidarScan.ranges.flatMap((range, i) => {
+			if (range <= lidarScan.range_min || range >= lidarScan.range_max) return [];
 			const angle = lidarScan.angle_min + i * lidarScan.angle_increment;
-			return {
-				x: range * Math.cos(angle),
-				y: range * Math.sin(angle),
-			};
+			return [{ x: range * Math.cos(angle), y: range * Math.sin(angle) }];
 		});
 	}, [lidarScan]);
 

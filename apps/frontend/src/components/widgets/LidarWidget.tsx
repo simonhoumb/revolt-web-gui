@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLidarData } from "../../hooks/useLidarData.js";
 import styles from "./LidarWidget.module.css";
 
@@ -10,10 +10,24 @@ function cssVar(name: string): string {
 	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Rotate the scan cloud so the vessel bow points up.
+// Measure: place an object straight ahead of the bow, note how many degrees
+// clockwise it appears from the top of the widget, then set that value here.
+const MOUNTING_YAW_DEG = -80;
+
+const ZOOM_STEPS = [2, 5, 10, 20, 50, 100, 130];
+const DEFAULT_ZOOM_IDX = 2; // 10 m
+
 export function LidarWidget() {
 	const { scan, points } = useLidarData();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const drawRef = useRef<() => void>(() => {});
+	const [zoomIdx, setZoomIdx] = useState(DEFAULT_ZOOM_IDX);
+
+	const displayRange = ZOOM_STEPS[zoomIdx] ?? 10;
+
+	const zoomIn = () => setZoomIdx((i) => Math.max(0, i - 1));
+	const zoomOut = () => setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
 
 	useEffect(() => {
 		drawRef.current = () => {
@@ -49,10 +63,9 @@ export function LidarWidget() {
 			ctx.arc(CENTER, CENTER, RADIUS, 0, 2 * Math.PI);
 			ctx.clip();
 
-			const scale = RADIUS / scan.range_max;
+			const scale = RADIUS / displayRange;
 
-			// Three inner range rings at 25 / 50 / 75 % of range_max.
-			// The outer border IS the 100 % ring, so no fourth ring needed.
+			// Three inner range rings at 25 / 50 / 75 % of displayRange.
 			ctx.strokeStyle = cssVar("--instrument-frame-tertiary-color");
 			ctx.lineWidth = 0.5;
 			for (let i = 1; i <= 3; i++) {
@@ -62,12 +75,29 @@ export function LidarWidget() {
 				ctx.stroke();
 			}
 
-			// Range label just inside the top of the circle.
+			// Ring distance labels — placed at right of center, vertically at each ring.
+			const fmtDist = (v: number) =>
+				v >= 10 ? `${Math.round(v)} m` : `${parseFloat(v.toFixed(1))} m`;
 			ctx.fillStyle = cssVar("--instrument-tick-mark-label-secondary-color");
+			ctx.font = "8px monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "middle";
+			for (let i = 1; i <= 3; i++) {
+				const r = (i / 4) * RADIUS;
+				ctx.fillText(fmtDist(displayRange * (i / 4)), CENTER + 4, CENTER - r);
+			}
+
+			// Outer range label just inside the top of the circle.
 			ctx.font = "9px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
-			ctx.fillText(`${scan.range_max.toFixed(0)} m`, CENTER + 4, CENTER - RADIUS + 4);
+			ctx.fillText(`${displayRange} m`, CENTER + 4, CENTER - RADIUS + 4);
+
+			// Rotate scan cloud so bow faces up. Positive = clockwise correction.
+			ctx.save();
+			ctx.translate(CENTER, CENTER);
+			ctx.rotate(MOUNTING_YAW_DEG * (Math.PI / 180));
+			ctx.translate(-CENTER, -CENTER);
 
 			// Scan returns — enhanced-primary contrasts with both day and dusk backgrounds.
 			ctx.fillStyle = cssVar("--instrument-enhanced-primary-color");
@@ -83,11 +113,13 @@ export function LidarWidget() {
 			ctx.arc(CENTER, CENTER, 4, 0, 2 * Math.PI);
 			ctx.fill();
 
-			ctx.restore();
+			ctx.restore(); // undo rotation — back to clip-only space
+
+			ctx.restore(); // undo clip
 		};
 
 		drawRef.current();
-	}, [scan, points]);
+	}, [scan, points, displayRange]);
 
 	// Redraw when brilliance changes — registered once, always calls the latest closure.
 	useEffect(() => {
@@ -111,6 +143,11 @@ export function LidarWidget() {
 				height={CANVAS_SIZE}
 				aria-label="2D lidar scan view"
 			/>
+			<div className={styles.controls}>
+				<button className={styles.zoomBtn} onClick={zoomIn} disabled={zoomIdx === 0} aria-label="Zoom in">+</button>
+				<span className={styles.rangeLabel}>{displayRange} m</span>
+				<button className={styles.zoomBtn} onClick={zoomOut} disabled={zoomIdx === ZOOM_STEPS.length - 1} aria-label="Zoom out">−</button>
+			</div>
 		</section>
 	);
 }
