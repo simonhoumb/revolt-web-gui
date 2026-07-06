@@ -5,7 +5,7 @@ import { ThrusterWidget } from "./ThrusterWidget.js";
 import { ConnectionWidget } from "./ConnectionWidget.js";
 import { LidarWidget } from "./LidarWidget.js";
 import { CameraWidget } from "./CameraWidget.js";
-import { MapPlaceholder } from "./MapPlaceholder.js";
+import { MapWidget } from "./MapWidget.js";
 import { ObiBatteryHorizontal100 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-100.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -91,7 +91,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 	map: {
 		id: "map",
 		label: "Map",
-		component: MapPlaceholder,
+		component: MapWidget,
 		icon: ObiChart,
 		defaultW: 6,
 		defaultH: 8,

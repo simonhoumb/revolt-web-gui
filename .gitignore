@@ -41,5 +41,9 @@ Thumbs.db
 test-results/
 coverage/
 
+# ENC tile pipeline (base map feature) -- locally-sourced chart data and
+# generated tiles, not for git (see infra/enc-pipeline/README.md)
+infra/enc-pipeline/.data/
+
 # Claude context file
 CLAUDE.md

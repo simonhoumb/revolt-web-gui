@@ -15,6 +15,7 @@
 		"@oicl/openbridge-webcomponents": "^1.0.1",
 		"@oicl/openbridge-webcomponents-react": "^1.0.1",
 		"@revolt/shared-types": "workspace:*",
+		"maplibre-gl": "^5.24.0",
 		"react": "^18.3.0",
 		"react-dom": "^18.3.0",
 		"react-grid-layout": "^2.2.3"
