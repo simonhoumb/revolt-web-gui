@@ -1,26 +1,13 @@
-.widget {
+.content {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	padding: 10px;
-	background-color: var(--container-section-color, #111);
-	border: 1px solid var(--border-divider-color, #271b10);
-	border-radius: 4px;
 }
 
-.widgetHeader {
+.badgeRow {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-}
-
-.header {
-	font-size: 0.75rem;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	color: var(--element-inactive-color, #9c6a34);
-	margin: 0;
 }
 
 .modeRow {

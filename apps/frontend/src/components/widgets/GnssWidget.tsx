@@ -15,8 +15,7 @@ export function GnssWidget() {
 		useGnssData();
 
 	return (
-		<section className={styles.widget}>
-			<h2 className={styles.header}>GNSS</h2>
+		<div className={styles.content}>
 			<div className={styles.fixRow}>
 				<ObcStatusIndicator status={fixIndicatorStatus(fixStatus)} />
 				<span className={styles.fixLabel}>{fixLabel}</span>
@@ -43,6 +42,6 @@ export function GnssWidget() {
 					<dd>{headingDeg !== null ? `${headingDeg.toFixed(1)}°` : "N/A"}</dd>
 				</div>
 			</dl>
-		</section>
+		</div>
 	);
 }

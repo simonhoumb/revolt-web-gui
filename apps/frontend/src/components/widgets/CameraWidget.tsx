@@ -23,15 +23,14 @@ export function CameraWidget() {
 
 	return (
 		<div className={styles.container}>
-			<h2 className={styles.header}>Camera</h2>
 			<div className={styles.viewport}>
 				<img
 					key={streamKey}
 					className={styles.feed}
 					src="/api/camera/main/stream"
 					alt="Live camera feed"
-					onError={() => setStreamError(true)}
-					onLoad={() => setStreamError(false)}
+					onError={() => { setStreamError(true); }}
+					onLoad={() => { setStreamError(false); }}
 				/>
 				{showOverlay ? (
 					<div className={styles.overlay}>

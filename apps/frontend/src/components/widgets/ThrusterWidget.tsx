@@ -69,11 +69,13 @@ export function ThrusterWidget() {
 	const isMiscomm = controlMode === "miscommunication";
 
 	return (
-		<section className={styles.widget}>
-			<div className={styles.widgetHeader}>
-				<h2 className={styles.header}>Thrusters</h2>
-				{isMiscomm && <ObcBadge type="caution" showNumber={false} showIcon={true} />}
-			</div>
+		<div className={styles.content}>
+			{isMiscomm && (
+				<div className={styles.badgeRow}>
+					<ObcBadge type="caution" showNumber={false} showIcon={true} />
+					<span className={styles.modeLabel}>Miscommunication</span>
+				</div>
+			)}
 			<div className={styles.modeRow}>
 				<span className={styles.modeLabel}>Mode:</span>
 				<span className={styles.modeValue}>
@@ -94,6 +96,6 @@ export function ThrusterWidget() {
 					bowExtra={{ retracted: bowRetracted }}
 				/>
 			</div>
-		</section>
+		</div>
 	);
 }
