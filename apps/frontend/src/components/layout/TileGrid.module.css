@@ -1,0 +1,40 @@
+.grid {
+	flex: 1;
+	overflow: hidden;
+	min-height: 0;
+	padding: 8px;
+	background-color: var(--container-background-color, #000);
+	position: relative;
+}
+
+.tileWrapper {
+	height: 100%;
+	position: relative;
+}
+
+/* Shown only in edit mode. Sits above web-component content so mousedown
+   events bubble in the light DOM, bypassing shadow-DOM retargeting. */
+.dragHandle {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	cursor: grab;
+}
+
+.dragHandle:active {
+	cursor: grabbing;
+}
+
+/* Drag/resize placeholder: blue when the drop is valid */
+.grid :global(.react-grid-placeholder) {
+	background: var(--obc-placeholder-valid, #1e88e5);
+	opacity: 0.25;
+	border-radius: 4px;
+	border: 2px solid var(--obc-placeholder-valid, #1e88e5);
+}
+
+/* Red when displaced tiles would exceed the viewport */
+.grid[data-drag-invalid] :global(.react-grid-placeholder) {
+	background: var(--alarm-color, #d32f2f);
+	border-color: var(--alarm-color, #d32f2f);
+}
