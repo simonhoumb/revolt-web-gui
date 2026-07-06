@@ -50,7 +50,7 @@ def _make_camera_frame(t: float) -> str:
 
     # Label — load_default(size=) requires Pillow >= 10
     font = ImageFont.load_default(size=32)
-    draw.text((20, 20), "CAM MOCK  1280×720", fill=(100, 120, 140), font=font)
+    draw.text((20, 20), "CAM MOCK  1280x720", fill=(100, 120, 140), font=font)
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=60)
