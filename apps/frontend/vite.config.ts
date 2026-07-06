@@ -7,12 +7,34 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [react()],
+		define: {
+			// react-draggable references process.env.DRAGGABLE_DEBUG in its log()
+			// helper. process is not available in the browser; replacing with false
+			// makes the log calls dead code. optimizeDeps.include ensures esbuild
+			// pre-bundles react-draggable and applies this replacement.
+			"process.env.DRAGGABLE_DEBUG": "false",
+		},
+		optimizeDeps: {
+			include: ["react-grid-layout"],
+			esbuildOptions: {
+				// react-draggable (bundled inside react-grid-layout) calls process.env.DRAGGABLE_DEBUG
+				// in its log() helper. process is not available in the browser; replacing with false
+				// makes the log() calls dead code so handleDragStart() can proceed to addEvent().
+				define: { "process.env.DRAGGABLE_DEBUG": "false" },
+			},
+		},
 		resolve: {
 			alias: {
 				// Use TS source directly in dev, no pre-build of shared-types needed
 				"@revolt/shared-types": path.resolve(
 					__dirname,
 					"../../packages/shared-types/src/index.ts",
+				),
+				// pnpm's virtual store can't be reached by Vite's CSS @import resolver
+				// for files listed in a package's exports field; pin to the real path.
+				"react-grid-layout/css/styles.css": path.resolve(
+					__dirname,
+					"node_modules/react-grid-layout/css/styles.css",
 				),
 			},
 		},
