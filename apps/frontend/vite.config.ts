@@ -48,6 +48,16 @@ export default defineConfig(({ mode }) => {
 					changeOrigin: true,
 					ws: true,
 				},
+				"/tiles": {
+					target: env.VITE_MARTIN_URL ?? "http://localhost:3000",
+					// martin's TileJSON responses embed absolute tile/glyph URLs built
+					// from the request's Host header, so the browser's original Host
+					// (not martin's) must reach it -- changeOrigin must stay false here,
+					// unlike /api above, or the returned URLs point at "martin" (or
+					// whatever the compose service name is), which the browser can't
+					// resolve.
+					changeOrigin: false,
+				},
 			},
 		},
 		preview: {

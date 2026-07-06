@@ -39,15 +39,16 @@ const LAYOUT_KEY = "revolt-dashboard-layout";
 const TEMPLATES_KEY = "revolt-dashboard-templates";
 
 const DEFAULT_TILES: TileLayout[] = [
-	{ i: "battery",    x: 0, y: 0, w: 3, h: 5 },
-	{ i: "gnss",       x: 3, y: 0, w: 3, h: 5 },
-	{ i: "connection", x: 6, y: 0, w: 3, h: 4 },
-	{ i: "thruster",   x: 6, y: 4, w: 3, h: 7 },
-	{ i: "lidar",      x: 3, y: 5, w: 3, h: 5 },
-	{ i: "camera",     x: 0, y: 5, w: 3, h: 7 },
+	{ i: "battery",    x: 0, y: 0,  w: 3, h: 5 },
+	{ i: "gnss",       x: 3, y: 0,  w: 3, h: 5 },
+	{ i: "connection", x: 6, y: 0,  w: 3, h: 4 },
+	{ i: "thruster",   x: 6, y: 4,  w: 3, h: 7 },
+	{ i: "lidar",      x: 3, y: 5,  w: 3, h: 5 },
+	{ i: "camera",     x: 0, y: 5,  w: 3, h: 7 },
+	{ i: "map",        x: 0, y: 12, w: 6, h: 8 },
 ];
 
-const DEFAULT_HIDDEN: WidgetId[] = ["map"];
+const DEFAULT_HIDDEN: WidgetId[] = [];
 
 const DEFAULT_CONFIG: LayoutConfig = {
 	tiles: DEFAULT_TILES,
