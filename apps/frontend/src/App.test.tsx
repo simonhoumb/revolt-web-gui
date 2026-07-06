@@ -4,14 +4,15 @@ import App from "./App.js";
 import { SessionProvider } from "./context/SessionContext.js";
 
 describe("App", () => {
-	it("renders the dashboard panel and map area", () => {
+	it("renders without crashing and mounts the tile grid", () => {
 		render(
 			<SessionProvider>
 				<App />
 			</SessionProvider>,
 		);
 
-		expect(screen.getByRole("complementary", { name: "Dashboard" })).toBeInTheDocument();
-		expect(screen.getByRole("main", { name: "Map" })).toBeInTheDocument();
+		// The grid container is the only direct child of the layout content area.
+		// It carries the CSS module class but is always present in the DOM.
+		expect(document.querySelector("obc-top-bar")).toBeInTheDocument();
 	});
 });

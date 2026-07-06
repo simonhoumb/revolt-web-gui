@@ -21,7 +21,6 @@ export function CameraWidget() {
 
 	return (
 		<div className={styles.container}>
-			<h2 className={styles.header}>Camera</h2>
 			<div className={styles.viewport}>
 				<img
 					key={streamKey}

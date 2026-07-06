@@ -7,8 +7,7 @@ export function ConnectionWidget() {
 	const { wsConnected, bridgeConnected, latencyMs, emergencyStopActive } = useVesselHealth();
 
 	return (
-		<section className={styles.widget}>
-			<h2 className={styles.header}>Connection</h2>
+		<div className={styles.content}>
 			<div className={styles.statusList}>
 				<div className={styles.statusRow}>
 					<ObcStatusIndicator
@@ -49,6 +48,6 @@ export function ConnectionWidget() {
 					<span className={styles.statusLabel}>Emergency Stop</span>
 				</div>
 			</div>
-		</section>
+		</div>
 	);
 }

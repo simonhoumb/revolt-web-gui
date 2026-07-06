@@ -15,15 +15,17 @@ export function BatteryWidget() {
 	const { voltageV, voltagePercent, voltageStatus, current } = useBatteryData();
 
 	return (
-		<section className={styles.widget}>
-			<h2 className={styles.header}>Battery</h2>
+		<div className={styles.content}>
 			<div className={styles.batteryRow}>
-				<ObcBatteryIcon
-					level={voltagePercent ?? 0}
-					charging={false}
-					horizontal={false}
-					notification={voltageStatus !== "normal"}
-				/>
+				<div className={styles.iconWrapper}>
+					<ObcBatteryIcon
+						className={styles.batteryIcon}
+						level={voltagePercent ?? 0}
+						charging={false}
+						horizontal={false}
+						notification={voltageStatus !== "normal"}
+					/>
+				</div>
 				<div className={styles.voltageBlock}>
 					<span className={styles.voltage}>
 						{voltageV !== null ? `${voltageV.toFixed(2)} V` : "— V"}
@@ -58,6 +60,6 @@ export function BatteryWidget() {
 					);
 				})}
 			</div>
-		</section>
+		</div>
 	);
 }

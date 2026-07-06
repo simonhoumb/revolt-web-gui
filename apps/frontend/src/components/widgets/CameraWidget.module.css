@@ -6,16 +6,6 @@
 	height: 100%;
 }
 
-.header {
-	font-size: 0.75rem;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	color: var(--element-inactive-color, #9c6a34);
-	margin: 0;
-	padding: 10px 10px 0;
-}
-
 .viewport {
 	position: relative;
 	flex: 1;
@@ -38,6 +28,7 @@
 	justify-content: center;
 	background-color: var(--overlay-container-background-color, rgba(0, 0, 0, 0.75));
 	z-index: 1;
+	pointer-events: none;
 }
 
 .overlayText {

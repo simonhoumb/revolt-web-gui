@@ -50,7 +50,7 @@ def _make_camera_frame(t: float) -> str:
 
     # Label — load_default(size=) requires Pillow >= 10
     font = ImageFont.load_default(size=32)
-    draw.text((20, 20), "CAM MOCK  1280×720", fill=(100, 120, 140), font=font)
+    draw.text((20, 20), "CAM MOCK  1280x720", fill=(100, 120, 140), font=font)
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=60)
@@ -60,18 +60,18 @@ def _make_camera_frame(t: float) -> str:
 INTERVALS_PHYSICAL: dict[str, float] = {
 	"/arduino/stern/battery_voltage": 2.0,
 	"/arduino/stern/port/current": 0.5,
-	"/arduino/stern/star/current": 0.5,
+	"/arduino/stern/starboard/current": 0.5,
 	"/arduino/bow/current": 0.5,
-	"/arduino/stern/DHT22/temperature": 5.0,
-	"/arduino/stern/DHT22/humidity": 5.0,
-	"/arduino/bow/DHT22/temperature": 5.0,
-	"/arduino/bow/DHT22/humidity": 5.0,
+	"/arduino/stern/dht22/temperature": 5.0,
+	"/arduino/stern/dht22/humidity": 5.0,
+	"/arduino/bow/dht22/temperature": 5.0,
+	"/arduino/bow/dht22/humidity": 5.0,
 	"/arduino/stern/emergency_stop_status": 1.0,
 	"/arduino/bow/linear_actuator_retract_state": 2.0,
 	"/control_mode": 1.0,
 	"/fix": 1.0,
-	"/camera/color/image_raw/compressed": 0.2,   # 5 fps
-	"/scan": 0.1,                                 # 10 Hz
+	"/camera/camera/color/image_raw/compressed": 0.2,   # 5 fps
+	"/scan": 0.1,                                        # 10 Hz
 }
 
 # Emit intervals for simulation topics
@@ -106,13 +106,17 @@ def _make_msg(topic: str) -> dict:
 			phase = int(t / 15) % 4
 			base = [13.0, 11.3, 10.5, 17.0][phase]
 			return {"data": round(base + random.gauss(0, 0.05), 2)}
-		case "/arduino/stern/port/current" | "/arduino/bow/current":
-			return {"data": max(0, min(1023, int(500 + random.gauss(0, 40))))}
-		case "/arduino/stern/star/current":
-			return {"data": max(0, min(1023, int(480 + random.gauss(0, 40))))}
-		case "/arduino/stern/DHT22/temperature" | "/arduino/bow/DHT22/temperature":
+		case "/arduino/stern/port/current":
+			# Firmware-converted amps (ACS712 formula applied on Arduino); typical range 0-30 A
+			return {"data": int(round(max(0.0, 10.0 + random.gauss(0, 1.5))))}
+		case "/arduino/stern/starboard/current":
+			return {"data": int(round(max(0.0, 12.0 + random.gauss(0, 1.5))))}
+		case "/arduino/bow/current":
+			# Raw ADC 0-1023; backend applies _ADC_TO_AMPS (30/1023) → ~15 A
+			return {"data": max(0, min(1023, int(512 + random.gauss(0, 30))))}
+		case "/arduino/stern/dht22/temperature" | "/arduino/bow/dht22/temperature":
 			return {"data": round(22.0 + random.gauss(0, 0.3), 1)}
-		case "/arduino/stern/DHT22/humidity" | "/arduino/bow/DHT22/humidity":
+		case "/arduino/stern/dht22/humidity" | "/arduino/bow/dht22/humidity":
 			return {"data": round(60.0 + random.gauss(0, 1.0), 1)}
 		case "/arduino/stern/emergency_stop_status":
 			# Toggles active every 5 s for easy testing (change to longer for demos)
@@ -221,7 +225,7 @@ def _make_msg(topic: str) -> dict:
 					},
 				]
 			}
-		case "/camera/color/image_raw/compressed":
+		case "/camera/camera/color/image_raw/compressed":
 			return {
 				"header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "camera_color_frame"},
 				"format": "jpeg",
