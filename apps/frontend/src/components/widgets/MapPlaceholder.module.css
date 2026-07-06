@@ -1,0 +1,22 @@
+.placeholder {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.label {
+	font-size: 1.2rem;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+.note {
+	font-size: 0.75rem;
+	opacity: 0.6;
+}
