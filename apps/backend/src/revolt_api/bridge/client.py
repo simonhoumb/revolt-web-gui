@@ -19,6 +19,8 @@ from revolt_api.bridge.contracts import (
 	CurrentMsg,
 	EmergencyStopMsg,
 	GnssFixMsg,
+	GnssHeadingMsg,
+	GnssVelocityMsg,
 	HumidityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
@@ -344,6 +346,30 @@ class RosBridgeClient:
 					longitude=float(lon),
 					altitude_m=float(alt),
 					fix_status=fix_status,
+				)
+			case "/heading":
+				# nmea_navsat builds this as a pure yaw rotation (quaternion_from_euler(0, 0, heading)),
+				# so a general yaw extraction recovers the original NMEA HDT heading in degrees.
+				q = msg["quaternion"]
+				w, x, y, z = float(q["w"]), float(q["x"]), float(q["y"]), float(q["z"])
+				yaw_rad = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+				return GnssHeadingMsg(
+					v="1",
+					type="gnss_heading",
+					timestamp_ms=now,
+					heading_deg=math.degrees(yaw_rad) % 360,
+				)
+			case "/vel":
+				# nmea_navsat encodes VTG speed/course as ENU components:
+				# linear.x = speed*sin(course), linear.y = speed*cos(course).
+				lin = msg["twist"]["linear"]
+				vx, vy = float(lin["x"]), float(lin["y"])
+				return GnssVelocityMsg(
+					v="1",
+					type="gnss_velocity",
+					timestamp_ms=now,
+					speed_ms=math.hypot(vx, vy),
+					course_deg=math.degrees(math.atan2(vx, vy)) % 360,
 				)
 			case "/revolt/sim/stc/gnss/velocity_vector":
 				data = msg["data"]

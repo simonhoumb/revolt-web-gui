@@ -70,6 +70,8 @@ INTERVALS_PHYSICAL: dict[str, float] = {
 	"/arduino/bow/linear_actuator_retract_state": 2.0,
 	"/control_mode": 1.0,
 	"/fix": 1.0,
+	"/vel": 1.0,
+	"/heading": 0.5,
 	"/camera/camera/color/image_raw/compressed": 0.2,   # 5 fps
 	"/scan": 0.1,                                        # 10 Hz
 }
@@ -91,6 +93,13 @@ INTERVALS_SIMULATION: dict[str, float] = {
 INTERVALS = INTERVALS_SIMULATION if BRIDGE_TARGET == "simulation" else INTERVALS_PHYSICAL
 
 _start_time = time.time()
+
+CRAB_ANGLE_RAD = math.radians(15)  # simulated cross-current/wind drift: COG diverges from heading
+
+
+def _mock_heading_rad(t: float) -> float:
+	# Bearing of travel matching the /fix drift (lat=sin, lon=cos of t/60).
+	return -(t / 60) % (2 * math.pi)
 
 
 def _make_msg(topic: str) -> dict:
@@ -130,12 +139,37 @@ def _make_msg(topic: str) -> dict:
 		case "/fix":
 			# Simulated NavSatFix: Bekkelaget, Oslo Fjord with tiny drift
 			return {
-				"latitude": round(59.9083 + 0.0001 * math.sin(t / 60), 7),
-				"longitude": round(10.7512 + 0.0001 * math.cos(t / 60), 7),
+				"latitude": round(59.3783 + 0.0001 * math.sin(t / 60), 7),
+				"longitude": round(10.5930 + 0.0001 * math.cos(t / 60), 7),
 				"altitude": round(5.0 + random.gauss(0, 0.1), 2),
 				"status": {"status": 0, "service": 1},
 				"position_covariance": [0.0] * 9,
 				"position_covariance_type": 0,
+			}
+		case "/heading":
+			heading_rad = _mock_heading_rad(t)
+			return {
+				"quaternion": {
+					"x": 0.0, "y": 0.0,
+					"z": round(math.sin(heading_rad / 2), 4),
+					"w": round(math.cos(heading_rad / 2), 4),
+				}
+			}
+		case "/vel":
+			speed = 3.0 + 0.2 * math.sin(t / 15)
+			# Simulated cross-current/wind crab: course over ground leads
+			# heading by a fixed angle so H (heading-up) and C (course-up)
+			# chart orientation modes are visibly distinct in the mock,
+			# matching real-world drift where COG != heading.
+			course_rad = (_mock_heading_rad(t) + CRAB_ANGLE_RAD) % (2 * math.pi)
+			return {
+				"twist": {
+					"linear": {
+						"x": round(speed * math.sin(course_rad), 3),
+						"y": round(speed * math.cos(course_rad), 3),
+						"z": 0.0,
+					}
+				}
 			}
 		# Simulation topics
 		case "/revolt/sim/stc/position/hull":
