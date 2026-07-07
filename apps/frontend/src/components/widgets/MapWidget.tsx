@@ -1,8 +1,4 @@
-import maplibregl, {
-	type GeoJSONSource,
-	type Map as MapLibreMap,
-	type Marker,
-} from "maplibre-gl";
+import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/stepper-box/stepper-box.js";
@@ -35,7 +31,7 @@ const TRACK_SOURCE_ID = "vessel-track";
 const TRACK_LINE_LAYER_ID = "vessel-track-line";
 const TRACK_POINTS_LAYER_ID = "vessel-track-points";
 
-type RotationMode = "H" | "N" | "C";
+type RotationMode = "H" | "N" | "C"; // HEADING-UP || NORTH-UP || COURSE-UP
 
 // Rough NM-per-screen approximation from zoom level, matching OpenBridge's own
 // ECDIS demo (Ocean-Industries-Concept-Lab/openbridge-webcomponents,
@@ -238,7 +234,7 @@ export function MapWidget() {
 		const map = mapRef.current;
 		if (!map || map.dragPan.isActive()) return;
 		const bearing =
-			rotationMode === "H" ? headingDeg ?? 0 : rotationMode === "C" ? courseDeg ?? 0 : 0;
+			rotationMode === "H" ? (headingDeg ?? 0) : rotationMode === "C" ? (courseDeg ?? 0) : 0;
 		map.easeTo({ bearing, duration: 300 });
 	}, [rotationMode, headingDeg, courseDeg]);
 
