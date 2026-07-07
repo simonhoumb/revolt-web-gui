@@ -22,7 +22,28 @@ vi.mock("maplibre-gl", () => {
 		addControl = vi.fn();
 		resize = vi.fn();
 		remove = vi.fn();
+		addSource = vi.fn();
+		addLayer = vi.fn();
+		getSource = vi.fn();
+		easeTo = vi.fn();
+		jumpTo = vi.fn();
+		zoomIn = vi.fn();
+		zoomOut = vi.fn();
+		getZoom = vi.fn(() => 11);
+		setBearing = vi.fn();
+		dragPan = { enable: vi.fn(), disable: vi.fn(), isActive: vi.fn(() => false) };
+		touchZoomRotate = { disableRotation: vi.fn() };
+		on = vi.fn();
+		off = vi.fn();
 	}
 
-	return { default: { Map: NoopMap, NavigationControl: vi.fn() } };
+	class NoopMarker {
+		setLngLat = vi.fn().mockReturnThis();
+		setRotation = vi.fn().mockReturnThis();
+		addTo = vi.fn().mockReturnThis();
+		remove = vi.fn();
+		getElement = vi.fn(() => document.createElement("div"));
+	}
+
+	return { default: { Map: NoopMap, NavigationControl: vi.fn(), Marker: NoopMarker } };
 });

@@ -15,6 +15,8 @@ import type {
 	CurrentMsg,
 	EmergencyStopMsg,
 	GnssFixMsg,
+	GnssHeadingMsg,
+	GnssVelocityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
 	SimGnssVelocityMsg,
@@ -38,7 +40,9 @@ export interface BridgeData {
 	battery: BatteryMsg | null;
 	current: CurrentReadings;
 	gnssFix: GnssFixMsg | null;
+	gnssHeading: GnssHeadingMsg | null;
 	gnssVelocity: SimGnssVelocityMsg | null;
+	gnssVelocityPhysical: GnssVelocityMsg | null;
 	controlMode: ControlModeMsg | null;
 	emergencyStop: EmergencyStopMsg | null;
 	linearActuator: LinearActuatorMsg | null;
@@ -58,7 +62,9 @@ const initialData: BridgeData = {
 	battery: null,
 	current: initialCurrent,
 	gnssFix: null,
+	gnssHeading: null,
 	gnssVelocity: null,
+	gnssVelocityPhysical: null,
 	controlMode: null,
 	emergencyStop: null,
 	linearActuator: null,
@@ -82,6 +88,10 @@ function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 			};
 		case "gnss_fix":
 			return { ...state, gnssFix: msg };
+		case "gnss_heading":
+			return { ...state, gnssHeading: msg };
+		case "gnss_velocity":
+			return { ...state, gnssVelocityPhysical: msg };
 		case "sim_gnss_velocity":
 			return { ...state, gnssVelocity: msg };
 		case "control_mode":
