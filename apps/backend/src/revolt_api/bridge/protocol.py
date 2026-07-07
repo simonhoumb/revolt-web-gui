@@ -75,7 +75,24 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		"sensor_msgs/NavSatFix",
 		description=(
 			"Primary GNSS fix (WGS84): latitude, longitude, altitude. "
-			"Topic name TBD — verify with `ros2 topic list` on the physical vessel."
+			"Published by the Hemisphere Vector VS330 GNSS compass via nmea_navsat."
+		),
+	),
+	TopicSpec(
+		"/vel",
+		"geometry_msgs/TwistStamped",
+		description=(
+			"GNSS speed/course over ground (VTG-derived), ENU linear.x/y components. "
+			"Published by the Hemisphere Vector VS330 GNSS compass via nmea_navsat."
+		),
+	),
+	TopicSpec(
+		"/heading",
+		"geometry_msgs/QuaternionStamped",
+		description=(
+			"True heading as a yaw-only quaternion, derived from the NMEA HDT sentence. "
+			"Published by the Hemisphere Vector VS330 GNSS compass (dual-antenna RTK "
+			"heading computed in receiver firmware) via nmea_navsat."
 		),
 	),
 	TopicSpec(
@@ -98,7 +115,9 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"PointCloud2 by velodyne_laserscan node. ~1800 points per 360° sweep at 10 Hz."
 		),
 	),
-	# IMU, radar: discover topic names on the vessel and add here.
+	# Xsens IMU (/filter/quaternion, /filter/velocity), radar: not wired up yet.
+	# GNSS heading/velocity use the VS330 compass (/heading, /vel) as the
+	# authoritative source; Xsens is a candidate fallback, not implemented.
 ]
 
 PHYSICAL_PUBLISH_TOPICS: list[TopicSpec] = [

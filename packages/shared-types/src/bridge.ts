@@ -117,6 +117,21 @@ export interface GnssFixMsg {
 	fix_status: number;  // NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
 }
 
+export interface GnssHeadingMsg {
+	v: "1";
+	type: "gnss_heading";
+	timestamp_ms: number;
+	heading_deg: number;  // true heading 0-360, from /heading QuaternionStamped yaw (VS330 GNSS compass)
+}
+
+export interface GnssVelocityMsg {
+	v: "1";
+	type: "gnss_velocity";
+	timestamp_ms: number;
+	speed_ms: number;    // from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
+	course_deg: number;  // course over ground 0-360, from /vel TwistStamped linear.x/y bearing
+}
+
 export interface SimGnssVelocityMsg {
 	v: "1";
 	type: "sim_gnss_velocity";
@@ -188,6 +203,8 @@ export type BridgeMessage =
 	| CameraStatusMsg
 	| PingMsg
 	| GnssFixMsg
+	| GnssHeadingMsg
+	| GnssVelocityMsg
 	| SimHullPositionMsg
 	| SimHullVelocityMsg
 	| SimGnssVelocityMsg

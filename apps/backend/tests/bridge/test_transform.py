@@ -251,6 +251,33 @@ def test_physical_gnss_fix_with_status(client: RosBridgeClient) -> None:
 	assert result["fix_status"] == 0  # FIX
 
 
+def test_physical_gnss_heading(client: RosBridgeClient) -> None:
+	# quaternion_from_euler(0, 0, radians(90)) -> pure yaw quaternion for 90 degrees
+	msg = {"quaternion": {"x": 0.0, "y": 0.0, "z": 0.7071067811865476, "w": 0.7071067811865476}}
+	result = client._transform("/heading", msg)
+	assert result is not None
+	assert result["type"] == "gnss_heading"
+	assert result["heading_deg"] == pytest.approx(90.0)
+
+
+def test_physical_gnss_heading_wraps_to_positive(client: RosBridgeClient) -> None:
+	# yaw of -90 degrees should normalize to 270
+	msg = {"quaternion": {"x": 0.0, "y": 0.0, "z": -0.7071067811865476, "w": 0.7071067811865476}}
+	result = client._transform("/heading", msg)
+	assert result is not None
+	assert result["heading_deg"] == pytest.approx(270.0)
+
+
+def test_physical_gnss_velocity(client: RosBridgeClient) -> None:
+	# speed=5 m/s, course=45 degrees -> x = 5*sin(45deg), y = 5*cos(45deg)
+	msg = {"twist": {"linear": {"x": 3.5355339059327378, "y": 3.5355339059327378, "z": 0.0}}}
+	result = client._transform("/vel", msg)
+	assert result is not None
+	assert result["type"] == "gnss_velocity"
+	assert result["speed_ms"] == pytest.approx(5.0)
+	assert result["course_deg"] == pytest.approx(45.0)
+
+
 def test_sim_gnss_velocity(client: RosBridgeClient) -> None:
 	result = client._transform("/revolt/sim/stc/gnss/velocity_vector", _FLOAT32MA_2)
 	assert result is not None

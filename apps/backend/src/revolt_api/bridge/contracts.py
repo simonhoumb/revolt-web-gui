@@ -120,6 +120,21 @@ class GnssFixMsg(TypedDict):
 	fix_status: int    # NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
 
 
+class GnssHeadingMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["gnss_heading"]
+	timestamp_ms: int
+	heading_deg: float  # true heading 0-360, from /heading QuaternionStamped yaw (VS330 GNSS compass)
+
+
+class GnssVelocityMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["gnss_velocity"]
+	timestamp_ms: int
+	speed_ms: float    # from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
+	course_deg: float  # course over ground 0-360, from /vel TwistStamped linear.x/y bearing
+
+
 class SimGnssVelocityMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["sim_gnss_velocity"]
@@ -191,6 +206,8 @@ BridgeMessage = (
 	| CameraStatusMsg
 	| PingMsg
 	| GnssFixMsg
+	| GnssHeadingMsg
+	| GnssVelocityMsg
 	| SimHullPositionMsg
 	| SimHullVelocityMsg
 	| SimGnssVelocityMsg
