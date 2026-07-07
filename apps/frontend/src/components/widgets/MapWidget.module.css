@@ -23,11 +23,11 @@
 	bottom: 0;
 	z-index: 1;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
-	padding: 0 8px;
-	height: var(--app-components-tool-bar-touch-target-size, 40px);
-	overflow-x: auto;
+	padding: 4px 8px;
+	min-height: var(--app-components-tool-bar-touch-target-size, 40px);
 	border-top: 1px solid var(--border-divider-color);
 	background: var(--container-section-color);
 	box-shadow: var(--shadow-flat-x) var(--shadow-flat-y) var(--shadow-flat-blur)
