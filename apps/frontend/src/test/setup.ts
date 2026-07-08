@@ -10,6 +10,20 @@ global.ResizeObserver = class ResizeObserver {
 	disconnect() {}
 };
 
+// jsdom's fetch (undici) requires an absolute URL, so a component that fetches a relative
+// endpoint on mount (e.g. MissionContext's loadMissions()) throws an unhandled rejection in any
+// test that mounts the full App tree without its own mock. Stub a benign empty-array response by
+// default; tests that care about a specific call mock it locally (missionApi.test.ts,
+// MissionContext.test.tsx) which takes precedence over this one.
+global.fetch = vi.fn(() =>
+	Promise.resolve(
+		new Response(JSON.stringify([]), {
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		}),
+	),
+) as unknown as typeof fetch;
+
 // jsdom has no WebGL context and no URL.createObjectURL, both of which
 // maplibre-gl touches at module-load time -- stub it globally so any test
 // that mounts the full dashboard (e.g. App.test.tsx) doesn't crash just from

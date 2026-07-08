@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import {
+	createContext,
+	useContext,
+	useState,
+	useEffect,
+	useCallback,
+	useMemo,
+	type ReactNode,
+} from "react";
 import { type WidgetId, ALL_WIDGET_IDS, WIDGET_REGISTRY } from "../components/widgets/registry.js";
 
 export interface TileLayout {
@@ -39,13 +47,14 @@ const LAYOUT_KEY = "revolt-dashboard-layout";
 const TEMPLATES_KEY = "revolt-dashboard-templates";
 
 const DEFAULT_TILES: TileLayout[] = [
-	{ i: "battery",    x: 0, y: 0,  w: 3, h: 5 },
-	{ i: "gnss",       x: 3, y: 0,  w: 3, h: 5 },
-	{ i: "connection", x: 6, y: 0,  w: 3, h: 4 },
-	{ i: "thruster",   x: 6, y: 4,  w: 3, h: 7 },
-	{ i: "lidar",      x: 3, y: 5,  w: 3, h: 5 },
-	{ i: "camera",     x: 0, y: 5,  w: 3, h: 7 },
-	{ i: "map",        x: 0, y: 12, w: 6, h: 8 },
+	{ i: "battery", x: 0, y: 0, w: 3, h: 5 },
+	{ i: "gnss", x: 3, y: 0, w: 3, h: 5 },
+	{ i: "connection", x: 6, y: 0, w: 3, h: 4 },
+	{ i: "thruster", x: 6, y: 4, w: 3, h: 7 },
+	{ i: "lidar", x: 3, y: 5, w: 3, h: 5 },
+	{ i: "camera", x: 0, y: 5, w: 3, h: 7 },
+	{ i: "map", x: 0, y: 12, w: 6, h: 8 },
+	{ i: "mission", x: 6, y: 12, w: 4, h: 8 },
 ];
 
 const DEFAULT_HIDDEN: WidgetId[] = [];
@@ -65,13 +74,13 @@ const BUILTIN_TEMPLATES: LayoutTemplate[] = [
 	{
 		name: "Instruments only",
 		tiles: [
-			{ i: "battery",    x: 0, y: 0, w: 4, h: 5 },
-			{ i: "gnss",       x: 4, y: 0, w: 4, h: 5 },
+			{ i: "battery", x: 0, y: 0, w: 4, h: 5 },
+			{ i: "gnss", x: 4, y: 0, w: 4, h: 5 },
 			{ i: "connection", x: 8, y: 0, w: 4, h: 4 },
-			{ i: "thruster",   x: 0, y: 5, w: 4, h: 7 },
-			{ i: "lidar",      x: 4, y: 5, w: 4, h: 5 },
+			{ i: "thruster", x: 0, y: 5, w: 4, h: 7 },
+			{ i: "lidar", x: 4, y: 5, w: 4, h: 5 },
 		],
-		hiddenWidgets: ["camera", "map"],
+		hiddenWidgets: ["camera", "map", "mission"],
 		savedAt: 0,
 	},
 ];
@@ -85,21 +94,24 @@ function loadConfig(): LayoutConfig {
 		// Merge stored tiles against defaults, filtering to known widget IDs only
 		const knownIds = new Set<string>(ALL_WIDGET_IDS);
 		const storedTiles = Array.isArray(parsed.tiles)
-			? (parsed.tiles).filter((t) => knownIds.has(t.i))
+			? parsed.tiles.filter((t) => knownIds.has(t.i))
 			: DEFAULT_TILES;
 		const storedHidden = Array.isArray(parsed.hiddenWidgets)
-			? (parsed.hiddenWidgets).filter((id) => knownIds.has(id))
+			? parsed.hiddenWidgets.filter((id) => knownIds.has(id))
 			: DEFAULT_HIDDEN;
 
 		// Backfill any widget IDs that appear in neither list (new widgets added after save)
-		const accountedFor = new Set([
-			...storedTiles.map((t) => t.i),
-			...storedHidden,
-		]);
+		const accountedFor = new Set([...storedTiles.map((t) => t.i), ...storedHidden]);
 		const missingWidgets = ALL_WIDGET_IDS.filter((id) => !accountedFor.has(id));
 		const backfillTiles: TileLayout[] = missingWidgets.map((id, idx) => {
 			const def = WIDGET_REGISTRY[id];
-			return { i: id, x: (idx * def.defaultW) % 12, y: 999, w: def.defaultW, h: def.defaultH };
+			return {
+				i: id,
+				x: (idx * def.defaultW) % 12,
+				y: 999,
+				w: def.defaultW,
+				h: def.defaultH,
+			};
 		});
 
 		return {
@@ -167,7 +179,13 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 		setConfig((prev) => {
 			const def = WIDGET_REGISTRY[id];
 			const pos = nextOpenPosition(prev.tiles);
-			const newTile: TileLayout = { i: id, x: pos.x, y: pos.y, w: def.defaultW, h: def.defaultH };
+			const newTile: TileLayout = {
+				i: id,
+				x: pos.x,
+				y: pos.y,
+				w: def.defaultW,
+				h: def.defaultH,
+			};
 			return {
 				tiles: [...prev.tiles, newTile],
 				hiddenWidgets: prev.hiddenWidgets.filter((w) => w !== id),
@@ -202,17 +220,20 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 		[config],
 	);
 
-	const loadTemplate = useCallback((name: string) => {
-		const builtin = BUILTIN_TEMPLATES.find((t) => t.name === name);
-		if (builtin) {
-			setConfig({ tiles: builtin.tiles, hiddenWidgets: builtin.hiddenWidgets });
-			return;
-		}
-		const found = userTemplates.find((t) => t.name === name);
-		if (found) {
-			setConfig({ tiles: found.tiles, hiddenWidgets: found.hiddenWidgets });
-		}
-	}, [userTemplates]);
+	const loadTemplate = useCallback(
+		(name: string) => {
+			const builtin = BUILTIN_TEMPLATES.find((t) => t.name === name);
+			if (builtin) {
+				setConfig({ tiles: builtin.tiles, hiddenWidgets: builtin.hiddenWidgets });
+				return;
+			}
+			const found = userTemplates.find((t) => t.name === name);
+			if (found) {
+				setConfig({ tiles: found.tiles, hiddenWidgets: found.hiddenWidgets });
+			}
+		},
+		[userTemplates],
+	);
 
 	const deleteTemplate = useCallback((name: string) => {
 		setUserTemplates((prev) => prev.filter((t) => t.name !== name));

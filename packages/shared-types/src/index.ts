@@ -61,6 +61,10 @@ export interface Waypoint {
 	sequence_number: number;
 	position: Position;
 	target_speed: number;
+	switch_radius: number;
+	heading_mode: number;
+	heading_deg: number | null;
+	validation_status: string | null;
 	reached_at: string | null;
 }
 
@@ -72,6 +76,10 @@ export interface Mission {
 	waypoints: Waypoint[];
 	started_at: string | null;
 	completed_at: string | null;
+	last_validated_at: string | null;
+	last_validation_status: string | null;
+	last_sent_at: string | null;
+	last_send_status: string | null;
 	created_at: string;
 	updated_at: string;
 }

@@ -1,0 +1,85 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	overflow-y: auto;
+	padding: 4px;
+}
+
+.missionRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.missionRow > :first-child {
+	flex: 1;
+}
+
+.newMissionRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.newMissionRow > :first-child {
+	flex: 1;
+}
+
+.emptyState {
+	font-size: 0.8rem;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+}
+
+.waypointList {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.waypointRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.waypointMeta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+}
+
+.sequenceBadge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: var(--container-section-color, #271b10);
+	color: var(--element-active-color, #eaa75e);
+	font-size: 0.7rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.coords {
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.waypointActions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
