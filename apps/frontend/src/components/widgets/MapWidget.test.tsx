@@ -2,9 +2,11 @@ import { cleanup, render } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
+import type { Mission, Waypoint } from "@revolt/shared-types";
 import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
+import { useMission } from "../../context/MissionContext.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
 
@@ -14,9 +16,13 @@ vi.mock("../../hooks/useGnssData.js", () => ({
 vi.mock("../../hooks/useVesselTrack.js", () => ({
 	useVesselTrack: vi.fn(),
 }));
+vi.mock("../../context/MissionContext.js", () => ({
+	useMission: vi.fn(),
+}));
 
 const mockUseGnssData = useGnssData as Mock;
 const mockUseVesselTrack = useVesselTrack as Mock;
+const mockUseMission = useMission as Mock;
 
 const baseGnss: GnssData = {
 	latitude: null,
@@ -30,11 +36,74 @@ const baseGnss: GnssData = {
 	isSimulation: false,
 };
 
+const mockAddWaypoint = vi.fn();
+const mockUpdateWaypointPosition = vi.fn();
+const mockSetLegValidation = vi.fn();
+
+function makeWaypoint(overrides: Partial<Waypoint> = {}): Waypoint {
+	return {
+		id: "wp-1",
+		mission_id: "mission-1",
+		sequence_number: 0,
+		position: { latitude: 59.0, longitude: 10.0 },
+		target_speed: 5,
+		switch_radius: 5,
+		heading_mode: 0,
+		heading_deg: null,
+		validation_status: null,
+		reached_at: null,
+		...overrides,
+	};
+}
+
+function setMission(waypoints: Waypoint[] = []) {
+	const activeMission: Mission | null =
+		waypoints.length > 0
+			? {
+					id: "mission-1",
+					name: "Test mission",
+					description: null,
+					status: "draft" as Mission["status"],
+					waypoints,
+					started_at: null,
+					completed_at: null,
+					last_validated_at: null,
+					last_validation_status: null,
+					last_sent_at: null,
+					last_send_status: null,
+					created_at: "2026-07-08T00:00:00Z",
+					updated_at: "2026-07-08T00:00:00Z",
+				}
+			: null;
+	mockUseMission.mockReturnValue({
+		missions: activeMission ? [activeMission] : [],
+		loading: false,
+		activeMissionId: activeMission?.id ?? null,
+		activeMission,
+		legValidation: {},
+		loadMissions: vi.fn(),
+		createMission: vi.fn(),
+		selectMission: vi.fn(),
+		renameMission: vi.fn(),
+		deleteMission: vi.fn(),
+		addWaypoint: mockAddWaypoint,
+		updateWaypointPosition: mockUpdateWaypointPosition,
+		updateWaypointSpeed: vi.fn(),
+		reorderWaypoints: vi.fn(),
+		deleteWaypoint: vi.fn(),
+		setLegValidation: mockSetLegValidation,
+	});
+}
+
 interface MockMapOptions {
 	style: string;
 }
 
-type Handler = (e: { originalEvent?: unknown }) => void;
+type Handler = (e: never) => void;
+
+class MockGeoJSONSource {
+	setData = vi.fn();
+}
 
 interface MockMapInstance {
 	options: MockMapOptions;
@@ -52,14 +121,20 @@ interface MockMapInstance {
 		isActive: ReturnType<typeof vi.fn>;
 	};
 	getSource: ReturnType<typeof vi.fn>;
-	source: { setData: ReturnType<typeof vi.fn> };
-	emit: (event: string, e?: { originalEvent?: unknown }) => void;
+	sources: Map<string, MockGeoJSONSource>;
+	canvasStyle: { cursor: string };
+	emit: (event: string, e?: unknown) => void;
 }
 
 interface MockMarkerInstance {
 	element: HTMLElement;
+	draggable: boolean;
+	lngLat: { lat: number; lng: number };
 	setLngLat: ReturnType<typeof vi.fn>;
 	setRotation: ReturnType<typeof vi.fn>;
+	getLngLat: () => { lat: number; lng: number };
+	remove: ReturnType<typeof vi.fn>;
+	emit: (event: string, e?: unknown) => void;
 }
 
 // Plain arrays, not classes -- referenced from inside the vi.mock factory
@@ -71,10 +146,6 @@ const mapInstances: MockMapInstance[] = [];
 const markerInstances: MockMarkerInstance[] = [];
 
 vi.mock("maplibre-gl", () => {
-	class MockSource {
-		setData = vi.fn();
-	}
-
 	class MockDragPan {
 		enable = vi.fn();
 		disable = vi.fn();
@@ -91,19 +162,35 @@ vi.mock("maplibre-gl", () => {
 		remove = vi.fn();
 		addControl = vi.fn();
 		resize = vi.fn();
-		addSource = vi.fn();
 		addLayer = vi.fn();
 		easeTo = vi.fn();
-		jumpTo = vi.fn();
+		center = { lng: 0, lat: 0 };
+		// Tracks the center so the camera-lock jitter threshold (which compares getCenter() against
+		// the incoming fix via project()) sees a realistic before/after in tests, not a fixed stub.
+		jumpTo = vi.fn((opts: { center?: [number, number] }) => {
+			if (opts.center) this.center = { lng: opts.center[0], lat: opts.center[1] };
+		});
 		zoomIn = vi.fn();
 		zoomOut = vi.fn();
 		getZoom = vi.fn(() => 11);
+		getCenter = vi.fn(() => this.center);
+		// Always "exists" -- these tests aren't exercising the missing-layer guard itself
+		// (encValidation.test.ts covers that in isolation), just need queryRenderedFeatures'
+		// layer list to come through unfiltered.
+		getLayer = vi.fn(() => ({}));
 		dragPan = new MockDragPan();
 		touchZoomRotate = new MockTouchZoomRotate();
-		source = new MockSource();
+		sources = new Map<string, MockGeoJSONSource>();
+		canvasStyle = { cursor: "" };
 		handlers: Record<string, Handler[]> = {};
 
-		getSource = vi.fn(() => this.source);
+		addSource = vi.fn((id: string) => {
+			this.sources.set(id, new MockGeoJSONSource());
+		});
+		getSource = vi.fn((id: string) => this.sources.get(id));
+		getCanvas = vi.fn(() => ({ style: this.canvasStyle }));
+		project = vi.fn((lngLat: [number, number]) => ({ x: lngLat[0] * 100, y: lngLat[1] * 100 }));
+		queryRenderedFeatures = vi.fn(() => []);
 
 		on = vi.fn((event: string, handler: Handler) => {
 			(this.handlers[event] ??= []).push(handler);
@@ -113,9 +200,9 @@ vi.mock("maplibre-gl", () => {
 			this.handlers[event] = (this.handlers[event] ?? []).filter((h) => h !== handler);
 		});
 
-		emit(event: string, e: { originalEvent?: unknown } = {}) {
+		emit(event: string, e: unknown = {}) {
 			this.handlers[event]?.forEach((h) => {
-				h(e);
+				h(e as never);
 			});
 		}
 
@@ -127,18 +214,51 @@ vi.mock("maplibre-gl", () => {
 
 	class MockMarker {
 		element: HTMLElement;
-		setLngLat = vi.fn().mockReturnThis();
+		draggable: boolean;
+		lngLat: { lat: number; lng: number } = { lat: 0, lng: 0 };
 		setRotation = vi.fn().mockReturnThis();
 		addTo = vi.fn().mockReturnThis();
 		remove = vi.fn();
+		handlers: Record<string, Handler[]> = {};
 
-		constructor(options: { element: HTMLElement }) {
+		setLngLat = vi.fn((coords: [number, number]) => {
+			this.lngLat = { lng: coords[0], lat: coords[1] };
+			return this;
+		});
+
+		setDraggable = vi.fn((shouldBeDraggable: boolean) => {
+			this.draggable = shouldBeDraggable;
+			return this;
+		});
+
+		on = vi.fn((event: string, handler: Handler) => {
+			(this.handlers[event] ??= []).push(handler);
+			return this;
+		});
+
+		off = vi.fn((event: string, handler: Handler) => {
+			this.handlers[event] = (this.handlers[event] ?? []).filter((h) => h !== handler);
+			return this;
+		});
+
+		emit(event: string, e: unknown = {}) {
+			this.handlers[event]?.forEach((h) => {
+				h(e as never);
+			});
+		}
+
+		constructor(options: { element: HTMLElement; draggable?: boolean }) {
 			this.element = options.element;
+			this.draggable = options.draggable ?? false;
 			markerInstances.push(this);
 		}
 
 		getElement() {
 			return this.element;
+		}
+
+		getLngLat() {
+			return this.lngLat;
 		}
 	}
 
@@ -149,6 +269,9 @@ afterEach(() => {
 	cleanup();
 	mapInstances.length = 0;
 	markerInstances.length = 0;
+	mockAddWaypoint.mockClear();
+	mockUpdateWaypointPosition.mockClear();
+	mockSetLegValidation.mockClear();
 	document.documentElement.removeAttribute("data-obc-theme");
 });
 
@@ -168,6 +291,7 @@ describe("MapWidget", () => {
 	it("initializes with the dark style by default (no theme attribute)", () => {
 		setGnss();
 		setTrack();
+		setMission();
 		render(<MapWidget />);
 		expect(mapInstances[0]?.options.style).toBe("/map-styles/oslo-fjord-dark.json");
 	});
@@ -176,6 +300,7 @@ describe("MapWidget", () => {
 		document.documentElement.setAttribute("data-obc-theme", "day");
 		setGnss();
 		setTrack();
+		setMission();
 		render(<MapWidget />);
 		expect(mapInstances[0]?.options.style).toBe("/map-styles/oslo-fjord-light.json");
 	});
@@ -184,17 +309,21 @@ describe("MapWidget", () => {
 		document.documentElement.setAttribute("data-obc-theme", "dusk");
 		setGnss();
 		setTrack();
+		setMission();
 		render(<MapWidget />);
 		document.documentElement.setAttribute("data-obc-theme", "day");
 
 		await vi.waitFor(() => {
-			expect(mapInstances[0]?.setStyle).toHaveBeenCalledWith("/map-styles/oslo-fjord-light.json");
+			expect(mapInstances[0]?.setStyle).toHaveBeenCalledWith(
+				"/map-styles/oslo-fjord-light.json",
+			);
 		});
 	});
 
 	it("removes the map instance on unmount", () => {
 		setGnss();
 		setTrack();
+		setMission();
 		const { unmount } = render(<MapWidget />);
 		unmount();
 		expect(mapInstances[0]?.remove).toHaveBeenCalled();
@@ -203,6 +332,7 @@ describe("MapWidget", () => {
 	it("keeps the vessel marker hidden until a fix arrives", () => {
 		setGnss();
 		setTrack();
+		setMission();
 		render(<MapWidget />);
 		expect(markerInstances[0]?.element.style.visibility).toBe("hidden");
 		expect(markerInstances[0]?.setLngLat).not.toHaveBeenCalledWith([10.7, 59.9]);
@@ -211,6 +341,7 @@ describe("MapWidget", () => {
 	it("moves and reveals the vessel marker once a fix arrives", () => {
 		setGnss();
 		setTrack();
+		setMission();
 		const { rerender } = render(<MapWidget />);
 
 		setGnss({ latitude: 59.9, longitude: 10.7 });
@@ -225,6 +356,7 @@ describe("MapWidget", () => {
 	it("rotates the vessel marker to the current heading", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 90 });
 		setTrack();
+		setMission();
 		render(<MapWidget />);
 		expect(markerInstances[0]?.setRotation).toHaveBeenCalledWith(90);
 	});
@@ -236,7 +368,8 @@ describe("MapWidget", () => {
 			{ latitude: 59.91, longitude: 10.71, timestampMs: 30_000 },
 		];
 		setTrack(points);
-		render(<MapWidget />);
+		setMission();
+		const { rerender } = render(<MapWidget />);
 
 		mapInstances[0]?.emit("style.load");
 
@@ -244,7 +377,14 @@ describe("MapWidget", () => {
 			"vessel-track",
 			expect.objectContaining({ type: "geojson" }),
 		);
-		expect(mapInstances[0]?.source.setData).toHaveBeenCalled();
+
+		// Initial data arrives via addSource's own `data` field (asserted above); setData is
+		// only exercised by subsequent updates once the source already exists.
+		setTrack([...points, { latitude: 59.92, longitude: 10.72, timestampMs: 60_000 }]);
+		act(() => {
+			rerender(<MapWidget />);
+		});
+		expect(mapInstances[0]?.sources.get("vessel-track")?.setData).toHaveBeenCalled();
 	});
 
 	function findByLabel(container: HTMLElement, label: string): Element {
@@ -262,6 +402,7 @@ describe("MapWidget", () => {
 	it("zooms the map via the range stepper's up/down events", () => {
 		setGnss();
 		setTrack();
+		setMission();
 		const { container } = render(<MapWidget />);
 		const stepper = findByLabel(container, "Chart range");
 
@@ -279,6 +420,7 @@ describe("MapWidget", () => {
 	it("eases chart bearing to true heading in heading-up mode", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
 		setTrack();
+		setMission();
 		const { container } = render(<MapWidget />);
 
 		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");
@@ -290,6 +432,7 @@ describe("MapWidget", () => {
 	it("eases chart bearing to course over ground in course-up mode", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
 		setTrack();
+		setMission();
 		const { container } = render(<MapWidget />);
 
 		dispatchToggleValue(findByLabel(container, "Chart orientation"), "C", "N");
@@ -301,6 +444,7 @@ describe("MapWidget", () => {
 	it("resets chart bearing to zero in north-up mode", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
 		setTrack();
+		setMission();
 		const { container } = render(<MapWidget />);
 
 		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");
@@ -313,6 +457,7 @@ describe("MapWidget", () => {
 	it("does not fight an active drag gesture with a bearing update", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
 		setTrack();
+		setMission();
 		const { container } = render(<MapWidget />);
 
 		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
@@ -327,6 +472,7 @@ describe("MapWidget", () => {
 	it("disables map dragging while the camera is locked, re-enables when freed", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7 });
 		setTrack();
+		setMission();
 		const { container } = render(<MapWidget />);
 
 		// Locked is the default state, so dragPan should already be disabled.
@@ -342,6 +488,7 @@ describe("MapWidget", () => {
 	it("recentres instantly (not eased) on new fixes while the camera is locked", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7 });
 		setTrack();
+		setMission();
 		const { rerender } = render(<MapWidget />);
 
 		setGnss({ latitude: 59.91, longitude: 10.71 });
@@ -355,9 +502,27 @@ describe("MapWidget", () => {
 		);
 	});
 
+	it("does not recentre for GNSS noise too small to be visible on screen", () => {
+		setGnss({ latitude: 59.9, longitude: 10.7 });
+		setTrack();
+		setMission();
+		const { rerender } = render(<MapWidget />);
+		mapInstances[0]?.jumpTo.mockClear();
+
+		// A tiny fix-to-fix delta (real receiver noise, or the mock backend's simulated drift)
+		// that the mock's project() (scale x100) resolves to well under 1px of apparent movement.
+		setGnss({ latitude: 59.900001, longitude: 10.700001 });
+		act(() => {
+			rerender(<MapWidget />);
+		});
+
+		expect(mapInstances[0]?.jumpTo).not.toHaveBeenCalled();
+	});
+
 	it("stops recentring once the camera is freed", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7 });
 		setTrack();
+		setMission();
 		const { container, rerender } = render(<MapWidget />);
 
 		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
@@ -369,5 +534,197 @@ describe("MapWidget", () => {
 		});
 
 		expect(mapInstances[0]?.jumpTo).not.toHaveBeenCalled();
+	});
+
+	describe("waypoint editing", () => {
+		it("renders a marker for each waypoint, not draggable until selected", () => {
+			setGnss();
+			setTrack();
+			setMission([
+				makeWaypoint({ id: "wp-1", position: { latitude: 59.0, longitude: 10.0 } }),
+				makeWaypoint({ id: "wp-2", position: { latitude: 59.1, longitude: 10.1 } }),
+			]);
+			render(<MapWidget />);
+
+			// markerInstances[0] is the own-ship marker; waypoint markers follow.
+			const waypointMarkers = markerInstances.slice(1);
+			expect(waypointMarkers).toHaveLength(2);
+			expect(waypointMarkers[0]?.draggable).toBe(false);
+			expect(waypointMarkers[0]?.lngLat).toEqual({ lng: 10.0, lat: 59.0 });
+			expect(waypointMarkers[1]?.lngLat).toEqual({ lng: 10.1, lat: 59.1 });
+		});
+
+		it("becomes draggable only once its marker is clicked to select it", () => {
+			setGnss();
+			setTrack();
+			setMission([makeWaypoint({ id: "wp-1" })]);
+			render(<MapWidget />);
+
+			const marker = markerInstances[1];
+			expect(marker?.draggable).toBe(false);
+
+			act(() => {
+				marker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			expect(marker?.draggable).toBe(true);
+		});
+
+		it("shows the idle-outline icon unselected, active-outline once selected, active-filled while dragging, and stays selected after drag ends", () => {
+			setGnss();
+			setTrack();
+			setMission([makeWaypoint({ id: "wp-1" })]);
+			render(<MapWidget />);
+
+			const marker = markerInstances[1];
+			expect(marker?.element.querySelector("obi-waypoint-optional-iec")).not.toBeNull();
+
+			act(() => {
+				marker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+			expect(marker?.element.querySelector("obi-waypoint-active-iec")).not.toBeNull();
+			expect(marker?.element.querySelector("obi-waypoint-optional-iec")).toBeNull();
+
+			marker?.emit("dragstart");
+			expect(marker?.element.querySelector("obi-waypoint-active-filled")).not.toBeNull();
+			expect(marker?.element.querySelector("obi-waypoint-active-iec")).toBeNull();
+
+			marker?.emit("dragend");
+			expect(marker?.element.querySelector("obi-waypoint-active-iec")).not.toBeNull();
+			expect(marker?.element.querySelector("obi-waypoint-active-filled")).toBeNull();
+		});
+
+		it("deselects (and becomes non-draggable again) when the map is clicked away from any marker", () => {
+			setGnss();
+			setTrack();
+			setMission([makeWaypoint({ id: "wp-1" })]);
+			render(<MapWidget />);
+
+			const marker = markerInstances[1];
+			act(() => {
+				marker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+			expect(marker?.draggable).toBe(true);
+
+			act(() => {
+				mapInstances[0]?.emit("click", { lngLat: { lat: 59.5, lng: 10.5 } });
+			});
+
+			expect(marker?.draggable).toBe(false);
+			expect(marker?.element.querySelector("obi-waypoint-optional-iec")).not.toBeNull();
+		});
+
+		it("removes a waypoint's marker when it's deleted from the mission", () => {
+			setGnss();
+			setTrack();
+			setMission([makeWaypoint({ id: "wp-1" }), makeWaypoint({ id: "wp-2" })]);
+			const { rerender } = render(<MapWidget />);
+
+			expect(markerInstances.slice(1)).toHaveLength(2);
+			const removedMarker = markerInstances[1];
+
+			setMission([makeWaypoint({ id: "wp-2" })]);
+			act(() => {
+				rerender(<MapWidget />);
+			});
+
+			expect(removedMarker?.remove).toHaveBeenCalled();
+		});
+
+		it("does not place a waypoint on map click while in the default edit mode", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			render(<MapWidget />);
+
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.5, lng: 10.5 } });
+
+			expect(mockAddWaypoint).not.toHaveBeenCalled();
+		});
+
+		it("places a waypoint on map click after switching to add mode", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			const { container } = render(<MapWidget />);
+
+			dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.5, lng: 10.5 } });
+
+			expect(mockAddWaypoint).toHaveBeenCalledWith(59.5, 10.5);
+		});
+
+		it("sets a crosshair cursor while in add mode", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			const { container } = render(<MapWidget />);
+
+			expect(mapInstances[0]?.canvasStyle.cursor).toBe("");
+			dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+			expect(mapInstances[0]?.canvasStyle.cursor).toBe("crosshair");
+		});
+
+		it("persists the new position when a waypoint marker drag ends", () => {
+			setGnss();
+			setTrack();
+			setMission([
+				makeWaypoint({ id: "wp-1", position: { latitude: 59.0, longitude: 10.0 } }),
+			]);
+			render(<MapWidget />);
+
+			const wpMarker = markerInstances[1];
+			wpMarker?.setLngLat([10.6, 59.4]);
+			wpMarker?.emit("dragend");
+
+			expect(mockUpdateWaypointPosition).toHaveBeenCalledWith("wp-1", 59.4, 10.6);
+		});
+
+		it("does not persist a position while a drag is still in progress", () => {
+			setGnss();
+			setTrack();
+			setMission([
+				makeWaypoint({ id: "wp-1", position: { latitude: 59.0, longitude: 10.0 } }),
+				makeWaypoint({ id: "wp-2", position: { latitude: 59.1, longitude: 10.1 } }),
+			]);
+			render(<MapWidget />);
+			mapInstances[0]?.emit("style.load");
+
+			const wpMarker = markerInstances[1];
+			wpMarker?.setLngLat([10.6, 59.4]);
+			wpMarker?.emit("drag");
+
+			expect(mockUpdateWaypointPosition).not.toHaveBeenCalled();
+			// Live drag feedback still pushes an updated legs line into the source.
+			expect(mapInstances[0]?.sources.get("mission-legs")?.setData).toHaveBeenCalled();
+		});
+
+		it("adds the mission-legs source and layer on style load", () => {
+			setGnss();
+			setTrack();
+			setMission([makeWaypoint({ id: "wp-1" }), makeWaypoint({ id: "wp-2" })]);
+			render(<MapWidget />);
+
+			mapInstances[0]?.emit("style.load");
+
+			expect(mapInstances[0]?.addSource).toHaveBeenCalledWith(
+				"mission-legs",
+				expect.objectContaining({ type: "geojson" }),
+			);
+			expect(mapInstances[0]?.addLayer).toHaveBeenCalledWith(
+				expect.objectContaining({ id: "mission-legs-casing" }),
+			);
+			expect(mapInstances[0]?.addLayer).toHaveBeenCalledWith(
+				expect.objectContaining({ id: "mission-legs-line" }),
+			);
+			// The casing must render before (i.e. underneath) the colored line.
+			const casingCallIndex = mapInstances[0]?.addLayer.mock.calls.findIndex(
+				(call: unknown[]) => (call[0] as { id?: string }).id === "mission-legs-casing",
+			);
+			const lineCallIndex = mapInstances[0]?.addLayer.mock.calls.findIndex(
+				(call: unknown[]) => (call[0] as { id?: string }).id === "mission-legs-line",
+			);
+			expect(casingCallIndex).toBeLessThan(lineCallIndex ?? -1);
+		});
 	});
 });

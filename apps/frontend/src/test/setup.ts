@@ -22,7 +22,7 @@ global.fetch = vi.fn(() =>
 			headers: { "Content-Type": "application/json" },
 		}),
 	),
-) as unknown as typeof fetch;
+);
 
 // jsdom has no WebGL context and no URL.createObjectURL, both of which
 // maplibre-gl touches at module-load time -- stub it globally so any test
@@ -44,7 +44,12 @@ vi.mock("maplibre-gl", () => {
 		zoomIn = vi.fn();
 		zoomOut = vi.fn();
 		getZoom = vi.fn(() => 11);
+		getCenter = vi.fn(() => ({ lng: 0, lat: 0 }));
+		getLayer = vi.fn(() => ({}));
 		setBearing = vi.fn();
+		getCanvas = vi.fn(() => ({ style: {} }));
+		project = vi.fn(() => ({ x: 0, y: 0 }));
+		queryRenderedFeatures = vi.fn(() => []);
 		dragPan = { enable: vi.fn(), disable: vi.fn(), isActive: vi.fn(() => false) };
 		touchZoomRotate = { disableRotation: vi.fn() };
 		on = vi.fn();

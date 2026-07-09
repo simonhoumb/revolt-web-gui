@@ -16,6 +16,60 @@
 	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
 }
 
+.waypointMarker {
+	/* MapLibre's own .maplibregl-marker class (applied to the same element) sets position:
+	   absolute and positions the marker purely via a CSS transform. "relative" here would win the
+	   cascade and make the element participate in normal document flow instead -- each marker
+	   after the first then gets pushed down by the accumulated height of its preceding siblings
+	   (block-stacking), landing off its actual coordinate. Still establishes a positioning context
+	   for .waypointLabel below, same as "relative" would, so nothing else needs to change. */
+	position: absolute;
+	width: 24px;
+	height: 24px;
+	color: var(--element-active-color, #eaa75e);
+	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+	/* Pointer, not grab -- an unselected marker isn't draggable yet, only clickable to select. */
+	cursor: pointer;
+}
+
+.waypointMarker[data-selected="true"] {
+	cursor: grab;
+}
+
+.waypointMarker[data-selected="true"]:active {
+	cursor: grabbing;
+}
+
+.waypointMarker obi-waypoint-active-iec,
+.waypointMarker obi-waypoint-active-filled {
+	color: var(--element-highlighted-color, #ffcf6e);
+}
+
+.waypointLabel {
+	/* Plain text beside the symbol, not a filled chip -- matches how real ECDIS labels waypoints,
+	   and (unlike a fixed-size circle) needs no resizing as the label text changes length. A
+	   four-direction text-shadow halo keeps it legible over any chart background instead of a
+	   solid fill, the same technique chart annotation text conventionally uses. Positioned below
+	   the marker rather than overlapping the icon, and non-interactive so it never steals the
+	   marker's drag hit area. */
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	transform: translateX(-50%);
+	margin-top: 2px;
+	color: var(--element-active-color, #eaa75e);
+	font-size: 0.65rem;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	text-shadow:
+		-1px -1px 0 var(--container-section-color, #271b10),
+		1px -1px 0 var(--container-section-color, #271b10),
+		-1px 1px 0 var(--container-section-color, #271b10),
+		1px 1px 0 var(--container-section-color, #271b10);
+	pointer-events: none;
+}
+
 .toolbar {
 	position: absolute;
 	left: 0;
@@ -27,6 +81,11 @@
 	align-items: center;
 	gap: 8px;
 	padding: 4px 8px;
+	/* maplibre's own attribution control (required by the CARTO basemap's terms, so it can't just
+	   be covered) sits in the same bottom-right corner with a higher default z-index than this bar.
+	   Reserve room for it so a 4th toolbar group doesn't reach into its footprint at typical tile
+	   widths -- past this point flex-wrap already pushes overflow onto its own row instead. */
+	padding-right: 240px;
 	min-height: var(--app-components-tool-bar-touch-target-size, 40px);
 	border-top: 1px solid var(--border-divider-color);
 	background: var(--container-section-color);

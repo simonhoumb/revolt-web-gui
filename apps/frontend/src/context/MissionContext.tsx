@@ -110,15 +110,22 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
 	const deleteMission = useCallback(
 		async (id: string) => {
-			setMissions((prev) => prev.filter((m) => m.id !== id));
-			setActiveMissionId((prev) => (prev === id ? null : prev));
+			// Fall back to another remaining mission (mirroring loadMissions' initial-selection
+			// logic) rather than null -- leaving activeMissionId unset after deleting the active
+			// mission stranded the UI: the dropdown still displayed some other mission's label (its
+			// own fallback for an unmatched value) while the context had no real selection, so no
+			// waypoints rendered and the delete button stayed disabled with no way to recover short
+			// of manually reselecting a mission.
+			const remaining = missions.filter((m) => m.id !== id);
+			setMissions(remaining);
+			setActiveMissionId((prev) => (prev === id ? (remaining[0]?.id ?? null) : prev));
 			try {
 				await missionApi.remove(id);
 			} catch {
 				await loadMissions();
 			}
 		},
-		[loadMissions],
+		[missions, loadMissions],
 	);
 
 	const addWaypoint = useCallback(

@@ -12,13 +12,18 @@ import { ObiArrowUpGoogle } from "@oicl/openbridge-webcomponents-react/icons/ico
 import { ObiArrowDownGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-down-google.js";
 import { ObiWaypointDeleteIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-delete-iec.js";
 import { useMission } from "../../context/MissionContext.js";
+import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import styles from "./MissionWidget.module.css";
 
 function inputValue(e: { target: EventTarget | null }): string {
 	return (e.target as { value?: string } | null)?.value ?? "";
 }
 
-function moveWaypointId(waypoints: Waypoint[], waypointId: string, direction: -1 | 1): string[] {
+export function moveWaypointId(
+	waypoints: Waypoint[],
+	waypointId: string,
+	direction: -1 | 1,
+): string[] {
 	const ids = waypoints.map((w) => w.id);
 	const index = ids.indexOf(waypointId);
 	const target = index + direction;
@@ -28,6 +33,16 @@ function moveWaypointId(waypoints: Waypoint[], waypointId: string, direction: -1
 		if (i === target) return ids[index] ?? id;
 		return id;
 	});
+}
+
+const METERS_PER_NM = 1852;
+
+export function formatDuration(hours: number): string {
+	if (!Number.isFinite(hours) || hours <= 0) return "—";
+	const totalMinutes = Math.round(hours * 60);
+	const h = Math.floor(totalMinutes / 60);
+	const m = totalMinutes % 60;
+	return h > 0 ? `${String(h)}h ${String(m)}m` : `${String(m)}m`;
 }
 
 interface WaypointRowProps {
@@ -125,6 +140,7 @@ export function MissionWidget() {
 		deleteWaypoint,
 		reorderWaypoints,
 	} = useMission();
+	const { legs } = useWaypointDraft();
 
 	const [newMissionName, setNewMissionName] = useState("");
 	const [renameDraft, setRenameDraft] = useState("");
@@ -147,6 +163,13 @@ export function MissionWidget() {
 	}
 
 	const missionOptions = missions.map((m) => ({ value: m.id, label: m.name }));
+
+	const waypointById = new Map((activeMission?.waypoints ?? []).map((w) => [w.id, w]));
+	const totalDistanceNm = legs.reduce((sum, leg) => sum + leg.distanceM / METERS_PER_NM, 0);
+	const totalDurationHours = legs.reduce((sum, leg) => {
+		const speedKt = waypointById.get(leg.toId)?.target_speed ?? 0;
+		return speedKt > 0 ? sum + leg.distanceM / METERS_PER_NM / speedKt : sum;
+	}, 0);
 
 	return (
 		<div className={styles.content}>
@@ -204,6 +227,13 @@ export function MissionWidget() {
 					}}
 					onBlur={commitRename}
 				/>
+			)}
+
+			{legs.length > 0 && (
+				<div className={styles.summaryRow}>
+					Total: {totalDistanceNm.toFixed(1)} nm · ETE{" "}
+					{formatDuration(totalDurationHours)}
+				</div>
 			)}
 
 			<div className={styles.waypointList}>

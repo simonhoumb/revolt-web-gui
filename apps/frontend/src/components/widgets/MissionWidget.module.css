@@ -2,7 +2,8 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	overflow-y: auto;
+	height: 100%;
+	min-height: 0;
 	padding: 4px;
 }
 
@@ -32,10 +33,24 @@
 	margin: 0;
 }
 
+.summaryRow {
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
 .waypointList {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	/* .content used to put overflow-y:auto on itself, but as a plain block child of TileCard's
+	   overflow:hidden body it had no bounded height to overflow against -- it just grew to fit all
+	   content and TileCard silently clipped the excess with no scrollbar. Making only the waypoint
+	   list the scrollable region (while the mission picker/summary above stay pinned) also means
+	   picking or renaming a mission doesn't scroll out of view once the list is long. */
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
 }
 
 .waypointRow {
@@ -58,10 +73,15 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 18px;
+	/* min-width (not width) with horizontal padding and a pill radius (not 50%) so the badge stays
+	   a compact circle for single-digit sequence numbers but grows into a rounded pill instead of
+	   clipping once waypoints reach double digits. */
+	min-width: 18px;
 	height: 18px;
+	padding: 0 4px;
+	box-sizing: border-box;
 	flex-shrink: 0;
-	border-radius: 50%;
+	border-radius: 999px;
 	background: var(--container-section-color, #271b10);
 	color: var(--element-active-color, #eaa75e);
 	font-size: 0.7rem;
@@ -75,6 +95,16 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* ObcNumberInputField has no built-in compact size and defaults to roughly 261px, refusing to
+   shrink as a flex item -- at the widget's actual default tile width that alone (plus the action
+   buttons) consumes the entire row, squeezing .waypointMeta down to 0px and hiding the sequence
+   badge and coordinates completely, not just clipping them. A fixed, narrower width is enough for
+   a speed value plus its "kt" unit and leaves room for the identifying info beside it. */
+.waypointRow > obc-number-input-field {
+	flex: 0 0 90px;
+	width: 90px;
 }
 
 .waypointActions {

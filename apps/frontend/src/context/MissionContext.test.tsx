@@ -159,6 +159,23 @@ describe("MissionProvider", () => {
 		expect(result.current.activeMissionId).toBeNull();
 	});
 
+	it("deleteMission falls back to another remaining mission if the active one is deleted", async () => {
+		mockApi.list.mockResolvedValue([makeMission({ id: "a" }), makeMission({ id: "b" })]);
+		mockApi.remove.mockResolvedValue(undefined);
+
+		const { result } = renderHook(() => useMission(), { wrapper: MissionProvider });
+		await waitFor(() => {
+			expect(result.current.activeMissionId).toBe("a");
+		});
+
+		await act(async () => {
+			await result.current.deleteMission("a");
+		});
+
+		expect(result.current.missions.map((m) => m.id)).toEqual(["b"]);
+		expect(result.current.activeMissionId).toBe("b");
+	});
+
 	it("addWaypoint appends the created waypoint to the active mission", async () => {
 		mockApi.list.mockResolvedValue([makeMission({ id: "a", waypoints: [] })]);
 		const waypoint = makeWaypoint({ id: "wp-new" });

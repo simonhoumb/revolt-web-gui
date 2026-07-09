@@ -113,7 +113,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		label: "Mission",
 		component: MissionWidget,
 		icon: ObiNavigationRoute,
-		defaultW: 4,
+		defaultW: 3,
 		defaultH: 8,
 		minW: 3,
 		minH: 4,
