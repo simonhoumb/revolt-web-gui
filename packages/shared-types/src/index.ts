@@ -84,4 +84,10 @@ export interface Mission {
 	updated_at: string;
 }
 
+export interface MissionSendResult {
+	status: string;
+	waypoint_count: number;
+	checked_at: string;
+}
+
 export * from "./bridge.js";

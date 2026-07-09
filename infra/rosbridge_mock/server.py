@@ -306,6 +306,18 @@ async def _emit_topic(
 		await asyncio.sleep(interval)
 
 
+async def _echo_waypoint_list(ws: ServerConnection, waypoint_list_msg: dict, delay_s: float = 1.0) -> None:
+	"""Simulate the mission planner accepting an /update_waypoint_list publish and adopting it as
+	the active list: echo the same payload back on /waypoint_list after a short delay, so the
+	backend's ack/echo flow (RosBridgeClient.publish_and_await_ack) is testable without the real
+	pygemini/STC stack."""
+	await asyncio.sleep(delay_s)
+	try:
+		await ws.send(json.dumps({"op": "publish", "topic": "/waypoint_list", "msg": waypoint_list_msg}))
+	except Exception:
+		pass
+
+
 async def _handle(ws: ServerConnection) -> None:
 	log.info("client connected: %s", ws.remote_address)
 	tasks: list[asyncio.Task] = []
@@ -333,6 +345,12 @@ async def _handle(ws: ServerConnection) -> None:
 
 			elif op == "publish":
 				log.info("received publish on %s: %s", topic, frame.get("msg"))
+				if topic == "/update_waypoint_list":
+					task = asyncio.create_task(
+						_echo_waypoint_list(ws, frame.get("msg", {})),
+						name="echo:/waypoint_list",
+					)
+					tasks.append(task)
 
 	except Exception:
 		pass

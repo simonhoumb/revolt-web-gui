@@ -1,4 +1,4 @@
-import type { Mission, MissionStatus, Waypoint } from "@revolt/shared-types";
+import type { Mission, MissionSendResult, MissionStatus, Waypoint } from "@revolt/shared-types";
 import { apiFetch } from "./api.js";
 
 export interface MissionCreatePayload {
@@ -133,6 +133,12 @@ export const missionApi = {
 				headers: JSON_HEADERS,
 				body: JSON.stringify(payload),
 			}),
+		);
+	},
+
+	async send(missionId: string): Promise<MissionSendResult> {
+		return handleJson<MissionSendResult>(
+			await apiFetch(`/api/missions/${missionId}/send`, { method: "POST" }),
 		);
 	},
 };

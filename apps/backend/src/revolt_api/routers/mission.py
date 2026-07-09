@@ -1,6 +1,7 @@
 import math
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import delete, func, select
@@ -8,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from revolt_api.audit import log_action
+from revolt_api.bridge import RosBridgeClient, get_bridge
+from revolt_api.bridge.waypoint_codec import expected_ack, waypoint_list_to_ros_dict
 from revolt_api.database import get_db
 from revolt_api.models.mission import Mission, MissionStatus, Waypoint
 from revolt_api.schemas.mission import (
 	MissionCreate,
 	MissionRead,
+	MissionSendResult,
 	MissionUpdate,
 	WaypointCreate,
 	WaypointRead,
@@ -244,3 +248,42 @@ async def replace_waypoints(
 	)
 	mission = await _get_mission_or_404(db, mission_id)
 	return mission.waypoints
+
+
+@router.post("/missions/{mission_id}/send", response_model=MissionSendResult)
+async def send_mission(
+	mission_id: uuid.UUID,
+	session_id: str = Depends(_session_id),  # noqa: B008
+	db: AsyncSession = Depends(get_db),  # noqa: B008
+	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
+) -> MissionSendResult:
+	"""Publish the mission's full waypoint list and wait for the sim's /waypoint_list echo
+	to confirm it landed (see RosBridgeClient.publish_and_await_ack).
+
+	On BRIDGE_TARGET=physical there is currently nothing that echoes /waypoint_list back, so
+	a send there will correctly resolve to "timed_out" rather than being special-cased —
+	that is honest degradation, not a bug, until a physical-vessel ack path exists.
+	"""
+	mission = await _get_mission_or_404(db, mission_id)
+	waypoints = mission.waypoints
+	ros_msg = waypoint_list_to_ros_dict(waypoints, bridge)
+	expected = expected_ack(waypoints, bridge)
+
+	bridge.broadcast_mission_send_status(str(mission_id), "sending", len(waypoints))
+	status = await bridge.publish_and_await_ack(
+		"/update_waypoint_list", "custom_msgs/WaypointList", ros_msg, expected
+	)
+
+	checked_at = datetime.now(UTC)
+	mission.last_sent_at = checked_at
+	mission.last_send_status = status
+	await db.commit()
+
+	bridge.broadcast_mission_send_status(str(mission_id), status, len(waypoints))
+	await log_action(
+		db,
+		session_id=session_id,
+		action="mission.send",
+		params={"mission_id": str(mission_id), "status": status, "waypoint_count": len(waypoints)},
+	)
+	return MissionSendResult(status=status, waypoint_count=len(waypoints), checked_at=checked_at)

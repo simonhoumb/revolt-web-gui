@@ -179,6 +179,15 @@ export interface SimWaypointListMsg {
 	waypoints: SimWaypoint[];
 }
 
+export interface MissionSendStatusMsg {
+	v: "1";
+	type: "mission_send_status";
+	timestamp_ms: number;
+	mission_id: string;
+	status: "sending" | "acknowledged" | "timed_out" | "not_connected" | "mismatched";
+	waypoint_count: number;
+}
+
 export interface LidarScanMsg {
 	v: "1";
 	type: "lidar_scan";
@@ -211,4 +220,5 @@ export type BridgeMessage =
 	| SimImuMsg
 	| SimThrusterFeedbackMsg
 	| SimWaypointListMsg
+	| MissionSendStatusMsg
 	| LidarScanMsg;

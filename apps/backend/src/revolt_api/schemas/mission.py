@@ -101,3 +101,9 @@ class MissionRead(BaseModel):
 	last_send_status: str | None
 	created_at: datetime
 	updated_at: datetime
+
+
+class MissionSendResult(BaseModel):
+	status: str
+	waypoint_count: int
+	checked_at: datetime

@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, Waypoint } from "@revolt/shared-types";
 import { MissionWidget, formatDuration, moveWaypointId } from "./MissionWidget.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
+import { useBridgeData } from "../../context/BridgeDataContext.js";
 
 vi.mock("../../context/MissionContext.js", () => ({
 	useMission: vi.fn(),
@@ -12,9 +13,13 @@ vi.mock("../../context/MissionContext.js", () => ({
 vi.mock("../../hooks/useWaypointDraft.js", () => ({
 	useWaypointDraft: vi.fn(),
 }));
+vi.mock("../../context/BridgeDataContext.js", () => ({
+	useBridgeData: vi.fn(),
+}));
 
 const mockUseMission = useMission as Mock;
 const mockUseWaypointDraft = useWaypointDraft as Mock;
+const mockUseBridgeData = useBridgeData as Mock;
 
 function makeWaypoint(overrides: Partial<Waypoint> = {}): Waypoint {
 	return {
@@ -32,7 +37,7 @@ function makeWaypoint(overrides: Partial<Waypoint> = {}): Waypoint {
 	};
 }
 
-function setMission(waypoints: Waypoint[]) {
+function setMission(waypoints: Waypoint[], overrides: { sendActiveMission?: Mock } = {}) {
 	const activeMission: Mission = {
 		id: "mission-1",
 		name: "Test mission",
@@ -65,11 +70,16 @@ function setMission(waypoints: Waypoint[]) {
 		reorderWaypoints: vi.fn(),
 		deleteWaypoint: vi.fn(),
 		setLegValidation: vi.fn(),
+		sendActiveMission: overrides.sendActiveMission ?? vi.fn(),
 	});
 }
 
 afterEach(() => {
 	cleanup();
+});
+
+beforeEach(() => {
+	mockUseBridgeData.mockReturnValue({ missionSendStatus: null });
 });
 
 describe("formatDuration", () => {
@@ -142,5 +152,75 @@ describe("MissionWidget", () => {
 
 		render(<MissionWidget />);
 		expect(screen.queryByText(/Total:/)).not.toBeInTheDocument();
+	});
+
+	it("shows the mission send status once a mission_send_status message matches the active mission", () => {
+		setMission([makeWaypoint()]);
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+		mockUseBridgeData.mockReturnValue({
+			missionSendStatus: {
+				v: "1",
+				type: "mission_send_status",
+				timestamp_ms: 0,
+				mission_id: "mission-1",
+				status: "acknowledged",
+				waypoint_count: 1,
+			},
+		});
+
+		render(<MissionWidget />);
+		expect(screen.getByText("Acknowledged")).toBeInTheDocument();
+	});
+
+	it("does not show a send status for a different mission's status message", () => {
+		setMission([makeWaypoint()]);
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+		mockUseBridgeData.mockReturnValue({
+			missionSendStatus: {
+				v: "1",
+				type: "mission_send_status",
+				timestamp_ms: 0,
+				mission_id: "some-other-mission",
+				status: "acknowledged",
+				waypoint_count: 1,
+			},
+		});
+
+		render(<MissionWidget />);
+		expect(screen.queryByText("Acknowledged")).not.toBeInTheDocument();
+	});
+
+	it("shows an indeterminate progress bar on the send button while a send is in flight", async () => {
+		let resolveSend: () => void = () => {
+			// overwritten below
+		};
+		const sendActiveMission = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveSend = resolve;
+				}),
+		);
+		setMission([makeWaypoint()], { sendActiveMission });
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+
+		render(<MissionWidget />);
+		const sendButton = document.querySelector("obc-progress-button") as
+			| (HTMLElement & { showProgress: boolean; disabled: boolean })
+			| null;
+		expect(sendButton).not.toBeNull();
+		expect(sendButton?.showProgress).toBe(false);
+
+		act(() => {
+			sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		});
+		expect(sendActiveMission).toHaveBeenCalledOnce();
+		expect(sendButton?.showProgress).toBe(true);
+		expect(sendButton?.disabled).toBe(true);
+
+		await act(async () => {
+			resolveSend();
+			await Promise.resolve();
+		});
+		expect(sendButton?.showProgress).toBe(false);
 	});
 });

@@ -11,9 +11,41 @@ import { ObiWidgetAddGoogle } from "@oicl/openbridge-webcomponents-react/icons/i
 import { ObiArrowUpGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-up-google.js";
 import { ObiArrowDownGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-down-google.js";
 import { ObiWaypointDeleteIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-delete-iec.js";
+import { ObiRouteExportIec } from "@oicl/openbridge-webcomponents-react/icons/icon-route-export-iec.js";
+import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
+import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
+import { ObcProgressButton } from "@oicl/openbridge-webcomponents-react/components/progress-button/progress-button.js";
+import {
+	ProgressButtonType,
+	ProgressMode,
+} from "@oicl/openbridge-webcomponents/dist/components/progress-button/progress-button.js";
+import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import styles from "./MissionWidget.module.css";
+
+const SEND_STATUS_LABEL: Record<string, string> = {
+	sending: "Sending…",
+	acknowledged: "Acknowledged",
+	timed_out: "Timed out — no response from vessel",
+	not_connected: "Bridge not connected",
+	mismatched: "Vessel reported a different route",
+};
+
+function sendIndicatorStatus(status: string): StatusIndicatorStatus {
+	switch (status) {
+		case "sending":
+			return StatusIndicatorStatus.active;
+		case "acknowledged":
+			return StatusIndicatorStatus.running;
+		case "timed_out":
+		case "not_connected":
+		case "mismatched":
+			return StatusIndicatorStatus.alarm;
+		default:
+			return StatusIndicatorStatus.inactive;
+	}
+}
 
 function inputValue(e: { target: EventTarget | null }): string {
 	return (e.target as { value?: string } | null)?.value ?? "";
@@ -139,11 +171,29 @@ export function MissionWidget() {
 		updateWaypointSpeed,
 		deleteWaypoint,
 		reorderWaypoints,
+		sendActiveMission,
 	} = useMission();
 	const { legs } = useWaypointDraft();
+	const { missionSendStatus } = useBridgeData();
 
 	const [newMissionName, setNewMissionName] = useState("");
 	const [renameDraft, setRenameDraft] = useState("");
+	const [sendPending, setSendPending] = useState(false);
+
+	async function handleSend() {
+		if (!activeMission) return;
+		setSendPending(true);
+		try {
+			await sendActiveMission();
+		} finally {
+			setSendPending(false);
+		}
+	}
+
+	const sendStatus =
+		activeMission && missionSendStatus?.mission_id === activeMission.id
+			? missionSendStatus
+			: null;
 
 	useEffect(() => {
 		setRenameDraft(activeMission?.name ?? "");
@@ -270,6 +320,32 @@ export function MissionWidget() {
 					/>
 				))}
 			</div>
+
+			{activeMission && (
+				<div className={styles.sendRow}>
+					<ObcProgressButton
+						type={ProgressButtonType.Linear}
+						mode={ProgressMode.Indeterminate}
+						showProgress={sendPending}
+						hasLeadingIcon
+						label="Send to vessel"
+						disabled={activeMission.waypoints.length === 0 || sendPending}
+						onClick={() => {
+							void handleSend();
+						}}
+					>
+						<ObiRouteExportIec slot="leading-icon" />
+					</ObcProgressButton>
+					{sendStatus && (
+						<>
+							<ObcStatusIndicator status={sendIndicatorStatus(sendStatus.status)} />
+							<span className={styles.sendStatus}>
+								{SEND_STATUS_LABEL[sendStatus.status] ?? sendStatus.status}
+							</span>
+						</>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

@@ -113,3 +113,16 @@
 	gap: 2px;
 	flex-shrink: 0;
 }
+
+.sendRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.sendStatus {
+	font-size: 0.75rem;
+	color: var(--element-active-color, #eaa75e);
+}

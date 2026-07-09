@@ -38,6 +38,7 @@ interface MissionContextValue {
 	reorderWaypoints: (orderedWaypointIds: string[]) => Promise<void>;
 	deleteWaypoint: (waypointId: string) => Promise<void>;
 	setLegValidation: (result: Record<string, HazardSummary>) => void;
+	sendActiveMission: () => Promise<void>;
 }
 
 const MissionContext = createContext<MissionContextValue | null>(null);
@@ -252,6 +253,14 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 		setLegValidationState(result);
 	}, []);
 
+	const sendActiveMission = useCallback(async () => {
+		if (!activeMissionId) return;
+		// The result (acknowledged/timed_out/etc) is broadcast over the WebSocket as a
+		// MissionSendStatusMsg so every open tab sees it, not just this one — the widget reads
+		// that from useBridgeData() rather than this call's return value.
+		await missionApi.send(activeMissionId);
+	}, [activeMissionId]);
+
 	const value = useMemo<MissionContextValue>(
 		() => ({
 			missions,
@@ -270,6 +279,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			reorderWaypoints,
 			deleteWaypoint,
 			setLegValidation,
+			sendActiveMission,
 		}),
 		[
 			missions,
@@ -288,6 +298,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			reorderWaypoints,
 			deleteWaypoint,
 			setLegValidation,
+			sendActiveMission,
 		],
 	);
 

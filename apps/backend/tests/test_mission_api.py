@@ -6,6 +6,7 @@ Requires: docker compose up -d db && alembic upgrade head. Excluded from the def
 db container if not using the default docker-compose port mapping (localhost:5432).
 """
 
+import math
 import os
 from collections.abc import AsyncGenerator
 from unittest.mock import MagicMock
@@ -18,6 +19,9 @@ from revolt_api.bridge.client import RosBridgeClient
 from revolt_api.database import get_db
 from revolt_api.main import app
 
+_ORIGIN_LAT = 59.9083
+_ORIGIN_LON = 10.7512
+
 pytestmark = pytest.mark.integration
 
 TEST_DATABASE_URL = os.environ.get(
@@ -25,10 +29,17 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
+def _latlon_to_cartesian(lat: float, lon: float) -> tuple[float, float]:
+	x = (lon - _ORIGIN_LON) * 111320.0 * math.cos(math.radians(_ORIGIN_LAT))
+	y = (lat - _ORIGIN_LAT) * 111320.0
+	return x, y
+
+
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
 	app.state.bridge = MagicMock(spec=RosBridgeClient)
 	app.state.bridge.connected = False
+	app.state.bridge.latlon_to_cartesian.side_effect = _latlon_to_cartesian
 
 	engine = create_async_engine(TEST_DATABASE_URL)
 	session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -166,3 +177,56 @@ async def test_mission_not_found_returns_404(client: AsyncClient) -> None:
 			json={"sequence_number": 0, "latitude": 0, "longitude": 0, "target_speed": 1},
 		)
 	).status_code == 404
+
+
+async def test_send_mission_acknowledged_updates_mission_and_returns_result(
+	client: AsyncClient,
+) -> None:
+	mission_id = await _create_mission(client, name="Send test")
+	try:
+		await client.post(
+			f"/api/missions/{mission_id}/waypoints",
+			json={"sequence_number": 0, "latitude": 59.92, "longitude": 10.76, "target_speed": 4.0},
+		)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "acknowledged"
+		assert body["waypoint_count"] == 1
+
+		bridge.publish_and_await_ack.assert_awaited_once()
+		call_args = bridge.publish_and_await_ack.await_args
+		assert call_args.args[0] == "/update_waypoint_list"
+		expected = call_args.args[3]
+		assert expected[0][0] == 0  # sequence_number
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		mission = mission_resp.json()
+		assert mission["last_send_status"] == "acknowledged"
+		assert mission["last_sent_at"] is not None
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_not_connected(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Send disconnected test")
+	try:
+		bridge = app.state.bridge
+		bridge.connected = False
+		bridge.publish_and_await_ack.return_value = "not_connected"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		assert resp.json()["status"] == "not_connected"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_not_found_returns_404(client: AsyncClient) -> None:
+	missing_id = "00000000-0000-0000-0000-000000000000"
+	assert (await client.post(f"/api/missions/{missing_id}/send")).status_code == 404

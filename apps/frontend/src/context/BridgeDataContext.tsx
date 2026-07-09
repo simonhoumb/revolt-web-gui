@@ -19,8 +19,10 @@ import type {
 	GnssVelocityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
+	MissionSendStatusMsg,
 	SimGnssVelocityMsg,
 	SimThrusterFeedbackMsg,
+	SimWaypointListMsg,
 } from "@revolt/shared-types";
 import { useBridgeConnection } from "../hooks/useBridgeConnection.js";
 
@@ -50,6 +52,8 @@ export interface BridgeData {
 	cameraStatus: CameraStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
 	lidarScan: LidarScanMsg | null;
+	activeWaypointList: SimWaypointListMsg | null;
+	missionSendStatus: MissionSendStatusMsg | null;
 	wsConnected: boolean;
 	bridgeConnected: boolean;
 	latencyMs: number | null;
@@ -72,6 +76,8 @@ const initialData: BridgeData = {
 	cameraStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
 	lidarScan: null,
+	activeWaypointList: null,
+	missionSendStatus: null,
 	wsConnected: false,
 	bridgeConnected: false,
 	latencyMs: null,
@@ -111,6 +117,10 @@ function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 			return { ...state, lidarScan: msg };
 		case "camera_status":
 			return { ...state, cameraStatus: msg };
+		case "sim_waypoint_list":
+			return { ...state, activeWaypointList: msg };
+		case "mission_send_status":
+			return { ...state, missionSendStatus: msg };
 		default:
 			return state;
 	}
