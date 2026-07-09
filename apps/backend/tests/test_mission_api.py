@@ -230,3 +230,114 @@ async def test_send_mission_not_connected(client: AsyncClient) -> None:
 async def test_send_mission_not_found_returns_404(client: AsyncClient) -> None:
 	missing_id = "00000000-0000-0000-0000-000000000000"
 	assert (await client.post(f"/api/missions/{missing_id}/send")).status_code == 404
+
+
+async def _add_waypoint(client: AsyncClient, mission_id: str, lat: float, lon: float) -> None:
+	resp = await client.post(
+		f"/api/missions/{mission_id}/waypoints",
+		json={"sequence_number": 0, "latitude": lat, "longitude": lon, "target_speed": 4.0},
+	)
+	assert resp.status_code == 201
+
+
+async def test_validate_mission_blocked_on_real_charted_land(client: AsyncClient) -> None:
+	# Straddles a real lndare polygon centroid from the ingested Oslo Fjord chart data (~200 m
+	# leg, land roughly in the middle) -- confirmed directly against enc_lndare via psql before
+	# writing this test, not just assumed from the coordinates.
+	mission_id = await _create_mission(client, name="Validate blocked test")
+	try:
+		await _add_waypoint(client, mission_id, 59.379916, 10.527813401271281)
+		await _add_waypoint(client, mission_id, 59.377916, 10.527813401271281)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "blocked"
+		assert any(h["layer"] == "lndare" for h in body["hazards"])
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		mission = mission_resp.json()
+		assert mission["last_validation_status"] == "blocked"
+		assert mission["last_validated_at"] is not None
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_validate_mission_warning_on_real_shallow_water(client: AsyncClient) -> None:
+	# Straddles a real enc_depare polygon (DRVAL1=0.5 m) centroid, confirmed clear of every
+	# blocked layer at this margin via psql before writing this test.
+	mission_id = await _create_mission(client, name="Validate warning test")
+	try:
+		await _add_waypoint(client, mission_id, 59.389597, 10.525664883346424)
+		await _add_waypoint(client, mission_id, 59.387597, 10.525664883346424)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "warning"
+		assert body["hazards"][0]["layer"] == "depare"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_validate_mission_safe_far_from_any_charted_hazard(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Validate safe test")
+	try:
+		await _add_waypoint(client, mission_id, 45.0, -30.0)
+		await _add_waypoint(client, mission_id, 45.01, -30.01)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "safe"
+		assert body["hazards"] == []
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_blocked_by_validation_refuses_to_publish(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Send blocked test")
+	try:
+		await _add_waypoint(client, mission_id, 59.379916, 10.527813401271281)
+		await _add_waypoint(client, mission_id, 59.377916, 10.527813401271281)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 409
+		assert "hazards" in resp.json()["detail"]
+		# Must not have attempted to publish at all -- a blocked route never reaches the vessel.
+		bridge.publish_and_await_ack.assert_not_awaited()
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		mission = mission_resp.json()
+		assert mission["last_validation_status"] == "blocked"
+		assert mission["last_send_status"] is None
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_response_surfaces_a_warning_result(client: AsyncClient) -> None:
+	# The send still succeeds for a "warning" (shallow water, not blocked) -- but the response
+	# itself must carry the warning, or it's silently persisted to last_validation_status with
+	# nothing anywhere ever telling the operator about it.
+	mission_id = await _create_mission(client, name="Send warning test")
+	try:
+		await _add_waypoint(client, mission_id, 59.389597, 10.525664883346424)
+		await _add_waypoint(client, mission_id, 59.387597, 10.525664883346424)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "acknowledged"
+		assert body["validation_status"] == "warning"
+		assert body["hazards"][0]["layer"] == "depare"
+		bridge.publish_and_await_ack.assert_awaited_once()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")

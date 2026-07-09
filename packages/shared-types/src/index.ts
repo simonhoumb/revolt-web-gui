@@ -84,9 +84,25 @@ export interface Mission {
 	updated_at: string;
 }
 
+export interface HazardHit {
+	layer: string;
+	description: string;
+	count: number;
+}
+
 export interface MissionSendResult {
 	status: string;
 	waypoint_count: number;
+	checked_at: string;
+	// The Phase 2 check /send always runs before publishing. "blocked" never reaches this
+	// response (the backend rejects with 409 instead) -- only ever "safe" or "warning".
+	validation_status: "safe" | "warning" | "blocked";
+	hazards: HazardHit[];
+}
+
+export interface MissionValidationResult {
+	status: "safe" | "warning" | "blocked";
+	hazards: HazardHit[];
 	checked_at: string;
 }
 

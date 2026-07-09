@@ -11,7 +11,10 @@ COPY --from=tippecanoe /usr/local/bin/tippecanoe /usr/local/bin/tippecanoe
 COPY --from=tippecanoe /usr/local/bin/tile-join /usr/local/bin/tile-join
 
 WORKDIR /pipeline
-COPY build.sh ./
-RUN chmod +x build.sh
+COPY build.sh ingest_postgis.sh ./
+RUN chmod +x build.sh ingest_postgis.sh
 
+# ingest_postgis.sh (Phase 2 ENC validation) overrides this via docker-compose.yml's
+# enc-postgis-ingest service entrypoint -- build.sh stays the default for run.sh's direct
+# docker run usage.
 ENTRYPOINT ["./build.sh"]

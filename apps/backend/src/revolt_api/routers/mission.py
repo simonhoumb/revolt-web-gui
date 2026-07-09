@@ -11,13 +11,16 @@ from sqlalchemy.orm import selectinload
 from revolt_api.audit import log_action
 from revolt_api.bridge import RosBridgeClient, get_bridge
 from revolt_api.bridge.waypoint_codec import expected_ack, waypoint_list_to_ros_dict
+from revolt_api.config import settings
 from revolt_api.database import get_db
+from revolt_api.enc_validation import evaluate_route_hazards
 from revolt_api.models.mission import Mission, MissionStatus, Waypoint
 from revolt_api.schemas.mission import (
 	MissionCreate,
 	MissionRead,
 	MissionSendResult,
 	MissionUpdate,
+	MissionValidationResult,
 	WaypointCreate,
 	WaypointRead,
 	WaypointReplace,
@@ -250,6 +253,41 @@ async def replace_waypoints(
 	return mission.waypoints
 
 
+@router.post("/missions/{mission_id}/validate", response_model=MissionValidationResult)
+async def validate_mission(
+	mission_id: uuid.UUID,
+	session_id: str = Depends(_session_id),  # noqa: B008
+	db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> MissionValidationResult:
+	"""Authoritative server-side ENC hazard check (Phase 2) against the enc_* PostGIS tables
+	(infra/enc-pipeline/ingest_postgis.sh) — independent of whatever chart tiles happen to be
+	rendered in the requesting browser's current viewport/zoom. See encValidation.ts's Phase 1
+	client-side check (advisory only) and WebApp/CLAUDE.md's ENC validation section for why that
+	distinction matters. send_mission() below always re-runs this itself before publishing —
+	this endpoint exists so the frontend can show hazard state before the operator attempts a
+	send at all, not as the only gate.
+	"""
+	mission = await _get_mission_or_404(db, mission_id)
+	result = await evaluate_route_hazards(
+		db, mission.waypoints, settings.safety_margin_m, settings.safety_contour_m
+	)
+	checked_at = datetime.now(UTC)
+	mission.last_validated_at = checked_at
+	mission.last_validation_status = result.status
+	await db.commit()
+	await log_action(
+		db,
+		session_id=session_id,
+		action="mission.validate",
+		params={
+			"mission_id": str(mission_id),
+			"status": result.status,
+			"hazard_count": len(result.hazards),
+		},
+	)
+	return MissionValidationResult(status=result.status, hazards=result.hazards, checked_at=checked_at)
+
+
 @router.post("/missions/{mission_id}/send", response_model=MissionSendResult)
 async def send_mission(
 	mission_id: uuid.UUID,
@@ -257,8 +295,14 @@ async def send_mission(
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> MissionSendResult:
-	"""Publish the mission's full waypoint list and wait for the sim's /waypoint_list echo
-	to confirm it landed (see RosBridgeClient.publish_and_await_ack).
+	"""Re-validate (Phase 2), then publish the mission's full waypoint list and wait for the
+	sim's /waypoint_list echo to confirm it landed (see RosBridgeClient.publish_and_await_ack).
+
+	Always re-runs the authoritative hazard check itself rather than trusting a client-reported
+	"already validated" flag — a route that was safe when last checked, or never checked at all,
+	must not reach the vessel unexamined. A "blocked" result refuses the send outright (409); a
+	"warning" (e.g. a shallow-water crossing) does not — sending isn't the only way to catch that,
+	and the operator has already seen it surfaced by Phase 1 while planning.
 
 	On BRIDGE_TARGET=physical there is currently nothing that echoes /waypoint_list back, so
 	a send there will correctly resolve to "timed_out" rather than being special-cased —
@@ -266,6 +310,32 @@ async def send_mission(
 	"""
 	mission = await _get_mission_or_404(db, mission_id)
 	waypoints = mission.waypoints
+
+	validation = await evaluate_route_hazards(
+		db, waypoints, settings.safety_margin_m, settings.safety_contour_m
+	)
+	mission.last_validated_at = datetime.now(UTC)
+	mission.last_validation_status = validation.status
+	await db.commit()
+	if validation.status == "blocked":
+		await log_action(
+			db,
+			session_id=session_id,
+			action="mission.send.blocked",
+			severity="warning",
+			params={
+				"mission_id": str(mission_id),
+				"hazards": [h.model_dump() for h in validation.hazards],
+			},
+		)
+		raise HTTPException(
+			status_code=409,
+			detail={
+				"message": "Route crosses a charted hazard and cannot be sent.",
+				"hazards": [h.model_dump() for h in validation.hazards],
+			},
+		)
+
 	ros_msg = waypoint_list_to_ros_dict(waypoints, bridge)
 	expected = expected_ack(waypoints, bridge)
 
@@ -284,6 +354,17 @@ async def send_mission(
 		db,
 		session_id=session_id,
 		action="mission.send",
-		params={"mission_id": str(mission_id), "status": status, "waypoint_count": len(waypoints)},
+		params={
+			"mission_id": str(mission_id),
+			"status": status,
+			"waypoint_count": len(waypoints),
+			"validation_status": validation.status,
+		},
 	)
-	return MissionSendResult(status=status, waypoint_count=len(waypoints), checked_at=checked_at)
+	return MissionSendResult(
+		status=status,
+		waypoint_count=len(waypoints),
+		checked_at=checked_at,
+		validation_status=validation.status,
+		hazards=validation.hazards,
+	)

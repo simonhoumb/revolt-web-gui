@@ -126,3 +126,42 @@
 	font-size: 0.75rem;
 	color: var(--element-active-color, #eaa75e);
 }
+
+.blockedError {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid var(--alarm-color, #d32f2f);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--alarm-color, #d32f2f) 12%, transparent);
+}
+
+.blockedErrorMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--alarm-color, #d32f2f);
+}
+
+/* Same warning color as the leg severity coloring in MapWidget.tsx ("warning" -> #fab219), so a
+   route flagged shallow reads the same way here as it does on the chart. */
+.sendWarning {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid #fab219;
+	border-radius: 4px;
+	background: color-mix(in srgb, #fab219 12%, transparent);
+}
+
+.sendWarningMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #fab219;
+}
+
+.hazardList {
+	margin: 4px 0 0;
+	padding-left: 16px;
+	font-size: 0.7rem;
+	color: var(--element-active-color, #eaa75e);
+}

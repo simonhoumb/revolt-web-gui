@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Waypoint } from "@revolt/shared-types";
+import type { HazardHit, Waypoint } from "@revolt/shared-types";
 import { ObcDropdownButton } from "@oicl/openbridge-webcomponents-react/components/dropdown-button/dropdown-button.js";
 import { ObcTextInputField } from "@oicl/openbridge-webcomponents-react/components/text-input-field/text-input-field.js";
 import { ObcNumberInputField } from "@oicl/openbridge-webcomponents-react/components/number-input-field/number-input-field.js";
@@ -22,6 +22,7 @@ import {
 import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
+import { MissionBlockedError } from "../../lib/missionApi.js";
 import styles from "./MissionWidget.module.css";
 
 const SEND_STATUS_LABEL: Record<string, string> = {
@@ -179,12 +180,27 @@ export function MissionWidget() {
 	const [newMissionName, setNewMissionName] = useState("");
 	const [renameDraft, setRenameDraft] = useState("");
 	const [sendPending, setSendPending] = useState(false);
+	const [blockedError, setBlockedError] = useState<MissionBlockedError | null>(null);
+	const [sendWarning, setSendWarning] = useState<HazardHit[] | null>(null);
 
 	async function handleSend() {
 		if (!activeMission) return;
 		setSendPending(true);
+		setBlockedError(null);
+		setSendWarning(null);
 		try {
-			await sendActiveMission();
+			const result = await sendActiveMission();
+			// "blocked" never reaches here (missionApi.send() throws MissionBlockedError for that
+			// case instead) -- only "warning" needs surfacing here, "safe" needs nothing shown.
+			if (result?.validation_status === "warning") {
+				setSendWarning(result.hazards);
+			}
+		} catch (err) {
+			if (err instanceof MissionBlockedError) {
+				setBlockedError(err);
+			} else {
+				throw err;
+			}
 		} finally {
 			setSendPending(false);
 		}
@@ -198,6 +214,14 @@ export function MissionWidget() {
 	useEffect(() => {
 		setRenameDraft(activeMission?.name ?? "");
 	}, [activeMission?.id, activeMission?.name]);
+
+	// A blocked-send error or a send warning describes a specific route; once the operator edits
+	// waypoints (or switches missions entirely) it no longer reflects the current route, so don't
+	// leave it displayed as if it still applied.
+	useEffect(() => {
+		setBlockedError(null);
+		setSendWarning(null);
+	}, [activeMission?.id, activeMission?.waypoints]);
 
 	async function handleCreateMission() {
 		const name = newMissionName.trim();
@@ -346,6 +370,35 @@ export function MissionWidget() {
 					)}
 				</div>
 			)}
+
+			{blockedError && (
+				<div className={styles.blockedError}>
+					<p className={styles.blockedErrorMessage}>{blockedError.message}</p>
+					{renderHazardList(blockedError.hazards)}
+				</div>
+			)}
+
+			{sendWarning && (
+				<div className={styles.sendWarning}>
+					<p className={styles.sendWarningMessage}>
+						Sent, but the route was flagged by the server-side chart check:
+					</p>
+					{renderHazardList(sendWarning)}
+				</div>
+			)}
 		</div>
+	);
+}
+
+function renderHazardList(hazards: HazardHit[]) {
+	return (
+		<ul className={styles.hazardList}>
+			{hazards.map((hazard) => (
+				<li key={hazard.layer}>
+					{hazard.description}
+					{hazard.count > 1 ? ` (${String(hazard.count)} charted features)` : ""}
+				</li>
+			))}
+		</ul>
 	);
 }

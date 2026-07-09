@@ -1,5 +1,24 @@
-import type { Mission, MissionSendResult, MissionStatus, Waypoint } from "@revolt/shared-types";
+import type {
+	HazardHit,
+	Mission,
+	MissionSendResult,
+	MissionStatus,
+	MissionValidationResult,
+	Waypoint,
+} from "@revolt/shared-types";
 import { apiFetch } from "./api.js";
+
+// Thrown by missionApi.send() specifically for the 409 "route crosses a charted hazard" case, so
+// callers can show the operator what's actually wrong instead of a generic failure message.
+export class MissionBlockedError extends Error {
+	hazards: HazardHit[];
+
+	constructor(message: string, hazards: HazardHit[]) {
+		super(message);
+		this.name = "MissionBlockedError";
+		this.hazards = hazards;
+	}
+}
 
 export interface MissionCreatePayload {
 	name: string;
@@ -137,8 +156,20 @@ export const missionApi = {
 	},
 
 	async send(missionId: string): Promise<MissionSendResult> {
-		return handleJson<MissionSendResult>(
-			await apiFetch(`/api/missions/${missionId}/send`, { method: "POST" }),
+		const res = await apiFetch(`/api/missions/${missionId}/send`, { method: "POST" });
+		if (res.status === 409) {
+			const body = (await res.json()) as { detail?: { message?: string; hazards?: HazardHit[] } };
+			throw new MissionBlockedError(
+				body.detail?.message ?? "Route crosses a charted hazard and cannot be sent.",
+				body.detail?.hazards ?? [],
+			);
+		}
+		return handleJson<MissionSendResult>(res);
+	},
+
+	async validate(missionId: string): Promise<MissionValidationResult> {
+		return handleJson<MissionValidationResult>(
+			await apiFetch(`/api/missions/${missionId}/validate`, { method: "POST" }),
 		);
 	},
 };

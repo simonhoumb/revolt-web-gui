@@ -7,7 +7,7 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import type { Mission, Waypoint } from "@revolt/shared-types";
+import type { Mission, MissionSendResult, Waypoint } from "@revolt/shared-types";
 import { missionApi } from "../lib/missionApi.js";
 
 export interface HazardSummary {
@@ -38,7 +38,7 @@ interface MissionContextValue {
 	reorderWaypoints: (orderedWaypointIds: string[]) => Promise<void>;
 	deleteWaypoint: (waypointId: string) => Promise<void>;
 	setLegValidation: (result: Record<string, HazardSummary>) => void;
-	sendActiveMission: () => Promise<void>;
+	sendActiveMission: () => Promise<MissionSendResult | null>;
 }
 
 const MissionContext = createContext<MissionContextValue | null>(null);
@@ -254,11 +254,13 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	const sendActiveMission = useCallback(async () => {
-		if (!activeMissionId) return;
-		// The result (acknowledged/timed_out/etc) is broadcast over the WebSocket as a
+		if (!activeMissionId) return null;
+		// The ack status (acknowledged/timed_out/etc) is broadcast over the WebSocket as a
 		// MissionSendStatusMsg so every open tab sees it, not just this one — the widget reads
-		// that from useBridgeData() rather than this call's return value.
-		await missionApi.send(activeMissionId);
+		// that from useBridgeData(). The Phase 2 validation_status/hazards on the response are
+		// NOT broadcast anywhere else, so this call's return value is the only place the sending
+		// tab can learn "the route was allowed through with a warning" and show it.
+		return await missionApi.send(activeMissionId);
 	}, [activeMissionId]);
 
 	const value = useMemo<MissionContextValue>(

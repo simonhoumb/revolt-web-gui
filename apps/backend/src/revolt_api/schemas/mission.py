@@ -8,6 +8,7 @@ from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from shapely.geometry import Point
 
+from revolt_api.enc_validation import HazardHit, ValidationStatus
 from revolt_api.models.mission import MissionStatus
 from revolt_api.schemas.vessel import Position
 
@@ -106,4 +107,16 @@ class MissionRead(BaseModel):
 class MissionSendResult(BaseModel):
 	status: str
 	waypoint_count: int
+	checked_at: datetime
+	# The Phase 2 check send_mission() always runs before publishing. "blocked" never reaches this
+	# response (send_mission() raises 409 instead) -- these fields only ever carry "safe" or
+	# "warning", so the frontend can surface a non-blocking warning instead of it being silently
+	# persisted to Mission.last_validation_status with nothing in the UI ever showing it.
+	validation_status: ValidationStatus
+	hazards: list[HazardHit]
+
+
+class MissionValidationResult(BaseModel):
+	status: ValidationStatus
+	hazards: list[HazardHit]
 	checked_at: datetime

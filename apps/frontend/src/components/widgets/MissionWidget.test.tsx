@@ -6,6 +6,7 @@ import { MissionWidget, formatDuration, moveWaypointId } from "./MissionWidget.j
 import { useMission } from "../../context/MissionContext.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import { useBridgeData } from "../../context/BridgeDataContext.js";
+import { MissionBlockedError } from "../../lib/missionApi.js";
 
 vi.mock("../../context/MissionContext.js", () => ({
 	useMission: vi.fn(),
@@ -222,5 +223,96 @@ describe("MissionWidget", () => {
 			await Promise.resolve();
 		});
 		expect(sendButton?.showProgress).toBe(false);
+	});
+
+	it("shows the blocked hazards inline when send is refused for crossing a charted hazard", async () => {
+		const sendActiveMission = vi.fn(() =>
+			Promise.reject(
+				new MissionBlockedError("Route crosses a charted hazard and cannot be sent.", [
+					{ layer: "lndare", description: "Route crosses charted land.", count: 1 },
+				]),
+			),
+		);
+		setMission([makeWaypoint()], { sendActiveMission });
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+
+		render(<MissionWidget />);
+		const sendButton = document.querySelector("obc-progress-button");
+		expect(sendButton).not.toBeNull();
+
+		await act(async () => {
+			sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(
+			screen.getByText("Route crosses a charted hazard and cannot be sent."),
+		).toBeInTheDocument();
+		expect(screen.getByText("Route crosses charted land.")).toBeInTheDocument();
+	});
+
+	it("shows the warning hazards inline when a send succeeds but the route was flagged", async () => {
+		const sendActiveMission = vi.fn(() =>
+			Promise.resolve({
+				status: "acknowledged",
+				waypoint_count: 1,
+				checked_at: "2026-07-09T00:00:00Z",
+				validation_status: "warning" as const,
+				hazards: [
+					{
+						layer: "depare",
+						description: "Route crosses charted depth below the 3 m safety contour.",
+						count: 1,
+					},
+				],
+			}),
+		);
+		setMission([makeWaypoint()], { sendActiveMission });
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+
+		render(<MissionWidget />);
+		const sendButton = document.querySelector("obc-progress-button");
+		expect(sendButton).not.toBeNull();
+
+		await act(async () => {
+			sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(
+			screen.getByText("Sent, but the route was flagged by the server-side chart check:"),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText("Route crosses charted depth below the 3 m safety contour."),
+		).toBeInTheDocument();
+	});
+
+	it("shows no warning panel when a send succeeds with a safe result", async () => {
+		const sendActiveMission = vi.fn(() =>
+			Promise.resolve({
+				status: "acknowledged",
+				waypoint_count: 1,
+				checked_at: "2026-07-09T00:00:00Z",
+				validation_status: "safe" as const,
+				hazards: [],
+			}),
+		);
+		setMission([makeWaypoint()], { sendActiveMission });
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+
+		render(<MissionWidget />);
+		const sendButton = document.querySelector("obc-progress-button");
+
+		await act(async () => {
+			sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(
+			screen.queryByText("Sent, but the route was flagged by the server-side chart check:"),
+		).not.toBeInTheDocument();
 	});
 });
