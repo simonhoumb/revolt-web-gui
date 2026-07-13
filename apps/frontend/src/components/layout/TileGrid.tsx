@@ -8,9 +8,13 @@ import styles from "./TileGrid.module.css";
 
 const GRID_CONFIG = {
 	cols: 12,
-	rowHeight: 80,
 	margin: [8, 8] as [number, number],
 };
+
+// Rows never shrink past this, however short the window gets -- past this point
+// the grid container scrolls (see TileGrid.module.css) instead of squishing tiles
+// into an unusable size.
+const MIN_ROW_HEIGHT = 48;
 
 function useContainerSize(initialWidth: number) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -53,15 +57,26 @@ export function TileGrid() {
 		}
 	};
 
+	const marginY = GRID_CONFIG.margin[1];
+
+	// The most rows that could ever fit at MIN_ROW_HEIGHT. Caps interactive drag/resize
+	// so editing a layout can't squish it below a usable size -- same role the old fixed
+	// maxRows played, just computed from the floor instead of a constant rowHeight.
+	const maxRows = height > 0
+		? Math.floor((height - marginY) / (MIN_ROW_HEIGHT + marginY))
+		: undefined;
+
+	// How many rows the current layout actually spans. rowHeight below is derived from
+	// this and the container's height, exactly mirroring how column width is already
+	// derived from containerWidth / cols -- so the whole layout always fits vertically,
+	// on any window size, instead of a fixed pixel rowHeight running past the bottom.
+	const neededRows = Math.max(1, ...config.tiles.map((tile) => tile.y + tile.h));
+
 	// containerPadding defaults to margin=[8,8]; each row occupies rowHeight+marginY pixels
 	// minus one marginY for the last row, plus 2*containerPaddingY total.
-	// Simplified: maxRows = floor((contentHeight - marginY) / (rowHeight + marginY))
-	const maxRows = height > 0
-		? Math.floor(
-			(height - GRID_CONFIG.margin[1]) /
-			(GRID_CONFIG.rowHeight + GRID_CONFIG.margin[1]),
-		)
-		: undefined;
+	const rowHeight = height > 0
+		? Math.max(MIN_ROW_HEIGHT, (height - (neededRows + 1) * marginY) / neededRows)
+		: MIN_ROW_HEIGHT;
 
 	const layout: Layout = config.tiles.map((tile) => {
 		const def = WIDGET_REGISTRY[tile.i];
@@ -83,7 +98,7 @@ export function TileGrid() {
 					key={gridKey}
 					width={width}
 					layout={layout}
-					gridConfig={{ ...GRID_CONFIG, maxRows }}
+					gridConfig={{ ...GRID_CONFIG, rowHeight, maxRows }}
 					dragConfig={{ enabled: editMode, handle: "[data-drag-handle]" }}
 					resizeConfig={{ enabled: editMode }}
 					onDrag={(currentLayout) => {
