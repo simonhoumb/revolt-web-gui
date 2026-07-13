@@ -1,6 +1,9 @@
 .grid {
 	flex: 1;
-	overflow: hidden;
+	/* rowHeight is fit to the container (see TileGrid.tsx), so this only ever
+	   scrolls if MIN_ROW_HEIGHT stops it from shrinking further on a very short window. */
+	overflow-y: auto;
+	overflow-x: hidden;
 	min-height: 0;
 	padding: 8px;
 	background-color: var(--container-background-color, #000);
