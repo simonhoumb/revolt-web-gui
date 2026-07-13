@@ -20,17 +20,23 @@ OUTPUT_DIR="$DATA_DIR/output"
 # around Horten, Tonsberg, Moss and Asgardstrand (not central Oslo city).
 CELLS=(NO4G0821 NO4H0820 NO4H0821 NO5G0821 NO5H0820)
 
-# S-57 layers to convert. Metadata layers (M_COVR, M_QUAL, M_NSYS, DSID) and
-# land-use layers (ROADWY, RAILWY, BUAARE) are skipped as not relevant to a
-# nautical chart. All layers are tiled across the same zoom range (6-16,
-# below) -- this tippecanoe version has no per-file zoom override, so
-# zoom-based visibility (e.g. hiding soundings/buoys until zoomed into
-# harbour scale) is handled in the MapLibre style's per-layer "minzoom"
-# instead of at tile-generation time.
+# S-57 layers to convert. Metadata layers M_QUAL, M_NSYS, DSID and land-use
+# layers (ROADWY, RAILWY, BUAARE) are skipped as not relevant to a nautical
+# chart. M_COVR (chart coverage extent, CATCOV=1 available / CATCOV=2 no
+# coverage) is included despite being metadata -- Feature 13's ENC validation
+# (both phases) queries it to distinguish "checked and found nothing" from
+# "no chart data here at all", which matters because the latter is easy to
+# mistake for confirmed-safe otherwise. It's never given a visible paint in
+# the MapLibre style (see apps/frontend/public/map-styles/), just present in
+# the tileset so queryRenderedFeatures() can see it.
+# All layers are tiled across the same zoom range (6-16, below) -- this
+# tippecanoe version has no per-file zoom override, so zoom-based visibility
+# (e.g. hiding soundings/buoys until zoomed into harbour scale) is handled in
+# the MapLibre style's per-layer "minzoom" instead of at tile-generation time.
 LAYERS=(
 	DEPARE DEPCNT SOUNDG COALNE LNDARE SBDARE SLCONS
 	BOYLAT BOYSAW BOYSPP BOYCAR BCNLAT BCNSPP BCNISD
-	LIGHTS WRECKS OBSTRN UWTROC RESARE TSSLPT TSSBND TSELNE
+	LIGHTS WRECKS OBSTRN UWTROC RESARE TSSLPT TSSBND TSELNE M_COVR
 )
 
 rm -rf "$CONSOLIDATED_DIR" "$GEOJSON_DIR" "$OUTPUT_DIR"

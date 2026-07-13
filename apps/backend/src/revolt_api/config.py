@@ -34,6 +34,14 @@ class Settings(BaseSettings):
 	sim_gnss_origin_lat: float = 59.9083  # degrees, default: Bekkelaget, Oslo Fjord
 	sim_gnss_origin_lon: float = 10.7512  # degrees
 
+	# Phase 2 (server-side authoritative) ENC validation. Matches the Phase 1 client-side check's
+	# own fixed values exactly (encValidation.ts's CORRIDOR_HALF_WIDTH_M and MapWidget's
+	# SAFETY_CONTOUR_M) rather than a separately configurable vessel_beam_m + margin split, since
+	# neither phase has a real documented vessel beam to build that split on -- a single margin,
+	# treated the same way in both phases, is honest about what's actually known.
+	safety_margin_m: float = 15.0  # half-width of the buffered route corridor checked for hazards
+	safety_contour_m: float = 3.0  # depths shallower than this trigger a warning, not a block
+
 	@property
 	def is_dev(self) -> bool:
 		return self.environment == "development"

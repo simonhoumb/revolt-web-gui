@@ -114,6 +114,29 @@ services:
         profiles:
             - mock
 
+    # One-shot job: loads the Phase 2 ENC hazard layers (server-side authoritative validation,
+    # /api/missions/{id}/validate) into PostGIS from the GeoJSON build.sh already extracted. Run
+    # manually after build.sh, not part of this stack -- see infra/enc-pipeline/README.md.
+    # Usage: docker compose --profile enc-ingest run --rm enc-postgis-ingest
+    enc-postgis-ingest:
+        build:
+            context: ./infra/enc-pipeline
+            dockerfile: Dockerfile
+        entrypoint: ["./ingest_postgis.sh"]
+        environment:
+            PGHOST: db
+            PGPORT: "5432"
+            PGUSER: ${POSTGRES_USER}
+            PGPASSWORD: ${POSTGRES_PASSWORD}
+            PGDATABASE: ${POSTGRES_DB}
+        volumes:
+            - ./infra/enc-pipeline/.data/geojson:/data/geojson:ro
+        depends_on:
+            db:
+                condition: service_healthy
+        profiles:
+            - enc-ingest
+
     # Socat proxy for physical vessel connectivity via Tailscale.
     # Shares the tailscale container's network namespace so it can reach revolt-onboard
     # on the tailnet, then exposes port 9090 to the compose network as vessel-proxy:9090.

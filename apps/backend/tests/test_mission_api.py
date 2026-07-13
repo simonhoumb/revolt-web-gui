@@ -1,0 +1,389 @@
+"""Mission/waypoint CRUD tests against a real Postgres/PostGIS database.
+
+Requires: docker compose up -d db && alembic upgrade head. Excluded from the default
+`pytest` run (see pyproject.toml addopts) since CI has no Postgres service — run with
+`PYTHONPATH="" uv run pytest -m integration`. Set DATABASE_URL to point at the running
+db container if not using the default docker-compose port mapping (localhost:5432).
+"""
+
+import math
+import os
+from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from revolt_api.bridge.client import RosBridgeClient
+from revolt_api.database import get_db
+from revolt_api.main import app
+
+_ORIGIN_LAT = 59.9083
+_ORIGIN_LON = 10.7512
+
+pytestmark = pytest.mark.integration
+
+TEST_DATABASE_URL = os.environ.get(
+	"TEST_DATABASE_URL", "postgresql+asyncpg://revolt:changeme@localhost:5432/revolt_dev"
+)
+
+
+def _latlon_to_cartesian(lat: float, lon: float) -> tuple[float, float]:
+	x = (lon - _ORIGIN_LON) * 111320.0 * math.cos(math.radians(_ORIGIN_LAT))
+	y = (lat - _ORIGIN_LAT) * 111320.0
+	return x, y
+
+
+@pytest.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
+	app.state.bridge = MagicMock(spec=RosBridgeClient)
+	app.state.bridge.connected = False
+	app.state.bridge.latlon_to_cartesian.side_effect = _latlon_to_cartesian
+
+	engine = create_async_engine(TEST_DATABASE_URL)
+	session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+	async def override_get_db() -> AsyncGenerator:
+		async with session_factory() as session:
+			yield session
+
+	app.dependency_overrides[get_db] = override_get_db
+	try:
+		async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+			yield ac
+	finally:
+		app.dependency_overrides.pop(get_db, None)
+		await engine.dispose()
+
+
+async def _create_mission(client: AsyncClient, name: str = "Oslo Fjord transit") -> str:
+	resp = await client.post("/api/missions", json={"name": name})
+	assert resp.status_code == 201
+	return resp.json()["id"]
+
+
+async def test_mission_and_waypoint_crud_round_trip(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client)
+	try:
+		wp_resp = await client.post(
+			f"/api/missions/{mission_id}/waypoints",
+			json={
+				"sequence_number": 0,
+				"latitude": 59.3783,
+				"longitude": 10.5930,
+				"target_speed": 4.5,
+			},
+			headers={"X-Session-ID": "test-session"},
+		)
+		assert wp_resp.status_code == 201
+		wp = wp_resp.json()
+		# Highest-risk item: lat/lon must round-trip through the PostGIS WKT-in/WKB-out
+		# conversion without drift or getting swapped.
+		assert wp["position"]["latitude"] == pytest.approx(59.3783, abs=1e-6)
+		assert wp["position"]["longitude"] == pytest.approx(10.5930, abs=1e-6)
+		assert wp["sequence_number"] == 0
+		assert wp["switch_radius"] == 5.0
+		assert wp["heading_mode"] == 0
+		assert wp["heading_deg"] is None
+		waypoint_id = wp["id"]
+
+		get_resp = await client.get(f"/api/missions/{mission_id}")
+		assert get_resp.status_code == 200
+		assert len(get_resp.json()["waypoints"]) == 1
+
+		update_resp = await client.patch(
+			f"/api/missions/{mission_id}/waypoints/{waypoint_id}",
+			json={"latitude": 59.4, "longitude": 10.6, "target_speed": 6.0, "heading_deg": 90.0},
+		)
+		assert update_resp.status_code == 200
+		updated = update_resp.json()
+		assert updated["position"]["latitude"] == pytest.approx(59.4, abs=1e-6)
+		assert updated["position"]["longitude"] == pytest.approx(10.6, abs=1e-6)
+		assert updated["target_speed"] == 6.0
+		assert updated["heading_deg"] == pytest.approx(90.0, abs=1e-4)
+
+		lat_only_resp = await client.patch(
+			f"/api/missions/{mission_id}/waypoints/{waypoint_id}", json={"latitude": 59.5}
+		)
+		assert lat_only_resp.status_code == 400
+
+		replace_resp = await client.put(
+			f"/api/missions/{mission_id}/waypoints",
+			json=[
+				{"latitude": 59.1, "longitude": 10.1, "target_speed": 3.0},
+				{"latitude": 59.2, "longitude": 10.2, "target_speed": 3.5},
+			],
+		)
+		assert replace_resp.status_code == 200
+		replaced = replace_resp.json()
+		assert [w["sequence_number"] for w in replaced] == [0, 1]
+		assert replaced[1]["position"]["latitude"] == pytest.approx(59.2, abs=1e-6)
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		assert len(mission_resp.json()["waypoints"]) == 2
+
+		rename_resp = await client.patch(f"/api/missions/{mission_id}", json={"name": "Renamed"})
+		assert rename_resp.status_code == 200
+		assert rename_resp.json()["name"] == "Renamed"
+
+		list_resp = await client.get("/api/missions")
+		assert list_resp.status_code == 200
+		assert any(m["id"] == mission_id for m in list_resp.json())
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+	assert (await client.get(f"/api/missions/{mission_id}")).status_code == 404
+
+
+async def test_waypoint_delete_renumbers_sequence(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Renumber test")
+	try:
+		ids = []
+		for i in range(3):
+			resp = await client.post(
+				f"/api/missions/{mission_id}/waypoints",
+				json={
+					"sequence_number": i,
+					"latitude": 59.0 + i * 0.01,
+					"longitude": 10.0,
+					"target_speed": 3.0,
+				},
+			)
+			assert resp.status_code == 201
+			ids.append(resp.json()["id"])
+
+		del_resp = await client.delete(f"/api/missions/{mission_id}/waypoints/{ids[0]}")
+		assert del_resp.status_code == 204
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		remaining = mission_resp.json()["waypoints"]
+		assert [w["sequence_number"] for w in remaining] == [0, 1]
+		assert [w["id"] for w in remaining] == [ids[1], ids[2]]
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_mission_not_found_returns_404(client: AsyncClient) -> None:
+	missing_id = "00000000-0000-0000-0000-000000000000"
+	assert (await client.get(f"/api/missions/{missing_id}")).status_code == 404
+	assert (
+		await client.patch(f"/api/missions/{missing_id}", json={"name": "x"})
+	).status_code == 404
+	assert (await client.delete(f"/api/missions/{missing_id}")).status_code == 404
+	assert (
+		await client.post(
+			f"/api/missions/{missing_id}/waypoints",
+			json={"sequence_number": 0, "latitude": 0, "longitude": 0, "target_speed": 1},
+		)
+	).status_code == 404
+
+
+async def test_send_mission_acknowledged_updates_mission_and_returns_result(
+	client: AsyncClient,
+) -> None:
+	mission_id = await _create_mission(client, name="Send test")
+	try:
+		await client.post(
+			f"/api/missions/{mission_id}/waypoints",
+			json={"sequence_number": 0, "latitude": 59.92, "longitude": 10.76, "target_speed": 4.0},
+		)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "acknowledged"
+		assert body["waypoint_count"] == 1
+
+		bridge.publish_and_await_ack.assert_awaited_once()
+		call_args = bridge.publish_and_await_ack.await_args
+		assert call_args.args[0] == "/update_waypoint_list"
+		expected = call_args.args[3]
+		assert expected[0][0] == 0  # sequence_number
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		mission = mission_resp.json()
+		assert mission["last_send_status"] == "acknowledged"
+		assert mission["last_sent_at"] is not None
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_not_connected(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Send disconnected test")
+	try:
+		bridge = app.state.bridge
+		bridge.connected = False
+		bridge.publish_and_await_ack.return_value = "not_connected"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		assert resp.json()["status"] == "not_connected"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_not_found_returns_404(client: AsyncClient) -> None:
+	missing_id = "00000000-0000-0000-0000-000000000000"
+	assert (await client.post(f"/api/missions/{missing_id}/send")).status_code == 404
+
+
+async def _add_waypoint(client: AsyncClient, mission_id: str, lat: float, lon: float) -> None:
+	resp = await client.post(
+		f"/api/missions/{mission_id}/waypoints",
+		json={"sequence_number": 0, "latitude": lat, "longitude": lon, "target_speed": 4.0},
+	)
+	assert resp.status_code == 201
+
+
+async def test_validate_mission_blocked_on_real_charted_land(client: AsyncClient) -> None:
+	# Straddles a real lndare polygon centroid from the ingested Oslo Fjord chart data (~200 m
+	# leg, land roughly in the middle) -- confirmed directly against enc_lndare via psql before
+	# writing this test, not just assumed from the coordinates.
+	mission_id = await _create_mission(client, name="Validate blocked test")
+	try:
+		await _add_waypoint(client, mission_id, 59.379916, 10.527813401271281)
+		await _add_waypoint(client, mission_id, 59.377916, 10.527813401271281)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "blocked"
+		assert any(h["layer"] == "lndare" for h in body["hazards"])
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		mission = mission_resp.json()
+		assert mission["last_validation_status"] == "blocked"
+		assert mission["last_validated_at"] is not None
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_validate_mission_warning_on_real_shallow_water(client: AsyncClient) -> None:
+	# Straddles a real enc_depare polygon (DRVAL1=0.5 m) centroid, confirmed clear of every
+	# blocked layer at this margin via psql before writing this test.
+	mission_id = await _create_mission(client, name="Validate warning test")
+	try:
+		await _add_waypoint(client, mission_id, 59.389597, 10.525664883346424)
+		await _add_waypoint(client, mission_id, 59.387597, 10.525664883346424)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "warning"
+		assert body["hazards"][0]["layer"] == "depare"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_validate_mission_safe_within_covered_hazard_free_water(client: AsyncClient) -> None:
+	# A point deep inside a real enc_m_covr CATCOV=1 polygon (confirmed via psql before writing
+	# this test: covered, and clear of every hazard/depth layer at this margin), so this exercises
+	# "safe" specifically -- covered AND hazard-free -- not just "no hazard layer happened to hit".
+	mission_id = await _create_mission(client, name="Validate safe test")
+	try:
+		await _add_waypoint(client, mission_id, 59.366128, 10.625)
+		await _add_waypoint(client, mission_id, 59.367128, 10.626)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "safe"
+		assert body["hazards"] == []
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_validate_mission_no_data_outside_charted_coverage(client: AsyncClient) -> None:
+	# Central Oslo -- confirmed via psql to fall outside every enc_m_covr CATCOV=1 polygon in this
+	# delivery (README.md already documents this delivery covers the outer/southern Oslofjord, not
+	# central Oslo city). Must not read as "safe": no hazard layer has any data there either.
+	mission_id = await _create_mission(client, name="Validate no_data test")
+	try:
+		await _add_waypoint(client, mission_id, 59.9139, 10.7522)
+		await _add_waypoint(client, mission_id, 59.9159, 10.7542)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "no_data"
+		assert body["hazards"][0]["layer"] == "m_covr"
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		assert mission_resp.json()["last_validation_status"] == "no_data"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_not_blocked_by_no_data(client: AsyncClient) -> None:
+	# The vessel is tested in areas outside this delivery's ENC coverage -- sending must stay
+	# possible there. Only "blocked" refuses; "no_data" (like "warning") does not.
+	mission_id = await _create_mission(client, name="Send no_data test")
+	try:
+		await _add_waypoint(client, mission_id, 59.9139, 10.7522)
+		await _add_waypoint(client, mission_id, 59.9159, 10.7542)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "acknowledged"
+		assert body["validation_status"] == "no_data"
+		bridge.publish_and_await_ack.assert_awaited_once()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_blocked_by_validation_refuses_to_publish(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Send blocked test")
+	try:
+		await _add_waypoint(client, mission_id, 59.379916, 10.527813401271281)
+		await _add_waypoint(client, mission_id, 59.377916, 10.527813401271281)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 409
+		assert "hazards" in resp.json()["detail"]
+		# Must not have attempted to publish at all -- a blocked route never reaches the vessel.
+		bridge.publish_and_await_ack.assert_not_awaited()
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		mission = mission_resp.json()
+		assert mission["last_validation_status"] == "blocked"
+		assert mission["last_send_status"] is None
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_response_surfaces_a_warning_result(client: AsyncClient) -> None:
+	# The send still succeeds for a "warning" (shallow water, not blocked) -- but the response
+	# itself must carry the warning, or it's silently persisted to last_validation_status with
+	# nothing anywhere ever telling the operator about it.
+	mission_id = await _create_mission(client, name="Send warning test")
+	try:
+		await _add_waypoint(client, mission_id, 59.389597, 10.525664883346424)
+		await _add_waypoint(client, mission_id, 59.387597, 10.525664883346424)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "acknowledged"
+		assert body["validation_status"] == "warning"
+		assert body["hazards"][0]["layer"] == "depare"
+		bridge.publish_and_await_ack.assert_awaited_once()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")

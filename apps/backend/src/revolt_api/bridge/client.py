@@ -4,6 +4,8 @@ import contextlib
 import json
 import math
 import time
+from dataclasses import dataclass, field
+from typing import Literal
 
 import structlog
 from websockets.asyncio.client import connect
@@ -24,6 +26,8 @@ from revolt_api.bridge.contracts import (
 	HumidityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
+	MissionSendStatus,
+	MissionSendStatusMsg,
 	SimGnssVelocityMsg,
 	SimHullPositionMsg,
 	SimHullVelocityMsg,
@@ -42,6 +46,21 @@ from revolt_api.bridge.protocol import (
 )
 
 logger = structlog.get_logger(__name__)
+
+AckStatus = Literal["acknowledged", "timed_out", "not_connected", "mismatched"]
+
+
+@dataclass
+class PendingAck:
+	"""Tracks a publish awaiting confirmation via the vessel's echoed waypoint list.
+
+	expected is (sequence_number, x_metres, y_metres) per waypoint, in order — compared
+	against the next /waypoint_list message that arrives after the publish.
+	"""
+
+	expected: list[tuple[int, float, float]]
+	event: asyncio.Event = field(default_factory=asyncio.Event)
+	result: AckStatus = "timed_out"
 
 
 class RosBridgeClient:
@@ -72,6 +91,7 @@ class RosBridgeClient:
 		self._camera_frame_counters: dict[str, int] = {}
 		self._camera_last_frame_time: dict[str, float] = {}
 		self._camera_connected: dict[str, bool] = {}
+		self._pending_ack: PendingAck | None = None
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
@@ -116,6 +136,69 @@ class RosBridgeClient:
 		frame: RosBridgePublishOut = {"op": "publish", "topic": topic, "msg": msg}
 		# _conn is set when _connected is True; mypy can't see the invariant
 		await self._conn.send(json.dumps(frame))  # type: ignore[union-attr]
+
+	async def publish_and_await_ack(
+		self,
+		topic: str,
+		ros_type: str,
+		msg: dict,
+		expected: list[tuple[int, float, float]],
+		timeout_s: float = 5.0,
+	) -> AckStatus:
+		"""Publish, then wait for the mission planner's /waypoint_list echo to confirm it landed.
+
+		There is no ROS2 service/ack for these topics (see CLAUDE.md's phased-transport note) — the
+		only confirmation available is that the sim's own active-list echo matches what was sent.
+		Only one send can be pending at a time; a second call while one is in flight replaces it.
+		"""
+		if not self._connected:
+			return "not_connected"
+		pending = PendingAck(expected=expected)
+		self._pending_ack = pending
+		try:
+			await self.publish(topic, ros_type, msg)
+			try:
+				await asyncio.wait_for(pending.event.wait(), timeout=timeout_s)
+			except TimeoutError:
+				return "timed_out"
+			return pending.result
+		finally:
+			if self._pending_ack is pending:
+				self._pending_ack = None
+
+	def _check_pending_ack(self, waypoints: list[SimWaypoint]) -> None:
+		pending = self._pending_ack
+		if pending is None:
+			return
+		actual = [(wp["id"], wp["pos_x"], wp["pos_y"]) for wp in waypoints]
+		matches = len(actual) == len(pending.expected) and all(
+			a_id == e_id and math.isclose(a_x, e_x, abs_tol=0.5) and math.isclose(a_y, e_y, abs_tol=0.5)
+			for (a_id, a_x, a_y), (e_id, e_x, e_y) in zip(actual, pending.expected, strict=True)
+		)
+		pending.result = "acknowledged" if matches else "mismatched"
+		pending.event.set()
+
+	def broadcast_mission_send_status(
+		self, mission_id: str, status: MissionSendStatus, waypoint_count: int
+	) -> None:
+		"""Fan out a mission send status update to every open frontend tab, not just the sender."""
+		self._broadcast(
+			MissionSendStatusMsg(
+				v="1",
+				type="mission_send_status",
+				timestamp_ms=int(time.time() * 1000),
+				mission_id=mission_id,
+				status=status,
+				waypoint_count=waypoint_count,
+			)
+		)
+
+	def latlon_to_cartesian(self, lat: float, lon: float) -> tuple[float, float]:
+		"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North). Inverse of
+		_cartesian_to_latlon, used when serialising outbound waypoints for the sim."""
+		x = (lon - self._gnss_origin_lon) * 111320.0 * math.cos(math.radians(self._gnss_origin_lat))
+		y = (lat - self._gnss_origin_lat) * 111320.0
+		return x, y
 
 	@property
 	def connected(self) -> bool:
@@ -438,6 +521,7 @@ class RosBridgeClient:
 					)
 					for wp in msg["waypoints"]
 				]
+				self._check_pending_ack(waypoints)
 				return SimWaypointListMsg(
 					v="1",
 					type="sim_waypoint_list",

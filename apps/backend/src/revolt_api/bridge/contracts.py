@@ -182,6 +182,18 @@ class SimWaypointListMsg(TypedDict):
 	waypoints: list[SimWaypoint]
 
 
+MissionSendStatus = Literal["sending", "acknowledged", "timed_out", "not_connected", "mismatched"]
+
+
+class MissionSendStatusMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["mission_send_status"]
+	timestamp_ms: int
+	mission_id: str
+	status: MissionSendStatus
+	waypoint_count: int
+
+
 class LidarScanMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["lidar_scan"]
@@ -214,6 +226,7 @@ BridgeMessage = (
 	| SimImuMsg
 	| SimThrusterFeedbackMsg
 	| SimWaypointListMsg
+	| MissionSendStatusMsg
 	| LidarScanMsg
 )
 

@@ -61,6 +61,10 @@ export interface Waypoint {
 	sequence_number: number;
 	position: Position;
 	target_speed: number;
+	switch_radius: number;
+	heading_mode: number;
+	heading_deg: number | null;
+	validation_status: string | null;
 	reached_at: string | null;
 }
 
@@ -72,8 +76,34 @@ export interface Mission {
 	waypoints: Waypoint[];
 	started_at: string | null;
 	completed_at: string | null;
+	last_validated_at: string | null;
+	last_validation_status: string | null;
+	last_sent_at: string | null;
+	last_send_status: string | null;
 	created_at: string;
 	updated_at: string;
+}
+
+export interface HazardHit {
+	layer: string;
+	description: string;
+	count: number;
+}
+
+export interface MissionSendResult {
+	status: string;
+	waypoint_count: number;
+	checked_at: string;
+	// The Phase 2 check /send always runs before publishing. "blocked" never reaches this
+	// response (the backend rejects with 409 instead) -- only ever "safe", "warning", or "no_data".
+	validation_status: "safe" | "warning" | "no_data" | "blocked";
+	hazards: HazardHit[];
+}
+
+export interface MissionValidationResult {
+	status: "safe" | "warning" | "no_data" | "blocked";
+	hazards: HazardHit[];
+	checked_at: string;
 }
 
 export * from "./bridge.js";

@@ -42,6 +42,12 @@ async def _mock_server(websocket) -> None:
 				await websocket.send(
 					json.dumps({"op": "publish", "topic": topic, "msg": msgs[topic]})
 				)
+		elif frame.get("op") == "publish" and frame.get("topic") == "/update_waypoint_list":
+			# Mirrors infra/rosbridge_mock/server.py's echo behavior: adopt whatever was
+			# published as the new active list and echo it back on /waypoint_list.
+			await websocket.send(
+				json.dumps({"op": "publish", "topic": "/waypoint_list", "msg": frame["msg"]})
+			)
 
 
 @pytest.fixture
@@ -178,6 +184,120 @@ async def test_frontend_throttle_drops_within_window() -> None:
 
 	assert q.qsize() == 1, "Second dispatch within throttle window should be dropped"
 	client.unsubscribe(q)
+
+
+async def test_publish_and_await_ack_resolves_acknowledged_on_matching_echo(
+	mock_bridge_url: str,
+) -> None:
+	client = RosBridgeClient(mock_bridge_url, "simulation")
+	await client.start()
+	try:
+		# Wait for the connection to actually establish before publishing.
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		waypoint_msg = {
+			"waypoints": [
+				{
+					"id": 0,
+					"pose": {
+						"pose": {"position": {"x": 1.0, "y": 2.0, "z": 0.0}},
+					},
+					"switch_radius": 5.0,
+					"desired_speed": 2.5,
+					"heading_mode": 0,
+					"heading": 0.0,
+				}
+			]
+		}
+		status = await client.publish_and_await_ack(
+			"/update_waypoint_list",
+			"custom_msgs/WaypointList",
+			waypoint_msg,
+			expected=[(0, 1.0, 2.0)],
+			timeout_s=5.0,
+		)
+		assert status == "acknowledged"
+	finally:
+		await client.stop()
+
+
+async def test_publish_and_await_ack_resolves_mismatched_on_different_echo(
+	mock_bridge_url: str,
+) -> None:
+	client = RosBridgeClient(mock_bridge_url, "simulation")
+	await client.start()
+	try:
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		waypoint_msg = {
+			"waypoints": [
+				{
+					"id": 0,
+					"pose": {"pose": {"position": {"x": 1.0, "y": 2.0, "z": 0.0}}},
+					"switch_radius": 5.0,
+					"desired_speed": 2.5,
+					"heading_mode": 0,
+					"heading": 0.0,
+				}
+			]
+		}
+		# expected doesn't match what the mock will echo back (same payload we send).
+		status = await client.publish_and_await_ack(
+			"/update_waypoint_list",
+			"custom_msgs/WaypointList",
+			waypoint_msg,
+			expected=[(0, 999.0, 999.0)],
+			timeout_s=5.0,
+		)
+		assert status == "mismatched"
+	finally:
+		await client.stop()
+
+
+async def test_publish_and_await_ack_times_out_with_no_echo(mock_bridge_url: str) -> None:
+	client = RosBridgeClient(mock_bridge_url, "simulation")
+	await client.start()
+	try:
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		# Publishing to a topic the mock never echoes back leaves nothing to resolve the wait.
+		status = await client.publish_and_await_ack(
+			"/add_waypoint", "custom_msgs/Waypoint", {}, expected=[(0, 0.0, 0.0)], timeout_s=0.3
+		)
+		assert status == "timed_out"
+	finally:
+		await client.stop()
+
+
+async def test_publish_and_await_ack_returns_not_connected_when_disconnected() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	status = await client.publish_and_await_ack(
+		"/update_waypoint_list", "custom_msgs/WaypointList", {}, expected=[]
+	)
+	assert status == "not_connected"
+
+
+def test_latlon_to_cartesian_is_inverse_of_cartesian_to_latlon() -> None:
+	client = RosBridgeClient(
+		"ws://unused:9090", "simulation", gnss_origin_lat=59.9083, gnss_origin_lon=10.7512
+	)
+	lat, lon = 59.92, 10.76
+	x, y = client.latlon_to_cartesian(lat, lon)
+	round_trip_lat, round_trip_lon = client._cartesian_to_latlon(x, y)
+	assert round_trip_lat == pytest.approx(lat, abs=1e-9)
+	assert round_trip_lon == pytest.approx(lon, abs=1e-9)
 
 
 async def test_unthrottled_topic_passes_every_dispatch() -> None:

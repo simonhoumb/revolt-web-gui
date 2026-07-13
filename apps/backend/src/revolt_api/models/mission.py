@@ -33,6 +33,15 @@ class Mission(Base, TimestampMixin):
 	started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 	completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+	# Populated by the send flow (ROS2 ack/echo) and the ENC validation endpoint. Plain nullable
+	# strings rather than enums since the value set is expected to grow as those flows mature.
+	last_validated_at: Mapped[datetime | None] = mapped_column(
+		DateTime(timezone=True), nullable=True
+	)
+	last_validation_status: Mapped[str | None] = mapped_column(String, nullable=True)
+	last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+	last_send_status: Mapped[str | None] = mapped_column(String, nullable=True)
+
 	waypoints: Mapped[list["Waypoint"]] = relationship(
 		"Waypoint",
 		back_populates="mission",
@@ -56,5 +65,13 @@ class Waypoint(Base):
 	)
 	target_speed: Mapped[float] = mapped_column(Float, nullable=False)
 	reached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+	# Mirror custom_msgs/Waypoint.msg fields not otherwise covered: switch_radius is the
+	# arrival/turn radius in metres, heading_mode is 0=NONE/1=TANGENT/2=ABSOLUTE, heading_rad is
+	# only meaningful when heading_mode is ABSOLUTE. Defaults match "follow the path direction".
+	switch_radius: Mapped[float] = mapped_column(Float, nullable=False, default=5.0)
+	heading_mode: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+	heading_rad: Mapped[float | None] = mapped_column(Float, nullable=True)
+	validation_status: Mapped[str | None] = mapped_column(String, nullable=True)
 
 	mission: Mapped["Mission"] = relationship("Mission", back_populates="waypoints")

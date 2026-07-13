@@ -11,6 +11,7 @@ from revolt_api.logging_config import configure_logging
 from revolt_api.middleware import RequestLoggingMiddleware
 from revolt_api.routers.camera import router as camera_router
 from revolt_api.routers.health import router as health_router
+from revolt_api.routers.mission import router as mission_router
 from revolt_api.routers.ws import router as ws_router
 
 
@@ -44,3 +45,4 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(ws_router)
 app.include_router(camera_router)
+app.include_router(mission_router)

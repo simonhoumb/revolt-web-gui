@@ -374,6 +374,15 @@
 				"circle-stroke-color": "#806000",
 				"circle-stroke-width": 1
 			}
+		},
+		{
+			"id": "m_covr",
+			"type": "fill",
+			"source": "oslo-fjord",
+			"source-layer": "m_covr",
+			"paint": {
+				"fill-opacity": 0
+			}
 		}
 	]
 }

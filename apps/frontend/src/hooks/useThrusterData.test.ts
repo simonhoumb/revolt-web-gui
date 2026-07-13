@@ -24,6 +24,8 @@ const base: BridgeData = {
 	bridgeStatus: { v: "1", type: "bridge_status", timestamp_ms: 0, connected: true, bridge_url: "", target: "physical" },
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	activeWaypointList: null,
+	missionSendStatus: null,
 	cameraStatus: null,
 	wsConnected: true,
 	bridgeConnected: true,
