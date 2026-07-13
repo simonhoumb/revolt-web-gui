@@ -120,6 +120,11 @@ interface MockMapInstance {
 		disable: ReturnType<typeof vi.fn>;
 		isActive: ReturnType<typeof vi.fn>;
 	};
+	scrollZoom: {
+		enable: ReturnType<typeof vi.fn>;
+		disable: ReturnType<typeof vi.fn>;
+		aroundCenter: boolean;
+	};
 	getSource: ReturnType<typeof vi.fn>;
 	sources: Map<string, MockGeoJSONSource>;
 	canvasStyle: { cursor: string };
@@ -156,6 +161,23 @@ vi.mock("maplibre-gl", () => {
 		disableRotation = vi.fn();
 	}
 
+	class MockScrollZoom {
+		// Mirrors real MapLibre: scrollZoom is enabled by default from map creation, and its real
+		// enable() is a no-op (including not applying the "around" option) if already enabled --
+		// this bit us for real (a disable()-then-enable() call was needed, not just enable()) so
+		// the mock replicates that guard instead of blindly recording every call as if it worked.
+		_enabled = true;
+		aroundCenter = false;
+		enable = vi.fn((options?: { around?: "center" }) => {
+			if (this._enabled) return;
+			this._enabled = true;
+			this.aroundCenter = options?.around === "center";
+		});
+		disable = vi.fn(() => {
+			this._enabled = false;
+		});
+	}
+
 	class MockMap {
 		options: MockMapOptions;
 		setStyle = vi.fn();
@@ -180,6 +202,7 @@ vi.mock("maplibre-gl", () => {
 		getLayer = vi.fn(() => ({}));
 		dragPan = new MockDragPan();
 		touchZoomRotate = new MockTouchZoomRotate();
+		scrollZoom = new MockScrollZoom();
 		sources = new Map<string, MockGeoJSONSource>();
 		canvasStyle = { cursor: "" };
 		handlers: Record<string, Handler[]> = {};
@@ -483,6 +506,26 @@ describe("MapWidget", () => {
 
 		dispatchToggleValue(findByLabel(container, "Camera lock"), "locked", "free");
 		expect(mapInstances[0]?.dragPan.disable).toHaveBeenCalledTimes(2);
+	});
+
+	it("zooms around the vessel while locked, around the cursor once freed", () => {
+		setGnss({ latitude: 59.9, longitude: 10.7 });
+		setTrack();
+		setMission();
+		const { container } = render(<MapWidget />);
+
+		// Asserting the mock's resulting aroundCenter state (not just that enable() was called
+		// with the right args) matters here: the mock replicates MapLibre's real early-return
+		// guard in scrollZoom.enable() (a no-op if already enabled, which it is by default from
+		// map creation) -- a version of this effect that called enable() without disable() first
+		// would still "call enable() with the right args" but silently never take effect.
+		expect(mapInstances[0]?.scrollZoom.aroundCenter).toBe(true);
+
+		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
+		expect(mapInstances[0]?.scrollZoom.aroundCenter).toBe(false);
+
+		dispatchToggleValue(findByLabel(container, "Camera lock"), "locked", "free");
+		expect(mapInstances[0]?.scrollZoom.aroundCenter).toBe(true);
 	});
 
 	it("recentres instantly (not eased) on new fixes while the camera is locked", () => {

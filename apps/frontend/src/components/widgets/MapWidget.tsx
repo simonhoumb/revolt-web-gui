@@ -624,14 +624,24 @@ export function MapWidget() {
 	}, [rotationMode, headingDeg, courseDeg]);
 
 	// Camera lock: while locked, dragging is disabled and the chart recentres
-	// on every fix; "free" hands panning back to the operator.
+	// on every fix; "free" hands panning back to the operator. Scroll-zoom follows the same
+	// split: MapLibre's default zooms around the cursor, which is the right feel for free
+	// camera, but while locked to the vessel that would let the scroll wheel drag the vessel
+	// off-center out from under a stationary cursor -- pin the zoom anchor to the map center
+	// (i.e. the vessel, since locked mode keeps it centred) instead. scrollZoom.enable() is a
+	// no-op if it's already enabled (MapLibre checks isEnabled() and returns early before
+	// touching the "around" option) -- it's enabled by default from map creation, so the very
+	// first call here would silently do nothing without disabling it first.
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map) return;
+		map.scrollZoom.disable();
 		if (cameraLocked) {
 			map.dragPan.disable();
+			map.scrollZoom.enable({ around: "center" });
 		} else {
 			map.dragPan.enable();
+			map.scrollZoom.enable();
 		}
 	}, [cameraLocked]);
 
