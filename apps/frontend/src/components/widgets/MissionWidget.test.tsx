@@ -289,6 +289,48 @@ describe("MissionWidget", () => {
 		).toBeInTheDocument();
 	});
 
+	it("shows the no_data notice inline when a send succeeds outside charted ENC coverage", async () => {
+		const sendActiveMission = vi.fn(() =>
+			Promise.resolve({
+				status: "acknowledged",
+				waypoint_count: 1,
+				checked_at: "2026-07-09T00:00:00Z",
+				validation_status: "no_data" as const,
+				hazards: [
+					{
+						layer: "m_covr",
+						description:
+							"Route passes through an area with no charted ENC data -- not verified safe, just unchecked.",
+						count: 1,
+					},
+				],
+			}),
+		);
+		setMission([makeWaypoint()], { sendActiveMission });
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+
+		render(<MissionWidget />);
+		const sendButton = document.querySelector("obc-progress-button");
+		expect(sendButton).not.toBeNull();
+
+		await act(async () => {
+			sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(
+			screen.getByText(
+				"Sent, but part of the route has no charted ENC data — not verified safe, just unchecked:",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				"Route passes through an area with no charted ENC data -- not verified safe, just unchecked.",
+			),
+		).toBeInTheDocument();
+	});
+
 	it("shows no warning panel when a send succeeds with a safe result", async () => {
 		const sendActiveMission = vi.fn(() =>
 			Promise.resolve({

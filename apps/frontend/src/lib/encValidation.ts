@@ -9,6 +9,16 @@ import type { HazardSummary } from "../context/MissionContext.js";
 // level, with zero exceptions -- not intermittent, just never checking land at all.
 const HAZARD_LAYERS = ["depare", "resare", "obstrn", "uwtroc", "lndare"];
 
+// Chart coverage extent (S-57 M_COVR, CATCOV=1 available / CATCOV=2 no coverage), queried
+// separately from the hazard layers above -- not a hazard layer itself, but "no hazard found
+// nearby" and "no chart data exists here at all" are very different facts, and conflating them
+// would let a leg through completely unsurveyed water report as confidently "safe". Never given a
+// visible paint in the MapLibre style (see apps/frontend/public/map-styles/), just present in the
+// tileset so queryRenderedFeatures() can see it (confirmed live: a zero-opacity fill layer is
+// still fully queryable -- MapLibre only omits layers from query results if their layout
+// visibility is "none", not if their paint opacity is 0).
+const COVERAGE_LAYER = "m_covr";
+
 // Web Mercator meters-per-pixel at zoom 0, latitude 0 (Earth's circumference / 256px tile width) --
 // the standard constant for converting a real-world distance into an on-screen pixel size that
 // scales correctly with zoom (pixel density doubles every zoom level, and shrinks with cos(lat)).
@@ -34,6 +44,36 @@ export function metersToPixels(meters: number, zoom: number, latitude: number): 
 
 interface DepareProperties {
 	DRVAL1?: number;
+}
+
+interface CoverageProperties {
+	CATCOV?: number;
+}
+
+function isCoverageFeature(feature: MapGeoJSONFeature): boolean {
+	return (
+		feature.layer.id === COVERAGE_LAYER &&
+		(feature.properties as CoverageProperties | null)?.CATCOV === 1
+	);
+}
+
+// Checked at each endpoint with its own small box, not the shared bbox spanning both endpoints
+// used for the hazard layers below -- a box spanning both endpoints can overlap the *covered*
+// endpoint's own polygon even when the far endpoint is genuinely outside coverage, so "does any
+// covered feature appear anywhere in this box" was silently reporting the whole leg as covered
+// whenever just one end was. Confirmed live: a leg from an inside-coverage point to an
+// outside-coverage point stayed green until this per-endpoint check replaced the shared one.
+function isCoveredAt(map: MapLibreMap, point: { x: number; y: number }, paddingPx: number): boolean {
+	// If the layer doesn't currently exist in the style (mid theme-transition, see the hazard-layer
+	// comment below), skip the check rather than concluding "not covered" -- a missing layer means
+	// "this evaluation finds nothing new", not a false negative.
+	if (!map.getLayer(COVERAGE_LAYER)) return true;
+	const box: [PointLike, PointLike] = [
+		[point.x - paddingPx, point.y - paddingPx],
+		[point.x + paddingPx, point.y + paddingPx],
+	];
+	const features = map.queryRenderedFeatures(box, { layers: [COVERAGE_LAYER] });
+	return features.some(isCoverageFeature);
 }
 
 function isDepareHazard(feature: MapGeoJSONFeature, safetyContourM: number): string | null {
@@ -67,14 +107,26 @@ function evaluateLeg(map: MapLibreMap, leg: LegPositions, safetyContourM: number
 	// "style.load" finishes reloading the new style document. Filtering to layers that actually
 	// exist right now degrades gracefully (this one evaluation just finds nothing new) instead of
 	// throwing if a drag/hazard recompute happens to land in that window.
-	const availableLayers = HAZARD_LAYERS.filter((id) => map.getLayer(id));
-	const features = map.queryRenderedFeatures(bbox, { layers: availableLayers });
+	const availableHazardLayers = HAZARD_LAYERS.filter((id) => map.getLayer(id));
+	const features = map.queryRenderedFeatures(bbox, { layers: availableHazardLayers });
 
 	for (const feature of features) {
 		const description = RESTRICTED_LAYER_DESCRIPTIONS[feature.layer.id];
 		if (description) {
 			return { status: "blocked", description };
 		}
+	}
+	// A bounding-box existence check per endpoint ("is a CATCOV=1 feature nearby this point"), not
+	// the true containment check Phase 2's ST_Covers does server-side -- consistent with how every
+	// other check here is already an approximation of what's currently rendered, not an
+	// authoritative answer. Still an approximation even per-endpoint: a coverage gap strictly in
+	// the middle of a long leg, with both endpoints covered, would slip through here -- Phase 2
+	// catches that at send time regardless of what this shows.
+	if (!isCoveredAt(map, p1, paddingPx) || !isCoveredAt(map, p2, paddingPx)) {
+		return {
+			status: "no_data",
+			description: "No charted ENC data covers this leg -- not verified safe, just unchecked.",
+		};
 	}
 	for (const feature of features) {
 		if (feature.layer.id === "depare") {
@@ -87,8 +139,9 @@ function evaluateLeg(map: MapLibreMap, leg: LegPositions, safetyContourM: number
 
 /**
  * Client-side ENC hazard check (Phase 1) against the already-rendered depare/resare/obstrn/uwtroc/
- * lndare vector tile layers. Advisory only -- only sees what's currently rendered at the current
- * zoom, with tile-simplified geometry. The authoritative server-side PostGIS check is Phase 2.
+ * lndare vector tile layers, plus m_covr for chart coverage extent. Advisory only -- only sees
+ * what's currently rendered at the current zoom, with tile-simplified geometry. The authoritative
+ * server-side PostGIS check is Phase 2.
  */
 export function evaluateEncHazards(
 	map: MapLibreMap,

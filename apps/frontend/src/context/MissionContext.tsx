@@ -11,7 +11,7 @@ import type { Mission, MissionSendResult, Waypoint } from "@revolt/shared-types"
 import { missionApi } from "../lib/missionApi.js";
 
 export interface HazardSummary {
-	status: "safe" | "warning" | "blocked";
+	status: "safe" | "warning" | "no_data" | "blocked";
 	description: string;
 }
 

@@ -769,5 +769,46 @@ describe("MapWidget", () => {
 			);
 			expect(casingCallIndex).toBeLessThan(lineCallIndex ?? -1);
 		});
+
+		it("recomputes leg hazards once the map settles, correcting an evaluation that ran before tiles loaded", () => {
+			// Regression test: waypoints can arrive (and trigger the waypoints-effect's evaluation)
+			// before the map's vector tiles have actually loaded, which queryRenderedFeatures sees
+			// as empty results everywhere -- read by the coverage check as "no charted data", so
+			// every leg reported no_data/grey until some unrelated interaction happened to trigger
+			// another recompute. The map's own "idle" event (fires once loading/rendering settles)
+			// should correct this without needing a waypoint change.
+			setGnss();
+			setTrack();
+			setMission([
+				makeWaypoint({ id: "wp-1", position: { latitude: 59.0, longitude: 10.0 } }),
+				makeWaypoint({ id: "wp-2", position: { latitude: 59.1, longitude: 10.1 } }),
+			]);
+			render(<MapWidget />);
+			mapInstances[0]?.emit("style.load");
+
+			// Mount-time evaluation already ran via the waypoints effect, with the mock's default
+			// queryRenderedFeatures() -> [] standing in for "tiles not loaded yet" -- confirm that
+			// actually produced no_data, or the rest of this test isn't exercising the bug at all.
+			const beforeIdle = mockSetLegValidation.mock.calls.at(-1)?.[0] as
+				| Record<string, { status: string }>
+				| undefined;
+			expect(beforeIdle?.["wp-2"]?.status).toBe("no_data");
+			mockSetLegValidation.mockClear();
+
+			// Tiles finish loading: queryRenderedFeatures now returns real (covered, hazard-free)
+			// data, and the map fires "idle".
+			if (mapInstances[0]) {
+				mapInstances[0].queryRenderedFeatures = vi.fn(() => [
+					{ layer: { id: "m_covr" }, properties: { CATCOV: 1 } },
+				]);
+			}
+			mapInstances[0]?.emit("idle");
+
+			expect(mockSetLegValidation).toHaveBeenCalled();
+			const afterIdle = mockSetLegValidation.mock.calls.at(-1)?.[0] as
+				| Record<string, { status: string }>
+				| undefined;
+			expect(afterIdle?.["wp-2"]?.status).toBe("safe");
+		});
 	});
 });

@@ -85,7 +85,10 @@ const LEGS_CORRIDOR_WIDTH: [
 
 // Status colors match the maritime safe/caution/danger convention (green/amber/red), not an
 // arbitrary categorical palette -- picking a hue too close to the chart's own water/depth fill
-// (blues/teals) makes a leg blend into the background it's drawn over.
+// (blues/teals) makes a leg blend into the background it's drawn over. "no_data" (no charted ENC
+// coverage at all) is deliberately NOT on that safe-to-danger gradient -- it's a grey/neutral,
+// matching how real ECDIS/S-52 renders unsurveyed areas distinctly from the safety-tier colors,
+// since "unknown" isn't a point on a scale from safe to dangerous.
 const HAZARD_LINE_COLOR: [
 	"match",
 	["get", "severity"],
@@ -93,8 +96,20 @@ const HAZARD_LINE_COLOR: [
 	string,
 	"warning",
 	string,
+	"no_data",
 	string,
-] = ["match", ["get", "severity"], "blocked", "#d03b3b", "warning", "#fab219", "#0ca30c"];
+	string,
+] = [
+	"match",
+	["get", "severity"],
+	"blocked",
+	"#d03b3b",
+	"warning",
+	"#fab219",
+	"no_data",
+	"#8a8a8a",
+	"#0ca30c",
+];
 
 // Fixed safety contour (m) for the client-side ENC check (Phase 1). ReVolt's shallow draft means a
 // mariner-configurable margin isn't needed the way it would be on a deep-draft vessel; Phase 2's
@@ -236,6 +251,27 @@ function createWaypointElement(sequenceNumber: number): { el: HTMLDivElement } {
 	label.textContent = "W-" + String(sequenceNumber);
 	el.appendChild(label);
 	return { el };
+}
+
+// evaluateEncHazards() only sees whatever the map's vector tiles have actually rendered so far
+// (queryRenderedFeatures), not what will be there once loading finishes -- calling this before the
+// relevant tiles have loaded (e.g. right after the mission's waypoints first arrive from the API,
+// which can easily race the map's own initial tile fetch on a fresh page load) sees empty results
+// everywhere, which the coverage check reads as "no charted data" for every leg. Shared by the
+// waypoints-driven recompute below and the map's own "idle" event (fires once the map has actually
+// finished loading/rendering), so a first evaluation that ran too early gets silently corrected
+// once real tile data is available, without needing a waypoint change to trigger it.
+function recomputeLegHazards(
+	map: MapLibreMap,
+	waypoints: Waypoint[],
+	setLegValidation: (result: Record<string, HazardSummary>) => void,
+): void {
+	const legPositions = computeLegPositions(waypoints);
+	const hazards =
+		legPositions.length > 0 ? evaluateEncHazards(map, legPositions, SAFETY_CONTOUR_M) : {};
+	setLegValidation(hazards);
+	const source = map.getSource<GeoJSONSource>(LEGS_SOURCE_ID);
+	source?.setData(legsToGeoJSON(legPositions, computeTurnArcs(waypoints), hazards));
 }
 
 export function MapWidget() {
@@ -395,6 +431,15 @@ export function MapWidget() {
 		};
 		map.on("style.load", addLegsLayer);
 
+		// See recomputeLegHazards' comment: a waypoints-driven evaluation can run before the map's
+		// vector tiles have actually loaded (most commonly right on initial page load), and "idle"
+		// is exactly the event that fires once loading/rendering has genuinely settled -- catches
+		// and corrects that case without needing a waypoint change to trigger a recompute.
+		const handleIdle = () => {
+			recomputeLegHazards(map, waypointsRef.current, setLegValidation);
+		};
+		map.on("idle", handleIdle);
+
 		const handleZoomEnd = () => {
 			setZoom(map.getZoom());
 		};
@@ -434,6 +479,7 @@ export function MapWidget() {
 		return () => {
 			map.off("style.load", addTrackLayers);
 			map.off("style.load", addLegsLayer);
+			map.off("idle", handleIdle);
 			map.off("zoomend", handleZoomEnd);
 			map.off("click", handleMapClick);
 			themeObserver.disconnect();
@@ -451,7 +497,9 @@ export function MapWidget() {
 			mapRef.current = null;
 			markerRef.current = null;
 		};
-	}, []);
+		// setLegValidation is stable (MissionContext wraps it in useCallback with no deps) -- this
+		// still only runs once at mount despite being listed.
+	}, [setLegValidation]);
 
 	useEffect(() => {
 		const marker = markerRef.current;
@@ -586,16 +634,13 @@ export function MapWidget() {
 
 	// Recompute hazards for the whole route and refresh the legs line layer whenever the
 	// persisted waypoint list changes (add/dragend/delete/reorder all flow through here). Live,
-	// per-leg feedback during an active drag is handled separately above.
+	// per-leg feedback during an active drag is handled separately above. The map's own "idle"
+	// event (registered at mount, see recomputeLegHazards' comment) covers the case where this
+	// runs before the map's tiles have actually loaded.
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map) return;
-		const legPositions = computeLegPositions(waypoints);
-		const hazards =
-			legPositions.length > 0 ? evaluateEncHazards(map, legPositions, SAFETY_CONTOUR_M) : {};
-		setLegValidation(hazards);
-		const source = map.getSource<GeoJSONSource>(LEGS_SOURCE_ID);
-		source?.setData(legsToGeoJSON(legPositions, computeTurnArcs(waypoints), hazards));
+		recomputeLegHazards(map, waypoints, setLegValidation);
 		// setLegValidation is stable; only waypoints should trigger a recompute, not legValidation
 		// itself (that would loop).
 		// eslint-disable-next-line react-hooks/exhaustive-deps

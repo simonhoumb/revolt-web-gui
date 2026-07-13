@@ -159,6 +159,24 @@
 	color: #fab219;
 }
 
+/* Same neutral grey as the "no_data" leg coloring in MapWidget.tsx -- deliberately off the
+   red/amber/green safety gradient, since "unknown" isn't a point on a scale from safe to
+   dangerous. */
+.sendNoData {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid #8a8a8a;
+	border-radius: 4px;
+	background: color-mix(in srgb, #8a8a8a 12%, transparent);
+}
+
+.sendNoDataMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #8a8a8a;
+}
+
 .hazardList {
 	margin: 4px 0 0;
 	padding-left: 16px;

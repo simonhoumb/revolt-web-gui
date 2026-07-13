@@ -95,13 +95,13 @@ export interface MissionSendResult {
 	waypoint_count: number;
 	checked_at: string;
 	// The Phase 2 check /send always runs before publishing. "blocked" never reaches this
-	// response (the backend rejects with 409 instead) -- only ever "safe" or "warning".
-	validation_status: "safe" | "warning" | "blocked";
+	// response (the backend rejects with 409 instead) -- only ever "safe", "warning", or "no_data".
+	validation_status: "safe" | "warning" | "no_data" | "blocked";
 	hazards: HazardHit[];
 }
 
 export interface MissionValidationResult {
-	status: "safe" | "warning" | "blocked";
+	status: "safe" | "warning" | "no_data" | "blocked";
 	hazards: HazardHit[];
 	checked_at: string;
 }

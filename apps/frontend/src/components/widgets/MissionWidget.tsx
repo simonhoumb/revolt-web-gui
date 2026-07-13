@@ -33,6 +33,16 @@ const SEND_STATUS_LABEL: Record<string, string> = {
 	mismatched: "Vessel reported a different route",
 };
 
+interface SendNotice {
+	status: "warning" | "no_data";
+	hazards: HazardHit[];
+}
+
+const SEND_NOTICE_MESSAGE: Record<SendNotice["status"], string> = {
+	warning: "Sent, but the route was flagged by the server-side chart check:",
+	no_data: "Sent, but part of the route has no charted ENC data — not verified safe, just unchecked:",
+};
+
 function sendIndicatorStatus(status: string): StatusIndicatorStatus {
 	switch (status) {
 		case "sending":
@@ -181,19 +191,21 @@ export function MissionWidget() {
 	const [renameDraft, setRenameDraft] = useState("");
 	const [sendPending, setSendPending] = useState(false);
 	const [blockedError, setBlockedError] = useState<MissionBlockedError | null>(null);
-	const [sendWarning, setSendWarning] = useState<HazardHit[] | null>(null);
+	const [sendNotice, setSendNotice] = useState<SendNotice | null>(null);
 
 	async function handleSend() {
 		if (!activeMission) return;
 		setSendPending(true);
 		setBlockedError(null);
-		setSendWarning(null);
+		setSendNotice(null);
 		try {
 			const result = await sendActiveMission();
 			// "blocked" never reaches here (missionApi.send() throws MissionBlockedError for that
-			// case instead) -- only "warning" needs surfacing here, "safe" needs nothing shown.
-			if (result?.validation_status === "warning") {
-				setSendWarning(result.hazards);
+			// case instead) -- "warning" and "no_data" both need surfacing (the vessel is tested in
+			// areas outside ENC coverage, so a no_data send is expected, not just tolerated -- but
+			// the operator should still see it happened), "safe" needs nothing shown.
+			if (result?.validation_status === "warning" || result?.validation_status === "no_data") {
+				setSendNotice({ status: result.validation_status, hazards: result.hazards });
 			}
 		} catch (err) {
 			if (err instanceof MissionBlockedError) {
@@ -215,12 +227,12 @@ export function MissionWidget() {
 		setRenameDraft(activeMission?.name ?? "");
 	}, [activeMission?.id, activeMission?.name]);
 
-	// A blocked-send error or a send warning describes a specific route; once the operator edits
+	// A blocked-send error or a send notice describes a specific route; once the operator edits
 	// waypoints (or switches missions entirely) it no longer reflects the current route, so don't
 	// leave it displayed as if it still applied.
 	useEffect(() => {
 		setBlockedError(null);
-		setSendWarning(null);
+		setSendNotice(null);
 	}, [activeMission?.id, activeMission?.waypoints]);
 
 	async function handleCreateMission() {
@@ -378,12 +390,18 @@ export function MissionWidget() {
 				</div>
 			)}
 
-			{sendWarning && (
-				<div className={styles.sendWarning}>
-					<p className={styles.sendWarningMessage}>
-						Sent, but the route was flagged by the server-side chart check:
+			{sendNotice && (
+				<div className={sendNotice.status === "no_data" ? styles.sendNoData : styles.sendWarning}>
+					<p
+						className={
+							sendNotice.status === "no_data"
+								? styles.sendNoDataMessage
+								: styles.sendWarningMessage
+						}
+					>
+						{SEND_NOTICE_MESSAGE[sendNotice.status]}
 					</p>
-					{renderHazardList(sendWarning)}
+					{renderHazardList(sendNotice.hazards)}
 				</div>
 			)}
 		</div>
