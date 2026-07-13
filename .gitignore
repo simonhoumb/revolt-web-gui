@@ -47,3 +47,4 @@ infra/enc-pipeline/.data/
 
 # Claude context file
 CLAUDE.md
+docs/reference/
