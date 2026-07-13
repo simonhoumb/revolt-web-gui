@@ -34,13 +34,17 @@ this reuses directly — no raw S-57 access needed for this step), then:
 docker compose --profile enc-ingest run --rm enc-postgis-ingest
 ```
 
-Loads `depare`, `resare`, `obstrn`, `uwtroc`, `lndare` — the same five layers
-Phase 1's client-side check covers (`encValidation.ts`'s `HAZARD_LAYERS`) —
-into `enc_depare`/`enc_resare`/`enc_obstrn`/`enc_uwtroc`/`enc_lndare` tables
-in the `db` service's Postgres, each with its own GIST index (`ogr2ogr -lco
-SPATIAL_INDEX=GIST`; no Alembic migration needed, this is externally-sourced
-chart data, not application schema). Column names are lowercased by Postgres
-(`drval1`, not `DRVAL1` as in the GeoJSON/MapLibre feature properties) — the
+Loads `depare`, `resare`, `obstrn`, `uwtroc`, `lndare` — the same five hazard
+layers Phase 1's client-side check covers (`encValidation.ts`'s
+`HAZARD_LAYERS`) — plus `m_covr` (chart coverage extent, `CATCOV=1`
+available / `CATCOV=2` no coverage; queried separately from the hazard
+layers to tell "checked and found nothing" apart from "no chart data here at
+all") into `enc_depare`/`enc_resare`/`enc_obstrn`/`enc_uwtroc`/`enc_lndare`/
+`enc_m_covr` tables in the `db` service's Postgres, each with its own GIST
+index (`ogr2ogr -lco SPATIAL_INDEX=GIST`; no Alembic migration needed, this
+is externally-sourced chart data, not application schema). Column names are
+lowercased by Postgres (`drval1`/`catcov`, not `DRVAL1`/`CATCOV` as in the
+GeoJSON/MapLibre feature properties) — the
 backend's `/api/missions/{id}/validate` endpoint queries accordingly.
 Re-running overwrites each table (`-overwrite`), so it's safe to repeat after
 regenerating the source GeoJSON.
@@ -81,8 +85,10 @@ more precise harbour-scale one, rather than always preferring the latter.
 ## Layer subset
 
 See `build.sh`'s `LAYERS` for the exact S-57 layers converted. Metadata
-layers (`M_COVR`, `M_QUAL`, `M_NSYS`, `DSID`) and land-use layers (`ROADWY`,
-`RAILWY`, `BUAARE`) are skipped as not relevant to a nautical chart.
+layers `M_QUAL`, `M_NSYS`, `DSID` and land-use layers (`ROADWY`, `RAILWY`,
+`BUAARE`) are skipped as not relevant to a nautical chart. `M_COVR` (chart
+coverage extent) is included despite being metadata -- see "Loading
+PostGIS" above for why.
 
 All layers are tiled across the same zoom range (6-16) — the bundled
 tippecanoe version doesn't support per-file zoom overrides, so which layers

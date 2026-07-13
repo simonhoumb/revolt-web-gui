@@ -9,6 +9,12 @@ WebApp/CLAUDE.md's ENC validation section for why that distinction matters.
 The route geometry checked is the vessel's actual path (straight legs joined by turn-radius arcs,
 geo.py's build_route_points), not a naive straight-line-through-every-waypoint polyline, so this
 agrees with what MapWidget draws rather than being a cruder approximation of it.
+
+Also checks chart coverage (enc_m_covr, S-57's CATCOV=1/2 metadata layer) separately from the
+hazard layers -- "no charted hazard found nearby" and "no chart data exists here at all" are very
+different facts, and conflating them would let a route through completely unsurveyed water report
+as confidently "safe". Unlike "blocked", "no_data" does NOT refuse a send: the vessel is tested in
+areas outside this delivery's ENC coverage, so sending has to stay possible there.
 """
 
 from collections.abc import Sequence
@@ -22,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revolt_api.geo import RouteWaypoint, build_route_points
 from revolt_api.models.mission import Waypoint
 
-ValidationStatus = Literal["safe", "warning", "blocked"]
+ValidationStatus = Literal["safe", "warning", "no_data", "blocked"]
 
 # Layers that always block a route outright if the buffered path comes within safety_margin_m --
 # matches encValidation.ts's RESTRICTED_LAYER_DESCRIPTIONS exactly (must never disagree with
@@ -34,6 +40,7 @@ _BLOCKED_LAYER_DESCRIPTIONS: dict[str, str] = {
 	"lndare": "Route crosses charted land.",
 }
 _DEPTH_LAYER = "depare"
+_NO_DATA_DESCRIPTION = "Route passes through an area with no charted ENC data."
 
 
 class HazardHit(BaseModel):
@@ -86,6 +93,27 @@ async def _count_nearby(
 	return result.scalar_one()
 
 
+async def _route_lacks_coverage(db: AsyncSession, route_wkt: str, margin_m: float) -> bool:
+	"""True if any part of the buffered route falls outside the union of CATCOV=1 (coverage
+	available) polygons -- a real containment check (ST_Covers), not an existence/nearby check
+	like _count_nearby's, since "some coverage polygon happens to be nearby" is a different and
+	weaker claim than "the whole route is actually within surveyed area"."""
+	result = await db.execute(
+		text(
+			"SELECT NOT ST_Covers("
+			"  (SELECT ST_Union(geom) FROM enc_m_covr WHERE catcov = 1),"
+			"  ST_Buffer(ST_GeomFromText(:route_wkt, 4326)::geography, :margin_m)::geometry"
+			")"
+		),
+		{"route_wkt": route_wkt, "margin_m": margin_m},
+	)
+	lacks_coverage = result.scalar_one()
+	# NOT ST_Covers(NULL, ...) is SQL NULL, not a boolean, when enc_m_covr has zero CATCOV=1 rows
+	# (e.g. ingestion never run) -- treat "we have no coverage information at all" as lacking
+	# coverage too, rather than silently defaulting to "covered".
+	return lacks_coverage is None or bool(lacks_coverage)
+
+
 async def evaluate_route_hazards(
 	db: AsyncSession,
 	waypoints: Sequence[Waypoint],
@@ -96,14 +124,24 @@ async def evaluate_route_hazards(
 	if route_wkt is None:
 		return ValidationResult(status="safe", hazards=[])
 
-	hazards: list[HazardHit] = []
+	blocked_hazards: list[HazardHit] = []
 	for layer, description in _BLOCKED_LAYER_DESCRIPTIONS.items():
 		count = await _count_nearby(db, f"enc_{layer}", route_wkt, safety_margin_m)
 		if count > 0:
-			hazards.append(HazardHit(layer=layer, description=description, count=count))
+			blocked_hazards.append(HazardHit(layer=layer, description=description, count=count))
 
-	if hazards:
-		return ValidationResult(status="blocked", hazards=hazards)
+	if blocked_hazards:
+		return ValidationResult(status="blocked", hazards=blocked_hazards)
+
+	# Below "blocked": collect every applicable hazard (coverage gap, depth warning) rather than
+	# stopping at the first, so the operator sees the full picture -- a route can be no_data along
+	# one leg and shallow along another. Overall status is the worst tier present: no_data outranks
+	# warning (an unknown risk deserves at least as much attention as a known, tolerable one), but
+	# neither blocks send_mission() -- only "blocked" does.
+	hazards: list[HazardHit] = []
+	lacks_coverage = await _route_lacks_coverage(db, route_wkt, safety_margin_m)
+	if lacks_coverage:
+		hazards.append(HazardHit(layer="m_covr", description=_NO_DATA_DESCRIPTION, count=1))
 
 	depth_count = await _count_nearby(
 		db,
@@ -122,6 +160,9 @@ async def evaluate_route_hazards(
 				count=depth_count,
 			)
 		)
-		return ValidationResult(status="warning", hazards=hazards)
 
+	if lacks_coverage:
+		return ValidationResult(status="no_data", hazards=hazards)
+	if depth_count > 0:
+		return ValidationResult(status="warning", hazards=hazards)
 	return ValidationResult(status="safe", hazards=[])

@@ -300,9 +300,11 @@ async def send_mission(
 
 	Always re-runs the authoritative hazard check itself rather than trusting a client-reported
 	"already validated" flag — a route that was safe when last checked, or never checked at all,
-	must not reach the vessel unexamined. A "blocked" result refuses the send outright (409); a
-	"warning" (e.g. a shallow-water crossing) does not — sending isn't the only way to catch that,
-	and the operator has already seen it surfaced by Phase 1 while planning.
+	must not reach the vessel unexamined. A "blocked" result refuses the send outright (409);
+	"warning" (e.g. a shallow-water crossing) and "no_data" (route passes outside charted ENC
+	coverage) do not — the vessel is tested in areas this delivery has no chart data for at all, so
+	sending has to stay possible there. Sending isn't the only way to catch either one, either —
+	the operator has already seen them surfaced by Phase 1 while planning.
 
 	On BRIDGE_TARGET=physical there is currently nothing that echoes /waypoint_list back, so
 	a send there will correctly resolve to "timed_out" rather than being special-cased —

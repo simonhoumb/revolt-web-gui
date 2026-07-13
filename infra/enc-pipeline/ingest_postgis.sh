@@ -13,9 +13,11 @@ set -euo pipefail
 GEOJSON_DIR="/data/geojson"
 PG_DSN="PG:host=$PGHOST port=$PGPORT user=$PGUSER password=$PGPASSWORD dbname=$PGDATABASE"
 
-# The same five layers Phase 1's client-side check covers (encValidation.ts's HAZARD_LAYERS) --
-# the two phases must never disagree about what counts as a hazard.
-LAYERS=(depare resare obstrn uwtroc lndare)
+# The same five hazard layers Phase 1's client-side check covers (encValidation.ts's
+# HAZARD_LAYERS), plus m_covr -- chart coverage extent, queried separately (not a hazard layer
+# itself) to tell "checked and found nothing" apart from "no chart data here at all". The two
+# phases must never disagree about what counts as a hazard or where coverage exists.
+LAYERS=(depare resare obstrn uwtroc lndare m_covr)
 
 for layer in "${LAYERS[@]}"; do
 	src="$GEOJSON_DIR/${layer}.geojson"

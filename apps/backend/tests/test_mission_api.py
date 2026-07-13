@@ -280,17 +280,63 @@ async def test_validate_mission_warning_on_real_shallow_water(client: AsyncClien
 		await client.delete(f"/api/missions/{mission_id}")
 
 
-async def test_validate_mission_safe_far_from_any_charted_hazard(client: AsyncClient) -> None:
+async def test_validate_mission_safe_within_covered_hazard_free_water(client: AsyncClient) -> None:
+	# A point deep inside a real enc_m_covr CATCOV=1 polygon (confirmed via psql before writing
+	# this test: covered, and clear of every hazard/depth layer at this margin), so this exercises
+	# "safe" specifically -- covered AND hazard-free -- not just "no hazard layer happened to hit".
 	mission_id = await _create_mission(client, name="Validate safe test")
 	try:
-		await _add_waypoint(client, mission_id, 45.0, -30.0)
-		await _add_waypoint(client, mission_id, 45.01, -30.01)
+		await _add_waypoint(client, mission_id, 59.366128, 10.625)
+		await _add_waypoint(client, mission_id, 59.367128, 10.626)
 
 		resp = await client.post(f"/api/missions/{mission_id}/validate")
 		assert resp.status_code == 200
 		body = resp.json()
 		assert body["status"] == "safe"
 		assert body["hazards"] == []
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_validate_mission_no_data_outside_charted_coverage(client: AsyncClient) -> None:
+	# Central Oslo -- confirmed via psql to fall outside every enc_m_covr CATCOV=1 polygon in this
+	# delivery (README.md already documents this delivery covers the outer/southern Oslofjord, not
+	# central Oslo city). Must not read as "safe": no hazard layer has any data there either.
+	mission_id = await _create_mission(client, name="Validate no_data test")
+	try:
+		await _add_waypoint(client, mission_id, 59.9139, 10.7522)
+		await _add_waypoint(client, mission_id, 59.9159, 10.7542)
+
+		resp = await client.post(f"/api/missions/{mission_id}/validate")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "no_data"
+		assert body["hazards"][0]["layer"] == "m_covr"
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		assert mission_resp.json()["last_validation_status"] == "no_data"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_send_mission_not_blocked_by_no_data(client: AsyncClient) -> None:
+	# The vessel is tested in areas outside this delivery's ENC coverage -- sending must stay
+	# possible there. Only "blocked" refuses; "no_data" (like "warning") does not.
+	mission_id = await _create_mission(client, name="Send no_data test")
+	try:
+		await _add_waypoint(client, mission_id, 59.9139, 10.7522)
+		await _add_waypoint(client, mission_id, 59.9159, 10.7542)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		resp = await client.post(f"/api/missions/{mission_id}/send")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["status"] == "acknowledged"
+		assert body["validation_status"] == "no_data"
+		bridge.publish_and_await_ack.assert_awaited_once()
 	finally:
 		await client.delete(f"/api/missions/{mission_id}")
 
