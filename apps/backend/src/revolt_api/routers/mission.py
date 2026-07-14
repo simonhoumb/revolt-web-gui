@@ -197,6 +197,17 @@ async def create_mission(
 	return await _get_mission_or_404(db, mission.id)
 
 
+@router.get("/missions/loaded", response_model=MissionRead)
+async def get_loaded_mission(db: AsyncSession = Depends(get_db)) -> Mission:  # noqa: B008
+	"""The mission Mission Control currently targets -- whichever mission was most recently sent
+	to the vessel (see _get_loaded_mission_id). Registered before /missions/{mission_id} so
+	FastAPI doesn't try to parse "loaded" as a mission_id UUID."""
+	loaded_id = await _get_loaded_mission_id(db)
+	if loaded_id is None:
+		raise HTTPException(status_code=404, detail="No mission is currently loaded on the vessel.")
+	return await _get_mission_or_404(db, loaded_id)
+
+
 @router.get("/missions/{mission_id}", response_model=MissionRead)
 async def get_mission(
 	mission_id: uuid.UUID,

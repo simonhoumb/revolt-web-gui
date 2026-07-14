@@ -257,6 +257,50 @@ async def test_mission_not_found_returns_404(client: AsyncClient) -> None:
 	).status_code == 404
 
 
+async def test_get_loaded_mission_does_not_return_a_mission_that_was_never_sent(
+	client: AsyncClient,
+) -> None:
+	# Not asserting a global 404 here: these integration tests run against the same database as
+	# manual/docker-compose testing (conftest.py's client fixture doesn't override get_db), so
+	# some other mission may legitimately already be "loaded" from outside this test run. The
+	# real guarantee to check is scoped to this test's own mission.
+	mission_id = await _create_mission(client, name="Never sent")
+	try:
+		resp = await client.get("/api/missions/loaded")
+		if resp.status_code == 200:
+			assert resp.json()["id"] != mission_id
+		else:
+			assert resp.status_code == 404
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_get_loaded_mission_returns_the_most_recently_sent_mission(
+	client: AsyncClient,
+) -> None:
+	bridge = app.state.bridge
+	bridge.connected = True
+	bridge.publish_and_await_ack.return_value = "acknowledged"
+
+	mission_a = await _create_mission(client, name="Sent first")
+	mission_b = await _create_mission(client, name="Sent most recently")
+	try:
+		await _add_waypoint(client, mission_a, 59.92, 10.76)
+		await _add_waypoint(client, mission_b, 59.93, 10.77)
+
+		await client.post(f"/api/missions/{mission_a}/send")
+		await client.post(f"/api/missions/{mission_b}/send")
+
+		resp = await client.get("/api/missions/loaded")
+		assert resp.status_code == 200
+		body = resp.json()
+		assert body["id"] == mission_b
+		assert body["name"] == "Sent most recently"
+	finally:
+		await client.delete(f"/api/missions/{mission_a}")
+		await client.delete(f"/api/missions/{mission_b}")
+
+
 async def test_send_mission_acknowledged_updates_mission_and_returns_result(
 	client: AsyncClient,
 ) -> None:
