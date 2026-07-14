@@ -673,6 +673,46 @@ async def test_start_mission_blocked_when_a_different_mission_was_sent_more_rece
 		await client.delete(f"/api/missions/{mission_b}")
 
 
+async def test_start_mission_rejects_an_already_active_mission(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Already active test")
+	try:
+		await _add_waypoint(client, mission_id, 59.92, 10.76)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
+		bridge.publish_and_await_ack.reset_mock()
+
+		resp = await client.post(f"/api/missions/{mission_id}/start")
+		assert resp.status_code == 409
+		assert resp.json()["detail"]["reason"] == "invalid_transition"
+		bridge.publish_and_await_ack.assert_not_awaited()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_start_mission_resume_path_rejects_a_non_paused_mission(client: AsyncClient) -> None:
+	# A resume_cache entry with no matching "paused" status shouldn't happen in practice (pause
+	# is what populates it), but the resume branch must not trust the cache blindly.
+	mission_id = await _create_mission(client, name="Stale resume cache test")
+	try:
+		await _add_waypoint(client, mission_id, 59.92, 10.76)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.resume_cache[str(mission_id)] = [_RESUME_WAYPOINT]
+
+		resp = await client.post(f"/api/missions/{mission_id}/start")
+		assert resp.status_code == 409
+		assert resp.json()["detail"]["reason"] == "invalid_transition"
+		bridge.publish_and_await_ack.assert_not_awaited()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
 async def test_start_mission_blocked_by_validation_refuses_to_publish(client: AsyncClient) -> None:
 	mission_id = await _create_mission(client, name="Start blocked test")
 	try:
@@ -738,6 +778,13 @@ async def test_pause_mission_snapshots_resume_cache_and_publishes_empty_list(
 		bridge.publish_and_await_ack.return_value = "acknowledged"
 		bridge.latest_waypoint_list = [_RESUME_WAYPOINT]
 
+		# Pause is only valid from an active mission -- get it there first, then reset the mocks
+		# so the assert_awaited_once_with calls below only see pause's own.
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
+		bridge.publish_and_await_ack.reset_mock()
+		bridge.publish.reset_mock()
+
 		resp = await client.post(f"/api/missions/{mission_id}/pause")
 		assert resp.status_code == 200
 		body = resp.json()
@@ -771,6 +818,10 @@ async def test_pause_mission_without_echo_logs_warning_and_skips_cache(
 		bridge.publish_and_await_ack.return_value = "not_connected"
 		bridge.latest_waypoint_list = None
 
+		# Pause is only valid from an active mission.
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
+
 		resp = await client.post(f"/api/missions/{mission_id}/pause")
 		assert resp.status_code == 200
 		assert mission_id not in bridge.resume_cache
@@ -789,6 +840,15 @@ async def test_pause_and_terminate_reject_when_a_different_mission_is_tracked(
 	try:
 		bridge = app.state.bridge
 		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		# pause/terminate are only valid from an active mission -- get mission_b there first,
+		# then reset the mock so the no-op-on-reject assertion below is unaffected by this setup.
+		await _add_waypoint(client, mission_b, 59.92, 10.76)
+		await client.post(f"/api/missions/{mission_b}/send")
+		await client.post(f"/api/missions/{mission_b}/start")
+		bridge.publish_and_await_ack.reset_mock()
+
 		bridge.tracked_mission_id = mission_a
 		bridge.tracked_state = "active"
 
@@ -806,6 +866,61 @@ async def test_pause_and_terminate_reject_when_a_different_mission_is_tracked(
 		await client.delete(f"/api/missions/{mission_b}")
 
 
+async def test_pause_rejects_a_mission_that_was_never_started(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Pause draft test")
+	try:
+		bridge = app.state.bridge
+		bridge.connected = True
+
+		resp = await client.post(f"/api/missions/{mission_id}/pause")
+		assert resp.status_code == 409
+		assert resp.json()["detail"]["reason"] == "invalid_transition"
+		bridge.publish_and_await_ack.assert_not_awaited()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_pause_rejects_an_aborted_mission(client: AsyncClient) -> None:
+	# The concrete bug this guards against: pausing an already-terminated mission must not
+	# silently relabel it "paused" again.
+	mission_id = await _create_mission(client, name="Pause aborted test")
+	try:
+		await _add_waypoint(client, mission_id, 59.92, 10.76)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
+		await client.post(f"/api/missions/{mission_id}/terminate")
+		bridge.publish_and_await_ack.reset_mock()
+
+		resp = await client.post(f"/api/missions/{mission_id}/pause")
+		assert resp.status_code == 409
+		assert resp.json()["detail"]["reason"] == "invalid_transition"
+		bridge.publish_and_await_ack.assert_not_awaited()
+
+		mission_resp = await client.get(f"/api/missions/{mission_id}")
+		assert mission_resp.json()["status"] == "aborted"  # unchanged
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_terminate_rejects_a_mission_that_was_never_started(client: AsyncClient) -> None:
+	mission_id = await _create_mission(client, name="Terminate draft test")
+	try:
+		bridge = app.state.bridge
+		bridge.connected = True
+
+		resp = await client.post(f"/api/missions/{mission_id}/terminate")
+		assert resp.status_code == 409
+		assert resp.json()["detail"]["reason"] == "invalid_transition"
+		bridge.publish_and_await_ack.assert_not_awaited()
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
 async def test_pause_and_terminate_allow_when_nothing_tracked(client: AsyncClient) -> None:
 	# Fail-open when tracked_mission_id is None (e.g. after a backend restart, in-memory tracking
 	# state is lost) -- a genuinely stuck mission must still be pausable/terminable.
@@ -817,6 +932,9 @@ async def test_pause_and_terminate_allow_when_nothing_tracked(client: AsyncClien
 		bridge.connected = True
 		bridge.publish_and_await_ack.return_value = "acknowledged"
 		bridge.tracked_mission_id = None
+
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
 
 		pause_resp = await client.post(f"/api/missions/{mission_id}/pause")
 		assert pause_resp.status_code == 200
@@ -847,6 +965,9 @@ async def test_resume_after_pause_sends_cached_remaining_list_not_full_mission(
 		bridge.publish_and_await_ack.return_value = "acknowledged"
 		bridge.resume_cache[mission_id] = [_RESUME_WAYPOINT]
 
+		# Resuming is only valid from a paused mission.
+		await client.patch(f"/api/missions/{mission_id}", json={"status": "paused"})
+
 		resp = await client.post(f"/api/missions/{mission_id}/start")
 		assert resp.status_code == 200
 		body = resp.json()
@@ -875,6 +996,13 @@ async def test_terminate_mission_sets_aborted_and_completed_at_and_logs_warning_
 		bridge.connected = True
 		bridge.target = "simulation"
 		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		# Terminate is only valid from an active (or paused) mission -- get it there first, then
+		# reset the mocks so the assert_awaited_once_with calls below only see terminate's own.
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
+		bridge.publish_and_await_ack.reset_mock()
+		bridge.publish.reset_mock()
 
 		resp = await client.post(f"/api/missions/{mission_id}/terminate")
 		assert resp.status_code == 200
@@ -906,6 +1034,12 @@ async def test_terminate_clears_resume_cache(client: AsyncClient) -> None:
 		bridge = app.state.bridge
 		bridge.connected = True
 		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		# Terminate is only valid from an active (or paused) mission -- get it there first (a
+		# fresh start, since resume_cache is still empty at this point). Only afterwards simulate
+		# an existing resume snapshot (as a prior pause would have left), to check terminate clears it.
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
 		bridge.resume_cache[mission_id] = [_RESUME_WAYPOINT]
 
 		resp = await client.post(f"/api/missions/{mission_id}/terminate")

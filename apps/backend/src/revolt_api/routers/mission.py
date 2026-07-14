@@ -117,6 +117,30 @@ def _reject_if_stale_mission(bridge: RosBridgeClient, mission_id: uuid.UUID) -> 
 		)
 
 
+# Starting is valid from any status except active -- an already-active mission has nothing to
+# (re)start. draft/aborted/completed all fall through to the fresh-start branch (loaded-check
+# below); paused additionally allows the resume branch (see the stricter check inside it).
+_START_ALLOWED_STATUSES: frozenset[MissionStatus] = frozenset(
+	{MissionStatus.draft, MissionStatus.paused, MissionStatus.aborted, MissionStatus.completed}
+)
+
+
+def _reject_invalid_transition(
+	mission: Mission, allowed: frozenset[MissionStatus], action: str
+) -> None:
+	"""Enforce the mission execution state machine server-side -- the frontend disables buttons
+	for the same reason, but that's a UI courtesy, not a guarantee (e.g. nothing stops a direct
+	curl call). Without this, pausing an aborted mission would silently mark it "paused" again."""
+	if mission.status not in allowed:
+		raise HTTPException(
+			status_code=409,
+			detail={
+				"message": f"Cannot {action} a mission that is currently {mission.status.value}.",
+				"reason": "invalid_transition",
+			},
+		)
+
+
 def _invalidate_load_if_edited(mission: Mission) -> None:
 	"""Clear last_sent_at/last_send_status when a mission that isn't active/paused is edited.
 	Deliberately does NOT clear it for active/paused missions: the vessel's guidance stack keeps
@@ -510,6 +534,7 @@ async def start_mission(
 	marks the mission active; autonomy engagement itself is outside the GUI's control there.
 	"""
 	mission = await _get_mission_or_404(db, mission_id)
+	_reject_invalid_transition(mission, _START_ALLOWED_STATUSES, "start")
 	waypoints = mission.waypoints
 
 	validation = await evaluate_route_hazards(
@@ -544,6 +569,10 @@ async def start_mission(
 	autonomy_note: str | None = None
 
 	if resumed is not None:
+		# Resuming is specifically "continue a paused mission" -- stricter than the general
+		# _START_ALLOWED_STATUSES check above, which also lets draft/aborted/completed through
+		# to the fresh-start branch.
+		_reject_invalid_transition(mission, frozenset({MissionStatus.paused}), "resume")
 		# Resume: still self-publishes and gates on a live ack, exactly as before this redesign.
 		ros_msg = sim_waypoint_list_to_ros_dict(resumed)
 		expected = expected_ack_from_sim(resumed)
@@ -636,6 +665,7 @@ async def pause_mission(
 	a subsequent Start falls back to a fresh full send, which is the correct behaviour anyway.
 	"""
 	mission = await _get_mission_or_404(db, mission_id)
+	_reject_invalid_transition(mission, frozenset({MissionStatus.active}), "pause")
 	resume_key = str(mission_id)
 	_reject_if_stale_mission(bridge, mission_id)
 
@@ -694,6 +724,9 @@ async def terminate_mission(
 	ack.
 	"""
 	mission = await _get_mission_or_404(db, mission_id)
+	_reject_invalid_transition(
+		mission, frozenset({MissionStatus.active, MissionStatus.paused}), "terminate"
+	)
 	resume_key = str(mission_id)
 	_reject_if_stale_mission(bridge, mission_id)
 	bridge.resume_cache.pop(resume_key, None)
