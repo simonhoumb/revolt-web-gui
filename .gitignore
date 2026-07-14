@@ -28,7 +28,6 @@ __pycache__/
 .coverage
 
 # Editor
-.vscode/settings.json
 .idea/
 *.swp
 *.swo
