@@ -68,8 +68,14 @@ async def test_client_receives_battery_message(mock_bridge_url: str) -> None:
 		msg = await asyncio.wait_for(q.get(), timeout=5.0)
 		assert msg["v"] == "1"
 		assert msg["type"] in {
-			"battery", "current", "temperature", "humidity",
-			"emergency_stop", "linear_actuator", "control_mode", "bridge_status",
+			"battery",
+			"current",
+			"temperature",
+			"humidity",
+			"emergency_stop",
+			"linear_actuator",
+			"control_mode",
+			"bridge_status",
 		}
 	finally:
 		await client.stop()
@@ -140,7 +146,9 @@ async def test_exponential_backoff_on_failed_connection() -> None:
 	await client.start()
 	try:
 		await asyncio.sleep(0.3)
-		assert client._backoff_s == 2.0, f"Expected 2.0 after first failure, got {client._backoff_s}"
+		assert client._backoff_s == 2.0, (
+			f"Expected 2.0 after first failure, got {client._backoff_s}"
+		)
 	finally:
 		await client.stop()
 
@@ -170,14 +178,16 @@ async def test_frontend_throttle_drops_within_window() -> None:
 	q = client.subscribe()
 	q.get_nowait()  # drain initial BridgeStatusMsg pushed by subscribe()
 
-	imu_msg = json.dumps({
-		"op": "publish",
-		"topic": "/revolt/sim/stc/imu/data",
-		"msg": {
-			"linear": {"x": 0.1, "y": 0.0, "z": 0.0},
-			"angular": {"x": 0.0, "y": 0.0, "z": 0.0},
-		},
-	})
+	imu_msg = json.dumps(
+		{
+			"op": "publish",
+			"topic": "/revolt/sim/stc/imu/data",
+			"msg": {
+				"linear": {"x": 0.1, "y": 0.0, "z": 0.0},
+				"angular": {"x": 0.0, "y": 0.0, "z": 0.0},
+			},
+		}
+	)
 
 	client._dispatch(imu_msg)
 	client._dispatch(imu_msg)  # within throttle window — should be dropped
@@ -306,11 +316,13 @@ async def test_unthrottled_topic_passes_every_dispatch() -> None:
 	q = client.subscribe()
 	q.get_nowait()  # drain initial BridgeStatusMsg pushed by subscribe()
 
-	battery_msg = json.dumps({
-		"op": "publish",
-		"topic": "/arduino/stern/battery_voltage",
-		"msg": {"data": 24.1},
-	})
+	battery_msg = json.dumps(
+		{
+			"op": "publish",
+			"topic": "/arduino/stern/battery_voltage",
+			"msg": {"data": 24.1},
+		}
+	)
 
 	client._dispatch(battery_msg)
 	client._dispatch(battery_msg)
@@ -320,23 +332,25 @@ async def test_unthrottled_topic_passes_every_dispatch() -> None:
 
 
 def _waypoint_list_frame(entries: list[tuple[int, float, float]]) -> str:
-	return json.dumps({
-		"op": "publish",
-		"topic": "/waypoint_list",
-		"msg": {
-			"waypoints": [
-				{
-					"id": wp_id,
-					"pose": {"pose": {"position": {"x": x, "y": y, "z": 0.0}}},
-					"switch_radius": 5.0,
-					"desired_speed": 1.5,
-					"heading_mode": 0,
-					"heading": 0.0,
-				}
-				for wp_id, x, y in entries
-			]
-		},
-	})
+	return json.dumps(
+		{
+			"op": "publish",
+			"topic": "/waypoint_list",
+			"msg": {
+				"waypoints": [
+					{
+						"id": wp_id,
+						"pose": {"pose": {"position": {"x": x, "y": y, "z": 0.0}}},
+						"switch_radius": 5.0,
+						"desired_speed": 1.5,
+						"heading_mode": 0,
+						"heading": 0.0,
+					}
+					for wp_id, x, y in entries
+				]
+			},
+		}
+	)
 
 
 def test_track_mission_sets_starting_state_and_total_count() -> None:

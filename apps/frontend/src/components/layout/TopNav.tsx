@@ -80,7 +80,11 @@ export function TopNav() {
 				>
 					<ObiWidgets />
 				</ObcIconButton>
-				<ObcClock slot="clock" date={time} timeZoneOffsetHours={-(new Date().getTimezoneOffset() / 60)} />
+				<ObcClock
+					slot="clock"
+					date={time}
+					timeZoneOffsetHours={-(new Date().getTimezoneOffset() / 60)}
+				/>
 				<ObcAlertButton
 					slot="alerts"
 					nAlerts={alertCount}
@@ -92,7 +96,13 @@ export function TopNav() {
 				/>
 			</ObcTopBar>
 			{alertMenuOpen && <AlertMenu alerts={alerts} />}
-			{pickerOpen && <WidgetPicker onClose={() => { setPickerOpen(false); }} />}
+			{pickerOpen && (
+				<WidgetPicker
+					onClose={() => {
+						setPickerOpen(false);
+					}}
+				/>
+			)}
 		</div>
 	);
 }

@@ -412,7 +412,9 @@ async def validate_mission(
 			"hazard_count": len(result.hazards),
 		},
 	)
-	return MissionValidationResult(status=result.status, hazards=result.hazards, checked_at=checked_at)
+	return MissionValidationResult(
+		status=result.status, hazards=result.hazards, checked_at=checked_at
+	)
 
 
 @router.post("/missions/{mission_id}/send", response_model=MissionSendResult)

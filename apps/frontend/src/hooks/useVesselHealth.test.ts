@@ -65,20 +65,26 @@ describe("useVesselHealth — bridge-offline alert", () => {
 	});
 
 	it("does not appear when ws itself is disconnected (bridge state is irrelevant)", () => {
-		expect(alertIds({ wsConnected: false, bridgeConnected: false })).not.toContain("bridge-offline");
+		expect(alertIds({ wsConnected: false, bridgeConnected: false })).not.toContain(
+			"bridge-offline",
+		);
 	});
 });
 
 describe("useVesselHealth — estop alert", () => {
 	it("appears when emergency stop is active", () => {
 		expect(
-			alertIds({ emergencyStop: { v: "1", type: "emergency_stop", timestamp_ms: 0, active: true } }),
+			alertIds({
+				emergencyStop: { v: "1", type: "emergency_stop", timestamp_ms: 0, active: true },
+			}),
 		).toContain("estop");
 	});
 
 	it("does not appear when emergency stop is inactive", () => {
 		expect(
-			alertIds({ emergencyStop: { v: "1", type: "emergency_stop", timestamp_ms: 0, active: false } }),
+			alertIds({
+				emergencyStop: { v: "1", type: "emergency_stop", timestamp_ms: 0, active: false },
+			}),
 		).not.toContain("estop");
 	});
 
@@ -90,13 +96,22 @@ describe("useVesselHealth — estop alert", () => {
 describe("useVesselHealth — miscomm alert", () => {
 	it("appears when control mode is miscommunication", () => {
 		expect(
-			alertIds({ controlMode: { v: "1", type: "control_mode", timestamp_ms: 0, mode: "miscommunication" } }),
+			alertIds({
+				controlMode: {
+					v: "1",
+					type: "control_mode",
+					timestamp_ms: 0,
+					mode: "miscommunication",
+				},
+			}),
 		).toContain("miscomm");
 	});
 
 	it("does not appear for other control modes", () => {
 		expect(
-			alertIds({ controlMode: { v: "1", type: "control_mode", timestamp_ms: 0, mode: "manual" } }),
+			alertIds({
+				controlMode: { v: "1", type: "control_mode", timestamp_ms: 0, mode: "manual" },
+			}),
 		).not.toContain("miscomm");
 	});
 });
@@ -170,7 +185,12 @@ describe("useVesselHealth — highestAlertLevel", () => {
 	it("is caution when only caution-level alerts are present", () => {
 		mockUseBridgeData.mockReturnValue({
 			...healthy,
-			controlMode: { v: "1", type: "control_mode", timestamp_ms: 0, mode: "miscommunication" },
+			controlMode: {
+				v: "1",
+				type: "control_mode",
+				timestamp_ms: 0,
+				mode: "miscommunication",
+			},
 		});
 		const { result } = renderHook(() => useVesselHealth());
 		expect(result.current.highestAlertLevel).toBe("caution");

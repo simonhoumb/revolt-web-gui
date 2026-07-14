@@ -58,7 +58,9 @@ def _route_linestring_wkt(waypoints: Sequence[Waypoint]) -> str | None:
 	route_waypoints: list[RouteWaypoint] = []
 	for wp in waypoints:
 		point = to_shape(wp.position)
-		route_waypoints.append(RouteWaypoint(lat=point.y, lon=point.x, switch_radius=wp.switch_radius))
+		route_waypoints.append(
+			RouteWaypoint(lat=point.y, lon=point.x, switch_radius=wp.switch_radius)
+		)
 	points = build_route_points(route_waypoints)
 	if len(points) < 2:
 		return None

@@ -49,17 +49,8 @@
 			"paint": {
 				"fill-color": [
 					"interpolate",
-					[
-						"linear"
-					],
-					[
-						"coalesce",
-						[
-							"get",
-							"DRVAL1"
-						],
-						0
-					],
+					["linear"],
+					["coalesce", ["get", "DRVAL1"], 0],
 					0,
 					"#16394a",
 					5,
@@ -112,16 +103,8 @@
 			"source-layer": "depcnt",
 			"minzoom": 11,
 			"layout": {
-				"text-field": [
-					"to-string",
-					[
-						"get",
-						"VALDCO"
-					]
-				],
-				"text-font": [
-					"Noto Sans Regular"
-				],
+				"text-field": ["to-string", ["get", "VALDCO"]],
+				"text-font": ["Noto Sans Regular"],
 				"text-size": 10
 			},
 			"paint": {
@@ -160,10 +143,7 @@
 			"paint": {
 				"line-color": "#8050c0",
 				"line-width": 1,
-				"line-dasharray": [
-					2,
-					2
-				]
+				"line-dasharray": [2, 2]
 			}
 		},
 		{
@@ -173,16 +153,8 @@
 			"source-layer": "soundg",
 			"minzoom": 13,
 			"layout": {
-				"text-field": [
-					"to-string",
-					[
-						"get",
-						"DEPTH"
-					]
-				],
-				"text-font": [
-					"Noto Sans Regular"
-				],
+				"text-field": ["to-string", ["get", "DEPTH"]],
+				"text-font": ["Noto Sans Regular"],
 				"text-size": 9
 			},
 			"paint": {
@@ -232,10 +204,7 @@
 				"circle-radius": 4,
 				"circle-color": [
 					"match",
-					[
-						"get",
-						"COLOUR"
-					],
+					["get", "COLOUR"],
 					3,
 					"#e02020",
 					4,
@@ -267,10 +236,7 @@
 				"circle-radius": 4,
 				"circle-color": [
 					"match",
-					[
-						"get",
-						"COLOUR"
-					],
+					["get", "COLOUR"],
 					3,
 					"#e02020",
 					4,
@@ -302,10 +268,7 @@
 				"circle-radius": 4,
 				"circle-color": [
 					"match",
-					[
-						"get",
-						"COLOUR"
-					],
+					["get", "COLOUR"],
 					3,
 					"#e02020",
 					4,
@@ -326,10 +289,7 @@
 				"circle-radius": 4,
 				"circle-color": [
 					"match",
-					[
-						"get",
-						"COLOUR"
-					],
+					["get", "COLOUR"],
 					3,
 					"#e02020",
 					4,
@@ -359,18 +319,7 @@
 			"minzoom": 9,
 			"paint": {
 				"circle-radius": 3,
-				"circle-color": [
-					"match",
-					[
-						"get",
-						"COLOUR"
-					],
-					3,
-					"#e02020",
-					4,
-					"#20a020",
-					"#e0c020"
-				],
+				"circle-color": ["match", ["get", "COLOUR"], 3, "#e02020", 4, "#20a020", "#e0c020"],
 				"circle-stroke-color": "#806000",
 				"circle-stroke-width": 1
 			}

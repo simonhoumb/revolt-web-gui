@@ -10,7 +10,7 @@ class BatteryMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["battery"]
 	timestamp_ms: int  # unix epoch ms, UTC, set at backend receive time
-	voltage_v: float   # raw volts from /arduino/stern/battery_voltage
+	voltage_v: float  # raw volts from /arduino/stern/battery_voltage
 
 
 class CurrentMsg(TypedDict):
@@ -18,7 +18,7 @@ class CurrentMsg(TypedDict):
 	type: Literal["current"]
 	timestamp_ms: int
 	location: Literal["stern_port", "stern_star", "bow"]
-	raw_adc: int    # 0-1023 from std_msgs/Int16
+	raw_adc: int  # 0-1023 from std_msgs/Int16
 	amperes: float  # raw_adc * 30.0 / 1023.0 via ACS712 formula
 
 
@@ -63,23 +63,23 @@ class BridgeStatusMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["bridge_status"]
 	timestamp_ms: int
-	connected: bool   # true when backend has a live connection to rosbridge
+	connected: bool  # true when backend has a live connection to rosbridge
 	bridge_url: str
-	target: str       # "physical" or "simulation"
+	target: str  # "physical" or "simulation"
 
 
 class CameraStatusMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["camera_status"]
 	timestamp_ms: int
-	camera_id: str   # e.g. "main"
+	camera_id: str  # e.g. "main"
 	connected: bool  # true when a frame was received within the last 3 seconds
 
 
 class PingMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["ping"]
-	server_ms: int    # backend unix epoch ms; frontend computes Date.now() - server_ms for latency
+	server_ms: int  # backend unix epoch ms; frontend computes Date.now() - server_ms for latency
 
 
 # Simulation (pygemini/STC) message contracts
@@ -89,10 +89,10 @@ class SimHullPositionMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["sim_hull_position"]
 	timestamp_ms: int
-	pos_x: float      # PoseStamped.pose.position.x; frame_id="map" (coordinate TBD: NED or WGS84)
+	pos_x: float  # PoseStamped.pose.position.x; frame_id="map" (coordinate TBD: NED or WGS84)
 	pos_y: float
 	pos_z: float
-	orient_x: float   # PoseStamped.pose.orientation.x (quaternion, ZYX extrinsic)
+	orient_x: float  # PoseStamped.pose.orientation.x (quaternion, ZYX extrinsic)
 	orient_y: float
 	orient_z: float
 	orient_w: float
@@ -102,7 +102,7 @@ class SimHullVelocityMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["sim_hull_velocity"]
 	timestamp_ms: int
-	vel_x: float      # Twist.linear.x, m/s
+	vel_x: float  # Twist.linear.x, m/s
 	vel_y: float
 	vel_z: float
 	ang_vel_x: float  # Twist.angular.x, rad/s (NOT converted to degrees)
@@ -114,24 +114,26 @@ class GnssFixMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["gnss_fix"]
 	timestamp_ms: int
-	latitude: float    # degrees, WGS84
-	longitude: float   # degrees, WGS84
+	latitude: float  # degrees, WGS84
+	longitude: float  # degrees, WGS84
 	altitude_m: float  # metres above WGS84 ellipsoid
-	fix_status: int    # NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
+	fix_status: int  # NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
 
 
 class GnssHeadingMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["gnss_heading"]
 	timestamp_ms: int
-	heading_deg: float  # true heading 0-360, from /heading QuaternionStamped yaw (VS330 GNSS compass)
+	heading_deg: (
+		float  # true heading 0-360, from /heading QuaternionStamped yaw (VS330 GNSS compass)
+	)
 
 
 class GnssVelocityMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["gnss_velocity"]
 	timestamp_ms: int
-	speed_ms: float    # from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
+	speed_ms: float  # from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
 	course_deg: float  # course over ground 0-360, from /vel TwistStamped linear.x/y bearing
 
 
@@ -139,7 +141,7 @@ class SimGnssVelocityMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["sim_gnss_velocity"]
 	timestamp_ms: int
-	speed: float        # Float32MultiArray.data[0], m/s
+	speed: float  # Float32MultiArray.data[0], m/s
 	heading_rad: float  # Float32MultiArray.data[1], radians
 
 
@@ -147,7 +149,7 @@ class SimImuMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["sim_imu"]
 	timestamp_ms: int
-	accel_x: float    # Twist.linear.x, m/s²
+	accel_x: float  # Twist.linear.x, m/s²
 	accel_y: float
 	accel_z: float
 	ang_vel_x: float  # Twist.angular.x, rad/s
@@ -160,19 +162,19 @@ class SimThrusterFeedbackMsg(TypedDict):
 	type: Literal["sim_thruster_feedback"]
 	timestamp_ms: int
 	thruster: Literal["bow", "port", "starboard"]
-	force: float   # Float32MultiArray.data[0]
-	angle: float   # Float32MultiArray.data[1]
+	force: float  # Float32MultiArray.data[0]
+	angle: float  # Float32MultiArray.data[1]
 
 
 class SimWaypoint(TypedDict):
 	id: int
-	pos_x: float          # PoseStamped.pose.position.x; frame TBD
+	pos_x: float  # PoseStamped.pose.position.x; frame TBD
 	pos_y: float
 	pos_z: float
 	switch_radius: float
-	desired_speed: float   # m/s; 0 or NaN means use route default
-	heading_mode: int      # 0=NONE 1=TANGENT 2=ABSOLUTE
-	heading_rad: float     # radians, used when heading_mode==ABSOLUTE
+	desired_speed: float  # m/s; 0 or NaN means use route default
+	heading_mode: int  # 0=NONE 1=TANGENT 2=ABSOLUTE
+	heading_rad: float  # radians, used when heading_mode==ABSOLUTE
 
 
 class SimWaypointListMsg(TypedDict):
@@ -214,12 +216,12 @@ class LidarScanMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["lidar_scan"]
 	timestamp_ms: int
-	angle_min: float        # radians, first scan angle
-	angle_max: float        # radians, last scan angle
+	angle_min: float  # radians, first scan angle
+	angle_max: float  # radians, last scan angle
 	angle_increment: float  # radians between consecutive measurements
-	range_min: float        # metres, minimum valid range
-	range_max: float        # metres, maximum valid range
-	ranges: list[float]     # metres per step; inf/NaN replaced with range_max
+	range_min: float  # metres, minimum valid range
+	range_max: float  # metres, maximum valid range
+	ranges: list[float]  # metres per step; inf/NaN replaced with range_max
 
 
 BridgeMessage = (

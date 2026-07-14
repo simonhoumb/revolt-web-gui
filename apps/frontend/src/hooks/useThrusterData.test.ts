@@ -21,7 +21,14 @@ const base: BridgeData = {
 	controlMode: null,
 	emergencyStop: null,
 	linearActuator: null,
-	bridgeStatus: { v: "1", type: "bridge_status", timestamp_ms: 0, connected: true, bridge_url: "", target: "physical" },
+	bridgeStatus: {
+		v: "1",
+		type: "bridge_status",
+		timestamp_ms: 0,
+		connected: true,
+		bridge_url: "",
+		target: "physical",
+	},
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
 	activeWaypointList: null,
@@ -47,7 +54,14 @@ describe("useThrusterData — isOn threshold", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			current: {
-				stern_port: { v: "1", type: "current", timestamp_ms: 0, location: "stern_port", raw_adc: 0, amperes: 0.5 },
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 0.5,
+				},
 				stern_star: null,
 				bow: null,
 			},
@@ -60,7 +74,14 @@ describe("useThrusterData — isOn threshold", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			current: {
-				stern_port: { v: "1", type: "current", timestamp_ms: 0, location: "stern_port", raw_adc: 0, amperes: 0.51 },
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 0.51,
+				},
 				stern_star: null,
 				bow: null,
 			},
@@ -73,7 +94,14 @@ describe("useThrusterData — isOn threshold", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			current: {
-				stern_port: { v: "1", type: "current", timestamp_ms: 0, location: "stern_port", raw_adc: 0, amperes: 0.49 },
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 0.49,
+				},
 				stern_star: null,
 				bow: null,
 			},
@@ -87,9 +115,23 @@ describe("useThrusterData — simulation feedback", () => {
 	it("populates force and angleDeg from sim feedback when in simulation mode", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
-			bridgeStatus: { v: "1", type: "bridge_status", timestamp_ms: 0, connected: true, bridge_url: "", target: "simulation" },
+			bridgeStatus: {
+				v: "1",
+				type: "bridge_status",
+				timestamp_ms: 0,
+				connected: true,
+				bridge_url: "",
+				target: "simulation",
+			},
 			thrusterFeedback: {
-				port: { v: "1", type: "sim_thruster_feedback", timestamp_ms: 0, thruster: "port", force: 42.0, angle: Math.PI },
+				port: {
+					v: "1",
+					type: "sim_thruster_feedback",
+					timestamp_ms: 0,
+					thruster: "port",
+					force: 42.0,
+					angle: Math.PI,
+				},
 				bow: null,
 				starboard: null,
 			},
@@ -104,7 +146,14 @@ describe("useThrusterData — simulation feedback", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			thrusterFeedback: {
-				port: { v: "1", type: "sim_thruster_feedback", timestamp_ms: 0, thruster: "port", force: 42.0, angle: Math.PI },
+				port: {
+					v: "1",
+					type: "sim_thruster_feedback",
+					timestamp_ms: 0,
+					thruster: "port",
+					force: 42.0,
+					angle: Math.PI,
+				},
 				bow: null,
 				starboard: null,
 			},
