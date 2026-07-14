@@ -126,6 +126,7 @@ interface MockMapInstance {
 		aroundCenter: boolean;
 	};
 	getSource: ReturnType<typeof vi.fn>;
+	queryRenderedFeatures: ReturnType<typeof vi.fn>;
 	sources: Map<string, MockGeoJSONSource>;
 	canvasStyle: { cursor: string };
 	emit: (event: string, e?: unknown) => void;

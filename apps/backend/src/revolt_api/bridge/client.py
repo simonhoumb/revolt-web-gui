@@ -189,7 +189,9 @@ class RosBridgeClient:
 			return
 		actual = [(wp["id"], wp["pos_x"], wp["pos_y"]) for wp in waypoints]
 		matches = len(actual) == len(pending.expected) and all(
-			a_id == e_id and math.isclose(a_x, e_x, abs_tol=0.5) and math.isclose(a_y, e_y, abs_tol=0.5)
+			a_id == e_id
+			and math.isclose(a_x, e_x, abs_tol=0.5)
+			and math.isclose(a_y, e_y, abs_tol=0.5)
 			for (a_id, a_x, a_y), (e_id, e_x, e_y) in zip(actual, pending.expected, strict=True)
 		)
 		pending.result = "acknowledged" if matches else "mismatched"
@@ -638,7 +640,9 @@ class RosBridgeClient:
 			case "/scan":
 				range_max = float(msg.get("range_max", 25.0))
 				raw_ranges: list[float] = msg.get("ranges", [])
-				ranges = [r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges]
+				ranges = [
+					r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges
+				]
 				return LidarScanMsg(
 					v="1",
 					type="lidar_scan",
@@ -678,17 +682,19 @@ class RosBridgeClient:
 	def _push_camera_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
 		now_ms = int(time.time() * 1000)
 		now = time.monotonic()
-		for camera_id, connected in self._camera_connected.items():
+		for camera_id, _connected in self._camera_connected.items():
 			last = self._camera_last_frame_time.get(camera_id, 0.0)
 			current = (now - last) < 3.0
 			with contextlib.suppress(asyncio.QueueFull):
-				q.put_nowait(CameraStatusMsg(
-					v="1",
-					type="camera_status",
-					timestamp_ms=now_ms,
-					camera_id=camera_id,
-					connected=current,
-				))
+				q.put_nowait(
+					CameraStatusMsg(
+						v="1",
+						type="camera_status",
+						timestamp_ms=now_ms,
+						camera_id=camera_id,
+						connected=current,
+					)
+				)
 
 	def _push_mission_execution_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
 		"""Push the currently tracked mission's execution status immediately, mirroring
@@ -735,10 +741,12 @@ class RosBridgeClient:
 				connected = (now - last) < _CAMERA_TIMEOUT_S
 				if connected != self._camera_connected.get(camera_id):
 					self._camera_connected[camera_id] = connected
-					self._broadcast(CameraStatusMsg(
-						v="1",
-						type="camera_status",
-						timestamp_ms=now_ms,
-						camera_id=camera_id,
-						connected=connected,
-					))
+					self._broadcast(
+						CameraStatusMsg(
+							v="1",
+							type="camera_status",
+							timestamp_ms=now_ms,
+							camera_id=camera_id,
+							connected=connected,
+						)
+					)

@@ -26,8 +26,12 @@ export function LidarWidget() {
 
 	const displayRange = ZOOM_STEPS[zoomIdx] ?? 10;
 
-	const zoomIn = () => setZoomIdx((i) => Math.max(0, i - 1));
-	const zoomOut = () => setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
+	const zoomIn = () => {
+		setZoomIdx((i) => Math.max(0, i - 1));
+	};
+	const zoomOut = () => {
+		setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
+	};
 
 	// Observe only the canvas area (above the controls) so the zoom buttons
 	// never eat into the space used for sizing the canvas.
@@ -98,7 +102,7 @@ export function LidarWidget() {
 
 			// Ring distance labels — placed at right of center, vertically at each ring.
 			const fmtDist = (v: number) =>
-				v >= 10 ? `${Math.round(v)} m` : `${parseFloat(v.toFixed(1))} m`;
+				v >= 10 ? `${String(Math.round(v))} m` : `${String(parseFloat(v.toFixed(1)))} m`;
 			ctx.fillStyle = cssVar("--instrument-tick-mark-label-secondary-color");
 			ctx.font = "8px monospace";
 			ctx.textAlign = "left";
@@ -112,7 +116,7 @@ export function LidarWidget() {
 			ctx.font = "9px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
-			ctx.fillText(`${displayRange} m`, center + 4, center - radius + 4);
+			ctx.fillText(`${String(displayRange)} m`, center + 4, center - radius + 4);
 
 			// Rotate scan cloud so bow faces up. Positive = clockwise correction.
 			ctx.save();
