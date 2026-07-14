@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { HazardHit, Waypoint } from "@revolt/shared-types";
 import { ObcDropdownButton } from "@oicl/openbridge-webcomponents-react/components/dropdown-button/dropdown-button.js";
 import { ObcTextInputField } from "@oicl/openbridge-webcomponents-react/components/text-input-field/text-input-field.js";
 import { ObcNumberInputField } from "@oicl/openbridge-webcomponents-react/components/number-input-field/number-input-field.js";
-import { ObcNumberInputFieldSize } from "@oicl/openbridge-webcomponents/dist/components/number-input-field/number-input-field.js";
+import {
+	ObcNumberInputField as ObcNumberInputFieldElement,
+	ObcNumberInputFieldSize,
+} from "@oicl/openbridge-webcomponents/dist/components/number-input-field/number-input-field.js";
 import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
 import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
 import { ObiDelete } from "@oicl/openbridge-webcomponents-react/icons/icon-delete.js";
@@ -103,19 +106,38 @@ function WaypointRow({
 	onSpeedCommit,
 }: WaypointRowProps) {
 	const [speedDraft, setSpeedDraft] = useState(String(waypoint.target_speed));
+	const speedInputRef = useRef<ObcNumberInputFieldElement | null>(null);
 
 	useEffect(() => {
 		setSpeedDraft(String(waypoint.target_speed));
 	}, [waypoint.target_speed]);
 
-	function commitSpeed() {
+	const commitSpeed = useCallback(() => {
 		const parsed = Number.parseFloat(speedDraft);
 		if (Number.isFinite(parsed) && parsed >= 0 && parsed !== waypoint.target_speed) {
 			onSpeedCommit(parsed);
 		} else {
 			setSpeedDraft(String(waypoint.target_speed));
 		}
-	}
+	}, [speedDraft, waypoint.target_speed, onSpeedCommit]);
+
+	// ObcNumberInputField's onBlur *prop* is unreliable here: the underlying Lit element defines
+	// its own private onBlur() method, and @lit/react's createComponent only special-cases props
+	// listed in its `events` map (just onInput for this component) -- anything else, including
+	// onBlur, falls through to a plain `node.onBlur = value` property assignment. That silently
+	// clobbers the Lit element's own onBlur method, and because the assignment happens on React's
+	// next commit (one tick behind Lit's own re-render triggered by typing), the listener Lit
+	// actually binds always reflects the *previous* keystroke's closure -- exactly the "one digit
+	// behind" bug reported. `blur` itself doesn't bubble out of the shadow root, but `focusout`
+	// does (it's composed), so attaching it directly via a ref sidesteps the wrapper entirely.
+	useEffect(() => {
+		const el = speedInputRef.current;
+		if (!el) return;
+		el.addEventListener("focusout", commitSpeed);
+		return () => {
+			el.removeEventListener("focusout", commitSpeed);
+		};
+	}, [commitSpeed]);
 
 	return (
 		<div className={styles.waypointRow}>
@@ -127,13 +149,13 @@ function WaypointRow({
 				</span>
 			</div>
 			<ObcNumberInputField
+				ref={speedInputRef}
 				size={ObcNumberInputFieldSize.Regular}
 				unit="kt"
 				value={speedDraft}
 				onInput={(e) => {
 					setSpeedDraft(inputValue(e));
 				}}
-				onBlur={commitSpeed}
 			/>
 			<div className={styles.waypointActions}>
 				<ObcIconButton

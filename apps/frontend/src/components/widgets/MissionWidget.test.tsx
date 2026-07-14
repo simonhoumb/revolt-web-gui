@@ -39,7 +39,10 @@ function makeWaypoint(overrides: Partial<Waypoint> = {}): Waypoint {
 	};
 }
 
-function setMission(waypoints: Waypoint[], overrides: { sendActiveMission?: Mock } = {}) {
+function setMission(
+	waypoints: Waypoint[],
+	overrides: { sendActiveMission?: Mock; updateWaypointSpeed?: Mock } = {},
+) {
 	const activeMission: Mission = {
 		id: "mission-1",
 		name: "Test mission",
@@ -68,7 +71,7 @@ function setMission(waypoints: Waypoint[], overrides: { sendActiveMission?: Mock
 		deleteMission: vi.fn(),
 		addWaypoint: vi.fn(),
 		updateWaypointPosition: vi.fn(),
-		updateWaypointSpeed: vi.fn(),
+		updateWaypointSpeed: overrides.updateWaypointSpeed ?? vi.fn(),
 		reorderWaypoints: vi.fn(),
 		deleteWaypoint: vi.fn(),
 		setLegValidation: vi.fn(),
@@ -146,6 +149,31 @@ describe("MissionWidget", () => {
 		render(<MissionWidget />);
 		expect(screen.getByText(/Total: 10\.0 nm/)).toBeInTheDocument();
 		expect(screen.getByText(/ETE 1h 0m/)).toBeInTheDocument();
+	});
+
+	it("commits the current speed value on focusout, not a stale one", () => {
+		// Regression: ObcNumberInputField's onBlur *prop* is unreliable (see the comment in
+		// MissionWidget.tsx) -- the fix listens for focusout via a ref instead. This checks that
+		// path fires with the value that was actually typed, not one keystroke behind it.
+		const updateWaypointSpeed = vi.fn();
+		setMission([makeWaypoint({ id: "wp-1", target_speed: 5 })], { updateWaypointSpeed });
+		mockUseWaypointDraft.mockReturnValue({ waypoints: [], legs: [] });
+
+		render(<MissionWidget />);
+		const field = document.querySelector("obc-number-input-field") as HTMLElement & {
+			value: string;
+		};
+		expect(field).toBeInTheDocument();
+
+		act(() => {
+			field.value = "22";
+			field.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		act(() => {
+			field.dispatchEvent(new Event("focusout", { bubbles: true }));
+		});
+
+		expect(updateWaypointSpeed).toHaveBeenCalledExactlyOnceWith("wp-1", 22);
 	});
 
 	it("does not show a summary row with no legs", () => {
