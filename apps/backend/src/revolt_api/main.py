@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	await engine.dispose()
 
 
-app = FastAPI(title="ReVolt API", lifespan=lifespan)
+app = FastAPI(title="ReVolt API", lifespan=lifespan, redirect_slashes=False)
 
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
