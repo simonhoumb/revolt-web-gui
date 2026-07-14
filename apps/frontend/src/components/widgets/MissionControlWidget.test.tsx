@@ -251,4 +251,29 @@ describe("MissionControlWidget", () => {
 		render(<MissionControlWidget />);
 		expect(getProgressButton("Terminate").disabled).toBe(true);
 	});
+
+	it("buttons follow a live mission_execution_status update, not just the mission's own stale status", () => {
+		// Regression: an out-of-band command (a different tab, or curl) changes execution state
+		// and broadcasts it over the WS, but this tab's loadedMission.status only refreshes when
+		// *this* tab issues a command itself -- buttons must react to the live broadcast too.
+		const mission = makeMission({ status: "active" as Mission["status"] });
+		setLoadedMission(mission);
+		setBridgeData({
+			missionExecutionStatus: {
+				v: "1",
+				type: "mission_execution_status",
+				timestamp_ms: 1000,
+				mission_id: mission.id,
+				state: "paused",
+				current_waypoint_seq: null,
+				remaining_count: 1,
+				total_count: 2,
+			},
+		});
+		render(<MissionControlWidget />);
+
+		expect(getProgressButton("Start").disabled).toBe(false);
+		expect(getProgressButton("Pause").disabled).toBe(true);
+		expect(getProgressButton("Terminate").disabled).toBe(false);
+	});
 });

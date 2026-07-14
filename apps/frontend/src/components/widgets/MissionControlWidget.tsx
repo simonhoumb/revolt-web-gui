@@ -252,10 +252,22 @@ export function MissionControlWidget() {
 	}
 
 	const missionStatus = loadedMission.status;
-	const canStart = missionStatus !== MissionStatus.Active;
-	const canPause = missionStatus === MissionStatus.Active;
-	const canTerminate =
-		missionStatus === MissionStatus.Active || missionStatus === MissionStatus.Paused;
+	// Live execution state (from the WS broadcast) is shared by every open tab and updates the
+	// instant *any* client issues a command -- unlike missionStatus, which only refreshes when
+	// this tab itself calls refreshMission. Buttons must key off the same source as the label, or
+	// a command issued via another tab (or curl) leaves this tab's buttons stuck showing the
+	// state from before that command. Checked directly against liveStatus/missionStatus rather
+	// than through fallbackExecutionState -- that mapping folds "draft" into "paused" for the
+	// indicator dot's sake, which would wrongly make a never-started mission look terminable.
+	const canStart = liveStatus
+		? liveStatus.state !== "active"
+		: missionStatus !== MissionStatus.Active;
+	const canPause = liveStatus
+		? liveStatus.state === "active"
+		: missionStatus === MissionStatus.Active;
+	const canTerminate = liveStatus
+		? liveStatus.state === "active" || liveStatus.state === "paused"
+		: missionStatus === MissionStatus.Active || missionStatus === MissionStatus.Paused;
 
 	return (
 		<div className={styles.content}>
