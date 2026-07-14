@@ -1,6 +1,7 @@
 import type {
 	HazardHit,
 	Mission,
+	MissionExecutionResult,
 	MissionSendResult,
 	MissionStatus,
 	MissionValidationResult,
@@ -18,6 +19,46 @@ export class MissionBlockedError extends Error {
 		this.name = "MissionBlockedError";
 		this.hazards = hazards;
 	}
+}
+
+// Thrown by missionApi.start() for the 412 "no prior /send has loaded this mission" case.
+export class MissionNotLoadedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "MissionNotLoadedError";
+	}
+}
+
+// Thrown by missionApi.send()/start()/pause()/terminate() for the 409 cases guarding the vessel's
+// single physical waypoint queue: "another_mission_active" (send while a different mission is
+// in-flight) or "stale_mission" (pause/terminate targeting a mission that isn't the tracked one).
+export class MissionConflictError extends Error {
+	reason: string;
+
+	constructor(message: string, reason: string) {
+		super(message);
+		this.name = "MissionConflictError";
+		this.reason = reason;
+	}
+}
+
+interface MissionErrorDetail {
+	message?: string;
+	hazards?: HazardHit[];
+	reason?: string;
+}
+
+async function throwMissionError(res: Response, fallbackMessage: string): Promise<never> {
+	const body = (await res.json()) as { detail?: MissionErrorDetail };
+	const message = body.detail?.message ?? fallbackMessage;
+	const reason = body.detail?.reason;
+	if (reason === "not_loaded") {
+		throw new MissionNotLoadedError(message);
+	}
+	if (reason === "another_mission_active" || reason === "stale_mission") {
+		throw new MissionConflictError(message, reason);
+	}
+	throw new MissionBlockedError(message, body.detail?.hazards ?? []);
 }
 
 export interface MissionCreatePayload {
@@ -158,11 +199,7 @@ export const missionApi = {
 	async send(missionId: string): Promise<MissionSendResult> {
 		const res = await apiFetch(`/api/missions/${missionId}/send`, { method: "POST" });
 		if (res.status === 409) {
-			const body = (await res.json()) as { detail?: { message?: string; hazards?: HazardHit[] } };
-			throw new MissionBlockedError(
-				body.detail?.message ?? "Route crosses a charted hazard and cannot be sent.",
-				body.detail?.hazards ?? [],
-			);
+			return throwMissionError(res, "Route crosses a charted hazard and cannot be sent.");
 		}
 		return handleJson<MissionSendResult>(res);
 	},
@@ -171,5 +208,31 @@ export const missionApi = {
 		return handleJson<MissionValidationResult>(
 			await apiFetch(`/api/missions/${missionId}/validate`, { method: "POST" }),
 		);
+	},
+
+	async start(missionId: string): Promise<MissionExecutionResult> {
+		// Re-validates hazards the same way send() does, so it can 409 the same way; 412 means
+		// this mission was never (or no longer is) the one loaded via a prior send().
+		const res = await apiFetch(`/api/missions/${missionId}/start`, { method: "POST" });
+		if (res.status === 409 || res.status === 412) {
+			return throwMissionError(res, "Route crosses a charted hazard and cannot be started.");
+		}
+		return handleJson<MissionExecutionResult>(res);
+	},
+
+	async pause(missionId: string): Promise<MissionExecutionResult> {
+		const res = await apiFetch(`/api/missions/${missionId}/pause`, { method: "POST" });
+		if (res.status === 409) {
+			return throwMissionError(res, "This mission is no longer the one being executed.");
+		}
+		return handleJson<MissionExecutionResult>(res);
+	},
+
+	async terminate(missionId: string): Promise<MissionExecutionResult> {
+		const res = await apiFetch(`/api/missions/${missionId}/terminate`, { method: "POST" });
+		if (res.status === 409) {
+			return throwMissionError(res, "This mission is no longer the one being executed.");
+		}
+		return handleJson<MissionExecutionResult>(res);
 	},
 };

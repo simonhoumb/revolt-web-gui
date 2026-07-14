@@ -317,3 +317,175 @@ async def test_unthrottled_topic_passes_every_dispatch() -> None:
 
 	assert q.qsize() == 2, "Battery topic has no throttle — both dispatches should reach the queue"
 	client.unsubscribe(q)
+
+
+def _waypoint_list_frame(entries: list[tuple[int, float, float]]) -> str:
+	return json.dumps({
+		"op": "publish",
+		"topic": "/waypoint_list",
+		"msg": {
+			"waypoints": [
+				{
+					"id": wp_id,
+					"pose": {"pose": {"position": {"x": x, "y": y, "z": 0.0}}},
+					"switch_radius": 5.0,
+					"desired_speed": 1.5,
+					"heading_mode": 0,
+					"heading": 0.0,
+				}
+				for wp_id, x, y in entries
+			]
+		},
+	})
+
+
+def test_track_mission_sets_starting_state_and_total_count() -> None:
+	# "starting", not "active": track_mission is called before the ack lands (see start_mission),
+	# so the tracked state must not claim active until broadcast_tracked_status confirms it.
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	client.track_mission("mission-1", 3)
+	assert client._tracked_mission_id == "mission-1"
+	assert client._tracked_total_count == 3
+	assert client._tracked_state == "starting"
+
+
+def test_tracked_mission_id_and_state_public_properties_reflect_current_tracking() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	assert client.tracked_mission_id is None
+
+	client.track_mission("mission-1", 3)
+	assert client.tracked_mission_id == "mission-1"
+	assert client.tracked_state == "starting"
+
+	client.broadcast_tracked_status("mission-1", "active", None, 0)
+	assert client.tracked_state == "active"
+
+	client.untrack_mission()
+	assert client.tracked_mission_id is None
+
+
+def test_untrack_mission_clears_tracking() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	client.track_mission("mission-1", 3)
+	client.untrack_mission()
+	assert client._tracked_mission_id is None
+	assert client._tracked_total_count == 0
+
+
+def test_waypoint_list_echo_broadcasts_execution_status_when_tracked() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	q.get_nowait()  # drain initial BridgeStatusMsg pushed by subscribe()
+	client.track_mission("mission-1", 3)
+
+	client._dispatch(_waypoint_list_frame([(2, 10.0, 20.0), (3, 30.0, 40.0)]))
+
+	# Two messages land: the sim_waypoint_list itself, then the execution status broadcast.
+	msgs = [q.get_nowait() for _ in range(2)]
+	exec_msgs = [m for m in msgs if m["type"] == "mission_execution_status"]
+	assert len(exec_msgs) == 1
+	status = exec_msgs[0]
+	assert status["mission_id"] == "mission-1"
+	assert status["state"] == "starting"  # track_mission's default, unless promoted since
+	assert status["current_waypoint_seq"] == 2
+	assert status["remaining_count"] == 2
+	assert status["total_count"] == 3
+	client.unsubscribe(q)
+
+
+def test_waypoint_list_echo_reports_no_current_waypoint_when_empty() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	q.get_nowait()
+	client.track_mission("mission-1", 3)
+
+	client._dispatch(_waypoint_list_frame([]))
+
+	msgs = [q.get_nowait() for _ in range(2)]
+	exec_msgs = [m for m in msgs if m["type"] == "mission_execution_status"]
+	assert len(exec_msgs) == 1
+	assert exec_msgs[0]["current_waypoint_seq"] is None
+	assert exec_msgs[0]["remaining_count"] == 0
+	client.unsubscribe(q)
+
+
+def test_waypoint_list_echo_does_not_broadcast_execution_status_when_untracked() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	q.get_nowait()
+
+	client._dispatch(_waypoint_list_frame([(1, 1.0, 2.0)]))
+
+	msgs = [q.get_nowait()]
+	assert all(m["type"] != "mission_execution_status" for m in msgs)
+	client.unsubscribe(q)
+
+
+def test_broadcast_tracked_status_ignores_wrong_mission_id() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	q.get_nowait()
+	client.track_mission("mission-1", 3)
+
+	client.broadcast_tracked_status("mission-2", "paused", None, 0)
+
+	assert q.qsize() == 0, "Broadcasting for a mission id that isn't currently tracked is a no-op"
+	client.unsubscribe(q)
+
+
+def test_broadcast_tracked_status_updates_state_for_matching_mission() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	q.get_nowait()
+	client.track_mission("mission-1", 3)
+
+	client.broadcast_tracked_status("mission-1", "paused", None, 2)
+
+	msg = q.get_nowait()
+	assert msg["type"] == "mission_execution_status"
+	assert msg["state"] == "paused"
+	assert msg["total_count"] == 3
+	assert client._tracked_state == "paused"
+	client.unsubscribe(q)
+
+
+def test_subscribe_pushes_no_mission_execution_status_when_nothing_tracked() -> None:
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	msgs = [q.get_nowait() for _ in range(q.qsize())]
+	assert all(m["type"] != "mission_execution_status" for m in msgs)
+	client.unsubscribe(q)
+
+
+def test_subscribe_pushes_current_mission_execution_status_when_tracked() -> None:
+	# A client that connects (or reconnects, e.g. on page refresh) after a mission was already
+	# started must learn its live state immediately -- not only on the next echo/broadcast.
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	client.track_mission("mission-1", 3)
+	client._dispatch(_waypoint_list_frame([(1, 10.0, 20.0), (2, 30.0, 40.0)]))
+
+	q = client.subscribe()
+	msgs = [q.get_nowait() for _ in range(q.qsize())]
+	exec_msgs = [m for m in msgs if m["type"] == "mission_execution_status"]
+	assert len(exec_msgs) == 1
+	status = exec_msgs[0]
+	assert status["mission_id"] == "mission-1"
+	assert status["current_waypoint_seq"] == 1
+	assert status["remaining_count"] == 2
+	assert status["total_count"] == 3
+	client.unsubscribe(q)
+
+
+def test_subscribe_pushes_total_count_as_remaining_when_no_echo_yet() -> None:
+	# track_mission() is called before publish_and_await_ack (see start_mission) -- a client
+	# connecting in that brief pre-ack window should see "nothing consumed yet", not a bogus 0.
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	client.track_mission("mission-1", 3)
+
+	q = client.subscribe()
+	msgs = [q.get_nowait() for _ in range(q.qsize())]
+	exec_msgs = [m for m in msgs if m["type"] == "mission_execution_status"]
+	assert len(exec_msgs) == 1
+	assert exec_msgs[0]["current_waypoint_seq"] is None
+	assert exec_msgs[0]["remaining_count"] == 3
+	client.unsubscribe(q)

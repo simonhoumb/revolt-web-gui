@@ -94,6 +94,39 @@ INTERVALS = INTERVALS_SIMULATION if BRIDGE_TARGET == "simulation" else INTERVALS
 
 _start_time = time.time()
 
+# Mutable "vessel state" for the active waypoint queue, mirroring waypoint_switcher_node's
+# pop-as-you-go queue: /update_waypoint_list wholesale-replaces it, so pause/terminate publishing
+# an empty list here must actually stick until the next real update, not get silently replayed by
+# the periodic emit below (which would make Pause/Terminate look broken during manual testing).
+_waypoint_queue: list[dict] = [
+	{
+		"id": 1,
+		"pose": {
+			"header": {"seq": 0, "stamp": {"secs": 0, "nsecs": 0}, "frame_id": "map"},
+			"pose": {"position": {"x": 59.001, "y": 10.501, "z": 0.0}, "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
+		},
+		"switch_radius": 5.0,
+		"desired_speed": 1.5,
+		"heading_mode": 1,
+		"heading": 0.0,
+	},
+	{
+		"id": 2,
+		"pose": {
+			"header": {"seq": 0, "stamp": {"secs": 0, "nsecs": 0}, "frame_id": "map"},
+			"pose": {"position": {"x": 59.002, "y": 10.502, "z": 0.0}, "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
+		},
+		"switch_radius": 5.0,
+		"desired_speed": 1.0,
+		"heading_mode": 0,
+		"heading": 0.0,
+	},
+]
+
+# Env-gated: pop the front waypoint every ~8s so current-waypoint/progress can be watched
+# advancing without the real guidance stack. Off by default to keep existing behavior stable.
+MOCK_AUTO_POP = os.environ.get("MOCK_AUTO_POP", "") == "1"
+
 CRAB_ANGLE_RAD = math.radians(15)  # simulated cross-current/wind drift: COG diverges from heading
 
 
@@ -233,32 +266,7 @@ def _make_msg(topic: str) -> dict:
 		case "/thruster/starboard":
 			return {"data": [round(50 + random.gauss(0, 5), 2), round(random.gauss(0, 2), 2)], "layout": {"dim": [], "data_offset": 0}}
 		case "/waypoint_list":
-			return {
-				"waypoints": [
-					{
-						"id": 1,
-						"pose": {
-							"header": {"seq": 0, "stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "map"},
-							"pose": {"position": {"x": 59.001, "y": 10.501, "z": 0.0}, "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
-						},
-						"switch_radius": 5.0,
-						"desired_speed": 1.5,
-						"heading_mode": 1,
-						"heading": 0.0,
-					},
-					{
-						"id": 2,
-						"pose": {
-							"header": {"seq": 0, "stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "map"},
-							"pose": {"position": {"x": 59.002, "y": 10.502, "z": 0.0}, "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
-						},
-						"switch_radius": 5.0,
-						"desired_speed": 1.0,
-						"heading_mode": 0,
-						"heading": 0.0,
-					},
-				]
-			}
+			return {"waypoints": _waypoint_queue}
 		case "/camera/camera/color/image_raw/compressed":
 			return {
 				"header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "camera_color_frame"},
@@ -318,6 +326,23 @@ async def _echo_waypoint_list(ws: ServerConnection, waypoint_list_msg: dict, del
 		pass
 
 
+async def _auto_pop_waypoints(ws: ServerConnection, interval_s: float = 8.0) -> None:
+	"""MOCK_AUTO_POP=1 only: pop the front waypoint every interval and re-broadcast immediately,
+	so current-waypoint/progress can be watched advancing without the real guidance stack."""
+	global _waypoint_queue
+	while not ws.close_code:
+		await asyncio.sleep(interval_s)
+		if not _waypoint_queue:
+			continue
+		popped = _waypoint_queue[0]
+		_waypoint_queue = _waypoint_queue[1:]
+		log.info("auto-pop: reached waypoint %s, %d remaining", popped.get("id"), len(_waypoint_queue))
+		try:
+			await ws.send(json.dumps({"op": "publish", "topic": "/waypoint_list", "msg": {"waypoints": _waypoint_queue}}))
+		except Exception:
+			return
+
+
 async def _handle(ws: ServerConnection) -> None:
 	log.info("client connected: %s", ws.remote_address)
 	tasks: list[asyncio.Task] = []
@@ -342,10 +367,14 @@ async def _handle(ws: ServerConnection) -> None:
 				)
 				tasks.append(task)
 				log.info("subscribed: %s (%.1f s interval)", topic, interval)
+				if topic == "/waypoint_list" and MOCK_AUTO_POP:
+					tasks.append(asyncio.create_task(_auto_pop_waypoints(ws), name="auto_pop:/waypoint_list"))
 
 			elif op == "publish":
 				log.info("received publish on %s: %s", topic, frame.get("msg"))
 				if topic == "/update_waypoint_list":
+					global _waypoint_queue
+					_waypoint_queue = list(frame.get("msg", {}).get("waypoints", []))
 					task = asyncio.create_task(
 						_echo_waypoint_list(ws, frame.get("msg", {})),
 						name="echo:/waypoint_list",

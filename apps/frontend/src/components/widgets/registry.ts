@@ -7,6 +7,7 @@ import { LidarWidget } from "./LidarWidget.js";
 import { CameraWidget } from "./CameraWidget.js";
 import { MapWidget } from "./MapWidget.js";
 import { MissionWidget } from "./MissionWidget.js";
+import { MissionControlWidget } from "./MissionControlWidget.js";
 import { ObiBatteryHorizontal100 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-100.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -15,6 +16,7 @@ import { ObiRadarIec } from "@oicl/openbridge-webcomponents-react/icons/icon-rad
 import { ObiCamera } from "@oicl/openbridge-webcomponents-react/icons/icon-camera.js";
 import { ObiChart } from "@oicl/openbridge-webcomponents-react/icons/icon-chart.js";
 import { ObiNavigationRoute } from "@oicl/openbridge-webcomponents-react/icons/icon-navigation-route.js";
+import { ObiMonitoringRoute } from "@oicl/openbridge-webcomponents-react/icons/icon-monitoring-route.js";
 
 export type WidgetId =
 	| "battery"
@@ -24,7 +26,8 @@ export type WidgetId =
 	| "lidar"
 	| "camera"
 	| "map"
-	| "mission";
+	| "mission"
+	| "mission_control";
 
 export interface WidgetDefinition {
 	id: WidgetId;
@@ -118,6 +121,16 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		minW: 3,
 		minH: 4,
 	},
+	mission_control: {
+		id: "mission_control",
+		label: "Mission Control",
+		component: MissionControlWidget,
+		icon: ObiMonitoringRoute,
+		defaultW: 3,
+		defaultH: 6,
+		minW: 3,
+		minH: 4,
+	},
 };
 
 export const ALL_WIDGET_IDS: WidgetId[] = [
@@ -129,4 +142,5 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"camera",
 	"map",
 	"mission",
+	"mission_control",
 ];

@@ -26,6 +26,7 @@ const base: BridgeData = {
 	lidarScan: null,
 	activeWaypointList: null,
 	missionSendStatus: null,
+	missionExecutionStatus: null,
 	cameraStatus: null,
 	wsConnected: true,
 	bridgeConnected: true,

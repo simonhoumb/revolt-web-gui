@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
-import type { Mission } from "@revolt/shared-types";
+import type { Mission, MissionSendStatusMsg } from "@revolt/shared-types";
 import { MissionProvider, useMission } from "./MissionContext.js";
 import { missionApi } from "../lib/missionApi.js";
+import { useBridgeData } from "./BridgeDataContext.js";
 
 vi.mock("../lib/missionApi.js", () => ({
 	missionApi: {
@@ -16,7 +17,15 @@ vi.mock("../lib/missionApi.js", () => ({
 		updateWaypoint: vi.fn(),
 		deleteWaypoint: vi.fn(),
 		replaceWaypoints: vi.fn(),
+		send: vi.fn(),
+		start: vi.fn(),
+		pause: vi.fn(),
+		terminate: vi.fn(),
 	},
+}));
+
+vi.mock("./BridgeDataContext.js", () => ({
+	useBridgeData: vi.fn(() => ({ missionSendStatus: null })),
 }));
 
 // missionApi's methods are plain vi.fn() mocks with no `this` usage, so unbound-method's
@@ -25,14 +34,19 @@ vi.mock("../lib/missionApi.js", () => ({
 const mockApi = {
 	list: missionApi.list as Mock,
 	create: missionApi.create as Mock,
+	get: missionApi.get as Mock,
 	update: missionApi.update as Mock,
 	remove: missionApi.remove as Mock,
 	createWaypoint: missionApi.createWaypoint as Mock,
 	updateWaypoint: missionApi.updateWaypoint as Mock,
 	deleteWaypoint: missionApi.deleteWaypoint as Mock,
 	replaceWaypoints: missionApi.replaceWaypoints as Mock,
+	start: missionApi.start as Mock,
+	pause: missionApi.pause as Mock,
+	terminate: missionApi.terminate as Mock,
 };
 /* eslint-enable @typescript-eslint/unbound-method */
+const mockUseBridgeData = useBridgeData as Mock;
 
 function makeMission(overrides: Partial<Mission> = {}): Mission {
 	return {
@@ -71,6 +85,7 @@ function makeWaypoint(overrides: Partial<Mission["waypoints"][number]> = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mockUseBridgeData.mockReturnValue({ missionSendStatus: null });
 });
 
 describe("MissionProvider", () => {
@@ -218,5 +233,119 @@ describe("MissionProvider", () => {
 
 		expect(mockApi.replaceWaypoints).toHaveBeenCalled();
 		expect(result.current.activeMission?.waypoints.map((w) => w.id)).toEqual(["wp-2", "wp-1"]);
+	});
+
+	it("loadedMission tracks whichever mission was most recently sent, unaffected by selectMission", async () => {
+		mockApi.list.mockResolvedValue([
+			makeMission({ id: "a", last_sent_at: "2026-07-08T10:00:00Z" }),
+			makeMission({ id: "b", last_sent_at: "2026-07-08T09:00:00Z" }),
+		]);
+
+		const { result } = renderHook(() => useMission(), { wrapper: MissionProvider });
+		await waitFor(() => {
+			expect(result.current.missions).toHaveLength(2);
+		});
+
+		expect(result.current.loadedMission?.id).toBe("a");
+
+		act(() => {
+			result.current.selectMission("b");
+		});
+
+		expect(result.current.activeMissionId).toBe("b");
+		expect(result.current.loadedMission?.id).toBe("a");
+	});
+
+	it("loadedMission is null when no mission has ever been sent", async () => {
+		mockApi.list.mockResolvedValue([makeMission({ id: "a", last_sent_at: null })]);
+
+		const { result } = renderHook(() => useMission(), { wrapper: MissionProvider });
+		await waitFor(() => {
+			expect(result.current.missions).toHaveLength(1);
+		});
+
+		expect(result.current.loadedMission).toBeNull();
+	});
+
+	it("startMission/pauseMission/terminateMission call the API with the passed id, not activeMissionId", async () => {
+		mockApi.list.mockResolvedValue([
+			makeMission({ id: "a" }),
+			makeMission({ id: "b", last_sent_at: "2026-07-08T10:00:00Z" }),
+		]);
+		mockApi.start.mockResolvedValue({ status: "acknowledged" });
+		mockApi.pause.mockResolvedValue({ status: "acknowledged" });
+		mockApi.terminate.mockResolvedValue({ status: "acknowledged" });
+		mockApi.get.mockResolvedValue(makeMission({ id: "b" }));
+
+		const { result } = renderHook(() => useMission(), { wrapper: MissionProvider });
+		await waitFor(() => {
+			expect(result.current.activeMissionId).toBe("a");
+		});
+
+		await act(async () => {
+			await result.current.startMission("b");
+		});
+		expect(mockApi.start).toHaveBeenCalledExactlyOnceWith("b");
+		expect(mockApi.get).toHaveBeenCalledExactlyOnceWith("b");
+
+		await act(async () => {
+			await result.current.pauseMission("b");
+		});
+		expect(mockApi.pause).toHaveBeenCalledExactlyOnceWith("b");
+
+		await act(async () => {
+			await result.current.terminateMission("b");
+		});
+		expect(mockApi.terminate).toHaveBeenCalledExactlyOnceWith("b");
+	});
+
+	it("refreshes the sent mission when a terminal mission_send_status arrives over the bridge", async () => {
+		mockApi.list.mockResolvedValue([makeMission({ id: "a" })]);
+		mockApi.get.mockResolvedValue(
+			makeMission({ id: "a", last_sent_at: "2026-07-08T10:00:00Z" }),
+		);
+
+		const { result, rerender } = renderHook(() => useMission(), { wrapper: MissionProvider });
+		await waitFor(() => {
+			expect(result.current.activeMissionId).toBe("a");
+		});
+
+		const sendStatus: MissionSendStatusMsg = {
+			v: "1",
+			type: "mission_send_status",
+			timestamp_ms: 1000,
+			mission_id: "a",
+			status: "acknowledged",
+			waypoint_count: 2,
+		};
+		mockUseBridgeData.mockReturnValue({ missionSendStatus: sendStatus });
+		rerender();
+
+		await waitFor(() => {
+			expect(mockApi.get).toHaveBeenCalledExactlyOnceWith("a");
+		});
+		expect(result.current.loadedMission?.id).toBe("a");
+	});
+
+	it("ignores a transient sending mission_send_status", async () => {
+		mockApi.list.mockResolvedValue([makeMission({ id: "a" })]);
+
+		const { rerender } = renderHook(() => useMission(), { wrapper: MissionProvider });
+		await waitFor(() => {
+			expect(mockApi.list).toHaveBeenCalled();
+		});
+
+		const sendStatus: MissionSendStatusMsg = {
+			v: "1",
+			type: "mission_send_status",
+			timestamp_ms: 1000,
+			mission_id: "a",
+			status: "sending",
+			waypoint_count: 2,
+		};
+		mockUseBridgeData.mockReturnValue({ missionSendStatus: sendStatus });
+		rerender();
+
+		expect(mockApi.get).not.toHaveBeenCalled();
 	});
 });

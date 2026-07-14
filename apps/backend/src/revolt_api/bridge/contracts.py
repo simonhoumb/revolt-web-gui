@@ -194,6 +194,22 @@ class MissionSendStatusMsg(TypedDict):
 	waypoint_count: int
 
 
+MissionExecutionState = Literal[
+	"starting", "active", "pausing", "paused", "terminating", "aborted", "completed"
+]
+
+
+class MissionExecutionStatusMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["mission_execution_status"]
+	timestamp_ms: int
+	mission_id: str
+	state: MissionExecutionState
+	current_waypoint_seq: int | None  # first element's id from the live /waypoint_list echo
+	remaining_count: int
+	total_count: int
+
+
 class LidarScanMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["lidar_scan"]
@@ -227,6 +243,7 @@ BridgeMessage = (
 	| SimThrusterFeedbackMsg
 	| SimWaypointListMsg
 	| MissionSendStatusMsg
+	| MissionExecutionStatusMsg
 	| LidarScanMsg
 )
 

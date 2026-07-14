@@ -7,8 +7,14 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import type { Mission, MissionSendResult, Waypoint } from "@revolt/shared-types";
+import type {
+	Mission,
+	MissionExecutionResult,
+	MissionSendResult,
+	Waypoint,
+} from "@revolt/shared-types";
 import { missionApi } from "../lib/missionApi.js";
+import { useBridgeData } from "./BridgeDataContext.js";
 
 export interface HazardSummary {
 	status: "safe" | "warning" | "no_data" | "blocked";
@@ -20,6 +26,9 @@ interface MissionContextValue {
 	loading: boolean;
 	activeMissionId: string | null;
 	activeMission: Mission | null;
+	// The mission most recently sent to the vessel (max non-null last_sent_at), independent of
+	// activeMissionId/the planning dropdown. Mission Control targets this, not the dropdown.
+	loadedMission: Mission | null;
 	// Keyed by waypoint id (the leg ending at that waypoint). Written by MapWidget's client-side
 	// ENC check once that lands; empty until then.
 	legValidation: Record<string, HazardSummary>;
@@ -39,6 +48,9 @@ interface MissionContextValue {
 	deleteWaypoint: (waypointId: string) => Promise<void>;
 	setLegValidation: (result: Record<string, HazardSummary>) => void;
 	sendActiveMission: () => Promise<MissionSendResult | null>;
+	startMission: (missionId: string) => Promise<MissionExecutionResult>;
+	pauseMission: (missionId: string) => Promise<MissionExecutionResult>;
+	terminateMission: (missionId: string) => Promise<MissionExecutionResult>;
 }
 
 const MissionContext = createContext<MissionContextValue | null>(null);
@@ -84,6 +96,20 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 		() => missions.find((m) => m.id === activeMissionId) ?? null,
 		[missions, activeMissionId],
 	);
+
+	const loadedMission = useMemo(() => {
+		let latest: Mission | null = null;
+		let latestMs = -Infinity;
+		for (const m of missions) {
+			if (!m.last_sent_at) continue;
+			const ms = new Date(m.last_sent_at).getTime();
+			if (ms > latestMs) {
+				latest = m;
+				latestMs = ms;
+			}
+		}
+		return latest;
+	}, [missions]);
 
 	const createMission = useCallback(async (name: string) => {
 		const mission = await missionApi.create({ name });
@@ -263,12 +289,71 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 		return await missionApi.send(activeMissionId);
 	}, [activeMissionId]);
 
+	// Re-fetches just the one mission that changed and merges it into `missions` so
+	// activeMission.status (button enablement, the fallback status label) reflects the new
+	// state immediately, without needing a full page reload. Only runs after a successful
+	// call -- if missionApi.* throws (e.g. MissionBlockedError), status didn't change, and the
+	// throw propagates to the caller exactly as before.
+	const refreshMission = useCallback(
+		async (missionId: string) => {
+			try {
+				const updated = await missionApi.get(missionId);
+				setMissions((prev) => replaceMission(prev, updated));
+			} catch {
+				await loadMissions();
+			}
+		},
+		[loadMissions],
+	);
+
+	// Mission Control targets whichever mission is "loaded" (see loadedMission above), not the
+	// planning dropdown's activeMissionId -- so these take an explicit id rather than closing
+	// over activeMissionId. The widget still owns pending/error UI and reads live execution
+	// state (current waypoint, progress) from useBridgeData().missionExecutionStatus, which is
+	// broadcast to every open tab, not just the one that issued the command.
+	const startMission = useCallback(
+		async (missionId: string) => {
+			const result = await missionApi.start(missionId);
+			await refreshMission(missionId);
+			return result;
+		},
+		[refreshMission],
+	);
+
+	const pauseMission = useCallback(
+		async (missionId: string) => {
+			const result = await missionApi.pause(missionId);
+			await refreshMission(missionId);
+			return result;
+		},
+		[refreshMission],
+	);
+
+	const terminateMission = useCallback(
+		async (missionId: string) => {
+			const result = await missionApi.terminate(missionId);
+			await refreshMission(missionId);
+			return result;
+		},
+		[refreshMission],
+	);
+
+	// last_sent_at drives loadedMission, so it must stay fresh in every open tab, not just the
+	// one that issued the send -- mission_send_status is broadcast over the WS to all of them.
+	// Ignore the transient "sending" status; only refresh once the outcome is final.
+	const missionSendStatus = useBridgeData().missionSendStatus;
+	useEffect(() => {
+		if (!missionSendStatus || missionSendStatus.status === "sending") return;
+		void refreshMission(missionSendStatus.mission_id);
+	}, [missionSendStatus, refreshMission]);
+
 	const value = useMemo<MissionContextValue>(
 		() => ({
 			missions,
 			loading,
 			activeMissionId,
 			activeMission,
+			loadedMission,
 			legValidation,
 			loadMissions,
 			createMission,
@@ -282,12 +367,16 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			deleteWaypoint,
 			setLegValidation,
 			sendActiveMission,
+			startMission,
+			pauseMission,
+			terminateMission,
 		}),
 		[
 			missions,
 			loading,
 			activeMissionId,
 			activeMission,
+			loadedMission,
 			legValidation,
 			loadMissions,
 			createMission,
@@ -301,6 +390,9 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			deleteWaypoint,
 			setLegValidation,
 			sendActiveMission,
+			startMission,
+			pauseMission,
+			terminateMission,
 		],
 	);
 

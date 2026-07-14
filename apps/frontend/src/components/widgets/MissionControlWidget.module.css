@@ -1,0 +1,89 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+	min-height: 0;
+	padding: 4px;
+}
+
+.emptyState {
+	font-size: 0.8rem;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+}
+
+.loadedHeader {
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.statusRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.statusLabel {
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.waypointRow,
+.etaRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.waypointLabel {
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.progressCaption {
+	font-size: 0.7rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-inactive-color, #9c6a34);
+	text-align: right;
+}
+
+.buttonRow {
+	display: flex;
+	gap: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.buttonRow > * {
+	flex: 1;
+}
+
+.autonomyNote {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border-radius: 4px;
+	font-size: 0.75rem;
+	background: var(--container-section-color, #271b10);
+	color: var(--element-active-color, #eaa75e);
+}
+
+/* Real OBC theme severity token (not the nonexistent --alarm-color MissionWidget.module.css
+   falls back from). */
+.blockedError {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid var(--alert-alarm-color, #e30019);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--alert-alarm-color, #e30019) 12%, transparent);
+}
+
+.blockedErrorMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--alert-alarm-color, #e30019);
+}

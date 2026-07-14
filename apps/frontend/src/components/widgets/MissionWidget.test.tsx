@@ -2,10 +2,11 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, Waypoint } from "@revolt/shared-types";
-import { MissionWidget, formatDuration, moveWaypointId } from "./MissionWidget.js";
+import { MissionWidget, moveWaypointId } from "./MissionWidget.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import { useBridgeData } from "../../context/BridgeDataContext.js";
+import { formatDuration } from "../../lib/format.js";
 import { MissionBlockedError } from "../../lib/missionApi.js";
 
 vi.mock("../../context/MissionContext.js", () => ({
