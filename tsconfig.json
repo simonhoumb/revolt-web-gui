@@ -19,9 +19,6 @@
 			"@revolt/shared-types": ["./packages/shared-types/src/index.ts"]
 		}
 	},
-	"references": [
-		{ "path": "./packages/shared-types" },
-		{ "path": "./apps/frontend" }
-	],
+	"references": [{ "path": "./packages/shared-types" }, { "path": "./apps/frontend" }],
 	"exclude": ["node_modules", "**/dist", "**/build"]
 }

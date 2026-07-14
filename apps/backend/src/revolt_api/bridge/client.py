@@ -26,6 +26,8 @@ from revolt_api.bridge.contracts import (
 	HumidityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
+	MissionExecutionState,
+	MissionExecutionStatusMsg,
 	MissionSendStatus,
 	MissionSendStatusMsg,
 	SimGnssVelocityMsg,
@@ -93,6 +95,20 @@ class RosBridgeClient:
 		self._camera_connected: dict[str, bool] = {}
 		self._pending_ack: PendingAck | None = None
 
+		# Latest /waypoint_list echo, i.e. whatever the vessel's queue actually still contains
+		# right now (already reflects any waypoints it has popped as reached). Used both to
+		# snapshot a resume point on pause and to derive live current-waypoint/progress status.
+		self.latest_waypoint_list: list[SimWaypoint] | None = None
+		# Snapshot of the remaining queue taken at pause time, keyed by mission id, so a
+		# subsequent Start resumes from where the vessel actually was instead of resending the
+		# full original mission. In-memory by design: it must always match the vessel's real
+		# queue, which a DB-persisted guess could drift from; lost on backend restart, same as
+		# the rest of this client's connection state.
+		self.resume_cache: dict[str, list[SimWaypoint]] = {}
+		self._tracked_mission_id: str | None = None
+		self._tracked_total_count: int = 0
+		self._tracked_state: MissionExecutionState = "active"
+
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
 		all_specs = [*PHYSICAL_SUBSCRIBE_TOPICS, *SIMULATION_SUBSCRIBE_TOPICS]
@@ -123,6 +139,7 @@ class RosBridgeClient:
 		# connect/disconnect event to learn whether the backend is connected to rosbridge.
 		self._push_status_to(q)
 		self._push_camera_status_to(q)
+		self._push_mission_execution_status_to(q)
 		return q
 
 	def unsubscribe(self, q: "asyncio.Queue[BridgeMessage]") -> None:
@@ -172,7 +189,9 @@ class RosBridgeClient:
 			return
 		actual = [(wp["id"], wp["pos_x"], wp["pos_y"]) for wp in waypoints]
 		matches = len(actual) == len(pending.expected) and all(
-			a_id == e_id and math.isclose(a_x, e_x, abs_tol=0.5) and math.isclose(a_y, e_y, abs_tol=0.5)
+			a_id == e_id
+			and math.isclose(a_x, e_x, abs_tol=0.5)
+			and math.isclose(a_y, e_y, abs_tol=0.5)
 			for (a_id, a_x, a_y), (e_id, e_x, e_y) in zip(actual, pending.expected, strict=True)
 		)
 		pending.result = "acknowledged" if matches else "mismatched"
@@ -193,6 +212,62 @@ class RosBridgeClient:
 			)
 		)
 
+	def track_mission(self, mission_id: str, total_count: int) -> None:
+		"""Start deriving live execution status (current waypoint, progress) for this mission
+		from subsequent /waypoint_list echoes. Called by the start endpoint before publishing,
+		not after -- so the echo that resolves publish_and_await_ack's own wait attributes
+		correctly to this mission rather than whatever was tracked previously. Defaults to
+		"starting" rather than "active" since the ack hasn't landed yet at this point."""
+		self._tracked_mission_id = mission_id
+		self._tracked_total_count = total_count
+		self._tracked_state = "starting"
+
+	def untrack_mission(self) -> None:
+		"""Stop deriving live execution status. Called by the terminate endpoint."""
+		self._tracked_mission_id = None
+		self._tracked_total_count = 0
+
+	def broadcast_tracked_status(
+		self,
+		mission_id: str,
+		state: MissionExecutionState,
+		current_waypoint_seq: int | None,
+		remaining_count: int,
+	) -> None:
+		"""Broadcast execution status for the currently tracked mission, filling in total_count
+		from the count captured at track_mission() time (e.g. pause keeps the mission tracked,
+		just relabels its state, so a resumed Start still has the right denominator for
+		progress). No-op if mission_id isn't the one currently tracked -- only one mission is
+		tracked at a time by design, so this guards against broadcasting under the wrong id."""
+		if self._tracked_mission_id != mission_id:
+			return
+		self._tracked_state = state
+		self.broadcast_mission_execution_status(
+			mission_id, state, current_waypoint_seq, remaining_count, self._tracked_total_count
+		)
+
+	def broadcast_mission_execution_status(
+		self,
+		mission_id: str,
+		state: MissionExecutionState,
+		current_waypoint_seq: int | None,
+		remaining_count: int,
+		total_count: int,
+	) -> None:
+		"""Fan out a mission execution status update to every open frontend tab."""
+		self._broadcast(
+			MissionExecutionStatusMsg(
+				v="1",
+				type="mission_execution_status",
+				timestamp_ms=int(time.time() * 1000),
+				mission_id=mission_id,
+				state=state,
+				current_waypoint_seq=current_waypoint_seq,
+				remaining_count=remaining_count,
+				total_count=total_count,
+			)
+		)
+
 	def latlon_to_cartesian(self, lat: float, lon: float) -> tuple[float, float]:
 		"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North). Inverse of
 		_cartesian_to_latlon, used when serialising outbound waypoints for the sim."""
@@ -203,6 +278,18 @@ class RosBridgeClient:
 	@property
 	def connected(self) -> bool:
 		return self._connected
+
+	@property
+	def target(self) -> str:
+		return self._target
+
+	@property
+	def tracked_mission_id(self) -> str | None:
+		return self._tracked_mission_id
+
+	@property
+	def tracked_state(self) -> MissionExecutionState:
+		return self._tracked_state
 
 	async def _run(self) -> None:
 		while True:
@@ -522,6 +609,15 @@ class RosBridgeClient:
 					for wp in msg["waypoints"]
 				]
 				self._check_pending_ack(waypoints)
+				self.latest_waypoint_list = waypoints
+				if self._tracked_mission_id is not None:
+					self.broadcast_mission_execution_status(
+						self._tracked_mission_id,
+						self._tracked_state,
+						waypoints[0]["id"] if waypoints else None,
+						len(waypoints),
+						self._tracked_total_count,
+					)
 				return SimWaypointListMsg(
 					v="1",
 					type="sim_waypoint_list",
@@ -544,7 +640,9 @@ class RosBridgeClient:
 			case "/scan":
 				range_max = float(msg.get("range_max", 25.0))
 				raw_ranges: list[float] = msg.get("ranges", [])
-				ranges = [r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges]
+				ranges = [
+					r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges
+				]
 				return LidarScanMsg(
 					v="1",
 					type="lidar_scan",
@@ -584,17 +682,43 @@ class RosBridgeClient:
 	def _push_camera_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
 		now_ms = int(time.time() * 1000)
 		now = time.monotonic()
-		for camera_id, connected in self._camera_connected.items():
+		for camera_id, _connected in self._camera_connected.items():
 			last = self._camera_last_frame_time.get(camera_id, 0.0)
 			current = (now - last) < 3.0
 			with contextlib.suppress(asyncio.QueueFull):
-				q.put_nowait(CameraStatusMsg(
+				q.put_nowait(
+					CameraStatusMsg(
+						v="1",
+						type="camera_status",
+						timestamp_ms=now_ms,
+						camera_id=camera_id,
+						connected=current,
+					)
+				)
+
+	def _push_mission_execution_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
+		"""Push the currently tracked mission's execution status immediately, mirroring
+		_push_status_to/_push_camera_status_to -- otherwise a client that connects (or
+		reconnects, e.g. on page refresh) after a mission was already started has no way to learn
+		its live state until the next /waypoint_list echo or command broadcast happens to fire."""
+		if self._tracked_mission_id is None:
+			return
+		waypoints = self.latest_waypoint_list
+		current_waypoint_seq = waypoints[0]["id"] if waypoints else None
+		remaining_count = len(waypoints) if waypoints is not None else self._tracked_total_count
+		with contextlib.suppress(asyncio.QueueFull):
+			q.put_nowait(
+				MissionExecutionStatusMsg(
 					v="1",
-					type="camera_status",
-					timestamp_ms=now_ms,
-					camera_id=camera_id,
-					connected=current,
-				))
+					type="mission_execution_status",
+					timestamp_ms=int(time.time() * 1000),
+					mission_id=self._tracked_mission_id,
+					state=self._tracked_state,
+					current_waypoint_seq=current_waypoint_seq,
+					remaining_count=remaining_count,
+					total_count=self._tracked_total_count,
+				)
+			)
 
 	def _broadcast(self, msg: BridgeMessage) -> None:
 		for q in list(self._subscribers):
@@ -617,10 +741,12 @@ class RosBridgeClient:
 				connected = (now - last) < _CAMERA_TIMEOUT_S
 				if connected != self._camera_connected.get(camera_id):
 					self._camera_connected[camera_id] = connected
-					self._broadcast(CameraStatusMsg(
-						v="1",
-						type="camera_status",
-						timestamp_ms=now_ms,
-						camera_id=camera_id,
-						connected=connected,
-					))
+					self._broadcast(
+						CameraStatusMsg(
+							v="1",
+							type="camera_status",
+							timestamp_ms=now_ms,
+							camera_id=camera_id,
+							connected=connected,
+						)
+					)

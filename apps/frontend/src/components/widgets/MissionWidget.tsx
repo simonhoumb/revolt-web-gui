@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { HazardHit, Waypoint } from "@revolt/shared-types";
 import { ObcDropdownButton } from "@oicl/openbridge-webcomponents-react/components/dropdown-button/dropdown-button.js";
 import { ObcTextInputField } from "@oicl/openbridge-webcomponents-react/components/text-input-field/text-input-field.js";
 import { ObcNumberInputField } from "@oicl/openbridge-webcomponents-react/components/number-input-field/number-input-field.js";
-import { ObcNumberInputFieldSize } from "@oicl/openbridge-webcomponents/dist/components/number-input-field/number-input-field.js";
+import {
+	ObcNumberInputField as ObcNumberInputFieldElement,
+	ObcNumberInputFieldSize,
+} from "@oicl/openbridge-webcomponents/dist/components/number-input-field/number-input-field.js";
 import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
 import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
 import { ObiDelete } from "@oicl/openbridge-webcomponents-react/icons/icon-delete.js";
@@ -22,7 +25,9 @@ import {
 import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
+import { formatDuration } from "../../lib/format.js";
 import { MissionBlockedError } from "../../lib/missionApi.js";
+import { HazardList } from "./HazardList.js";
 import styles from "./MissionWidget.module.css";
 
 const SEND_STATUS_LABEL: Record<string, string> = {
@@ -40,7 +45,8 @@ interface SendNotice {
 
 const SEND_NOTICE_MESSAGE: Record<SendNotice["status"], string> = {
 	warning: "Sent, but the route was flagged by the server-side chart check:",
-	no_data: "Sent, but part of the route has no charted ENC data — not verified safe, just unchecked:",
+	no_data:
+		"Sent, but part of the route has no charted ENC data — not verified safe, just unchecked:",
 };
 
 function sendIndicatorStatus(status: string): StatusIndicatorStatus {
@@ -80,14 +86,6 @@ export function moveWaypointId(
 
 const METERS_PER_NM = 1852;
 
-export function formatDuration(hours: number): string {
-	if (!Number.isFinite(hours) || hours <= 0) return "—";
-	const totalMinutes = Math.round(hours * 60);
-	const h = Math.floor(totalMinutes / 60);
-	const m = totalMinutes % 60;
-	return h > 0 ? `${String(h)}h ${String(m)}m` : `${String(m)}m`;
-}
-
 interface WaypointRowProps {
 	waypoint: Waypoint;
 	index: number;
@@ -108,19 +106,38 @@ function WaypointRow({
 	onSpeedCommit,
 }: WaypointRowProps) {
 	const [speedDraft, setSpeedDraft] = useState(String(waypoint.target_speed));
+	const speedInputRef = useRef<ObcNumberInputFieldElement | null>(null);
 
 	useEffect(() => {
 		setSpeedDraft(String(waypoint.target_speed));
 	}, [waypoint.target_speed]);
 
-	function commitSpeed() {
+	const commitSpeed = useCallback(() => {
 		const parsed = Number.parseFloat(speedDraft);
 		if (Number.isFinite(parsed) && parsed >= 0 && parsed !== waypoint.target_speed) {
 			onSpeedCommit(parsed);
 		} else {
 			setSpeedDraft(String(waypoint.target_speed));
 		}
-	}
+	}, [speedDraft, waypoint.target_speed, onSpeedCommit]);
+
+	// ObcNumberInputField's onBlur *prop* is unreliable here: the underlying Lit element defines
+	// its own private onBlur() method, and @lit/react's createComponent only special-cases props
+	// listed in its `events` map (just onInput for this component) -- anything else, including
+	// onBlur, falls through to a plain `node.onBlur = value` property assignment. That silently
+	// clobbers the Lit element's own onBlur method, and because the assignment happens on React's
+	// next commit (one tick behind Lit's own re-render triggered by typing), the listener Lit
+	// actually binds always reflects the *previous* keystroke's closure -- exactly the "one digit
+	// behind" bug reported. `blur` itself doesn't bubble out of the shadow root, but `focusout`
+	// does (it's composed), so attaching it directly via a ref sidesteps the wrapper entirely.
+	useEffect(() => {
+		const el = speedInputRef.current;
+		if (!el) return;
+		el.addEventListener("focusout", commitSpeed);
+		return () => {
+			el.removeEventListener("focusout", commitSpeed);
+		};
+	}, [commitSpeed]);
 
 	return (
 		<div className={styles.waypointRow}>
@@ -132,13 +149,13 @@ function WaypointRow({
 				</span>
 			</div>
 			<ObcNumberInputField
+				ref={speedInputRef}
 				size={ObcNumberInputFieldSize.Regular}
 				unit="kt"
 				value={speedDraft}
 				onInput={(e) => {
 					setSpeedDraft(inputValue(e));
 				}}
-				onBlur={commitSpeed}
 			/>
 			<div className={styles.waypointActions}>
 				<ObcIconButton
@@ -204,7 +221,10 @@ export function MissionWidget() {
 			// case instead) -- "warning" and "no_data" both need surfacing (the vessel is tested in
 			// areas outside ENC coverage, so a no_data send is expected, not just tolerated -- but
 			// the operator should still see it happened), "safe" needs nothing shown.
-			if (result?.validation_status === "warning" || result?.validation_status === "no_data") {
+			if (
+				result?.validation_status === "warning" ||
+				result?.validation_status === "no_data"
+			) {
 				setSendNotice({ status: result.validation_status, hazards: result.hazards });
 			}
 		} catch (err) {
@@ -386,12 +406,16 @@ export function MissionWidget() {
 			{blockedError && (
 				<div className={styles.blockedError}>
 					<p className={styles.blockedErrorMessage}>{blockedError.message}</p>
-					{renderHazardList(blockedError.hazards)}
+					<HazardList hazards={blockedError.hazards} />
 				</div>
 			)}
 
 			{sendNotice && (
-				<div className={sendNotice.status === "no_data" ? styles.sendNoData : styles.sendWarning}>
+				<div
+					className={
+						sendNotice.status === "no_data" ? styles.sendNoData : styles.sendWarning
+					}
+				>
 					<p
 						className={
 							sendNotice.status === "no_data"
@@ -401,22 +425,9 @@ export function MissionWidget() {
 					>
 						{SEND_NOTICE_MESSAGE[sendNotice.status]}
 					</p>
-					{renderHazardList(sendNotice.hazards)}
+					<HazardList hazards={sendNotice.hazards} />
 				</div>
 			)}
 		</div>
-	);
-}
-
-function renderHazardList(hazards: HazardHit[]) {
-	return (
-		<ul className={styles.hazardList}>
-			{hazards.map((hazard) => (
-				<li key={hazard.layer}>
-					{hazard.description}
-					{hazard.count > 1 ? ` (${String(hazard.count)} charted features)` : ""}
-				</li>
-			))}
-		</ul>
 	);
 }

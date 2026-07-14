@@ -32,9 +32,7 @@ function buildWsUrl(): string {
  * onMessage callback (optional): called for every non-ping message including bridge_status.
  * Stored in a ref so callers can dispatch without causing stale closure issues.
  */
-export function useBridgeConnection(
-	options: BridgeConnectionOptions = {},
-): BridgeConnectionState {
+export function useBridgeConnection(options: BridgeConnectionOptions = {}): BridgeConnectionState {
 	const [wsConnected, setWsConnected] = useState(false);
 	const [bridgeConnected, setBridgeConnected] = useState(false);
 	const [latencyMs, setLatencyMs] = useState<number | null>(null);

@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from geoalchemy2.shape import to_shape
 
 from revolt_api.bridge.client import RosBridgeClient
+from revolt_api.bridge.contracts import SimWaypoint
 from revolt_api.models.mission import Waypoint
 
 _KNOTS_TO_MS = 0.514444
@@ -47,3 +48,33 @@ def expected_ack(
 ) -> list[tuple[int, float, float]]:
 	"""The (sequence_number, x, y) tuples publish_and_await_ack compares the echo against."""
 	return [(wp.sequence_number, *_waypoint_cartesian(wp, bridge)) for wp in waypoints]
+
+
+def sim_waypoint_to_ros_dict(wp: SimWaypoint) -> dict:
+	"""Build a custom_msgs/Waypoint JSON dict from an already-echoed SimWaypoint.
+
+	Used to resend a resume-cache snapshot (captured from a /waypoint_list echo, so already in
+	the vessel's native Cartesian/m-per-second/radians units) without a lat/lon round trip.
+	"""
+	return {
+		"id": wp["id"],
+		"pose": {
+			"header": {"frame_id": "map"},
+			"pose": {
+				"position": {"x": wp["pos_x"], "y": wp["pos_y"], "z": wp["pos_z"]},
+				"orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+			},
+		},
+		"switch_radius": wp["switch_radius"],
+		"desired_speed": wp["desired_speed"],
+		"heading_mode": wp["heading_mode"],
+		"heading": wp["heading_rad"],
+	}
+
+
+def sim_waypoint_list_to_ros_dict(waypoints: Sequence[SimWaypoint]) -> dict:
+	return {"waypoints": [sim_waypoint_to_ros_dict(wp) for wp in waypoints]}
+
+
+def expected_ack_from_sim(waypoints: Sequence[SimWaypoint]) -> list[tuple[int, float, float]]:
+	return [(wp["id"], wp["pos_x"], wp["pos_y"]) for wp in waypoints]

@@ -47,11 +47,16 @@
 					"interpolate",
 					["linear"],
 					["coalesce", ["get", "DRVAL1"], 0],
-					0, "#c9e8f5",
-					5, "#a9d8ec",
-					10, "#8ac8e3",
-					20, "#5fb0d6",
-					50, "#2f8fc0"
+					0,
+					"#c9e8f5",
+					5,
+					"#a9d8ec",
+					10,
+					"#8ac8e3",
+					20,
+					"#5fb0d6",
+					50,
+					"#2f8fc0"
 				]
 			}
 		},
@@ -166,7 +171,17 @@
 			"minzoom": 11,
 			"paint": {
 				"circle-radius": 4,
-				"circle-color": ["match", ["get", "COLOUR"], 3, "#e02020", 4, "#20a020", 6, "#e0c020", "#808080"]
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
 			}
 		},
 		{
@@ -185,7 +200,17 @@
 			"minzoom": 11,
 			"paint": {
 				"circle-radius": 4,
-				"circle-color": ["match", ["get", "COLOUR"], 3, "#e02020", 4, "#20a020", 6, "#e0c020", "#808080"]
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
 			}
 		},
 		{
@@ -204,7 +229,17 @@
 			"minzoom": 11,
 			"paint": {
 				"circle-radius": 4,
-				"circle-color": ["match", ["get", "COLOUR"], 3, "#e02020", 4, "#20a020", 6, "#e0c020", "#808080"]
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
 			}
 		},
 		{
@@ -215,7 +250,17 @@
 			"minzoom": 11,
 			"paint": {
 				"circle-radius": 4,
-				"circle-color": ["match", ["get", "COLOUR"], 3, "#e02020", 4, "#20a020", 6, "#e0c020", "#808080"]
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
 			}
 		},
 		{

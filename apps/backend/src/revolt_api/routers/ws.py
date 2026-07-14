@@ -20,9 +20,8 @@ async def vessel_ws(
 	await websocket.accept()
 	# Headers: apiFetch sets X-Session-ID, but native WebSocket doesn't allow custom headers.
 	# The frontend hook sends it as ?session_id= query param instead.
-	session_id = (
-		websocket.query_params.get("session_id")
-		or websocket.headers.get("x-session-id", "unknown")
+	session_id = websocket.query_params.get("session_id") or websocket.headers.get(
+		"x-session-id", "unknown"
 	)
 	logger.info("ws_client_connected", session_id=session_id)
 

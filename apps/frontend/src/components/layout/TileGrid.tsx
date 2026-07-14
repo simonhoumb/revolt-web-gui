@@ -32,7 +32,9 @@ function useContainerSize(initialWidth: number) {
 		});
 		ro.observe(el);
 		setMounted(true);
-		return () => { ro.disconnect(); };
+		return () => {
+			ro.disconnect();
+		};
 	}, []);
 
 	return { containerRef, width, height, mounted };
@@ -62,9 +64,8 @@ export function TileGrid() {
 	// The most rows that could ever fit at MIN_ROW_HEIGHT. Caps interactive drag/resize
 	// so editing a layout can't squish it below a usable size -- same role the old fixed
 	// maxRows played, just computed from the floor instead of a constant rowHeight.
-	const maxRows = height > 0
-		? Math.floor((height - marginY) / (MIN_ROW_HEIGHT + marginY))
-		: undefined;
+	const maxRows =
+		height > 0 ? Math.floor((height - marginY) / (MIN_ROW_HEIGHT + marginY)) : undefined;
 
 	// How many rows the current layout actually spans. rowHeight below is derived from
 	// this and the container's height, exactly mirroring how column width is already
@@ -74,9 +75,10 @@ export function TileGrid() {
 
 	// containerPadding defaults to margin=[8,8]; each row occupies rowHeight+marginY pixels
 	// minus one marginY for the last row, plus 2*containerPaddingY total.
-	const rowHeight = height > 0
-		? Math.max(MIN_ROW_HEIGHT, (height - (neededRows + 1) * marginY) / neededRows)
-		: MIN_ROW_HEIGHT;
+	const rowHeight =
+		height > 0
+			? Math.max(MIN_ROW_HEIGHT, (height - (neededRows + 1) * marginY) / neededRows)
+			: MIN_ROW_HEIGHT;
 
 	const layout: Layout = config.tiles.map((tile) => {
 		const def = WIDGET_REGISTRY[tile.i];
@@ -115,18 +117,27 @@ export function TileGrid() {
 					}}
 					onDragStop={(finalLayout) => {
 						setPlaceholderInvalid(false);
-						if (maxRows !== undefined && finalLayout.some((item) => item.y + item.h > maxRows)) {
+						if (
+							maxRows !== undefined &&
+							finalLayout.some((item) => item.y + item.h > maxRows)
+						) {
 							setGridKey((k) => k + 1);
 						}
 					}}
 					onResizeStop={(finalLayout) => {
 						setPlaceholderInvalid(false);
-						if (maxRows !== undefined && finalLayout.some((item) => item.y + item.h > maxRows)) {
+						if (
+							maxRows !== undefined &&
+							finalLayout.some((item) => item.y + item.h > maxRows)
+						) {
 							setGridKey((k) => k + 1);
 						}
 					}}
 					onLayoutChange={(updated) => {
-						if (maxRows !== undefined && updated.some((item) => item.y + item.h > maxRows)) {
+						if (
+							maxRows !== undefined &&
+							updated.some((item) => item.y + item.h > maxRows)
+						) {
 							return;
 						}
 						updateLayout(
@@ -145,7 +156,9 @@ export function TileGrid() {
 						const W = def.component;
 						return (
 							<div key={tile.i} className={styles.tileWrapper}>
-								{editMode && <div className={styles.dragHandle} data-drag-handle="" />}
+								{editMode && (
+									<div className={styles.dragHandle} data-drag-handle="" />
+								)}
 								<TileCard
 									title={def.label}
 									widgetId={tile.i}

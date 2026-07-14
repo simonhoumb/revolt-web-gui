@@ -1,3 +1,5 @@
+import type { MissionExecutionState } from "./bridge.js";
+
 export enum ControlMode {
 	Manual = "manual",
 	ManualAssisted = "manual_assisted",
@@ -104,6 +106,16 @@ export interface MissionValidationResult {
 	status: "safe" | "warning" | "no_data" | "blocked";
 	hazards: HazardHit[];
 	checked_at: string;
+}
+
+export interface MissionExecutionResult {
+	status: string;
+	state: MissionExecutionState;
+	autonomy_engaged: boolean;
+	// Explains the physical-target limitation when relevant: engaging autonomy on the real
+	// vessel is the RC operator's action (hardware/RC-owned), not something this endpoint can do.
+	autonomy_note: string | null;
+	waypoint_count: number;
 }
 
 export * from "./bridge.js";

@@ -26,6 +26,7 @@ const base: BridgeData = {
 	lidarScan: null,
 	activeWaypointList: null,
 	missionSendStatus: null,
+	missionExecutionStatus: null,
 	cameraStatus: null,
 	wsConnected: true,
 	bridgeConnected: true,
@@ -80,7 +81,14 @@ describe("useBatteryData — isOn threshold", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			current: {
-				stern_port: { v: "1", type: "current", timestamp_ms: 0, location: "stern_port", raw_adc: 0, amperes: 0.5 },
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 0.5,
+				},
 				stern_star: null,
 				bow: null,
 			},
@@ -93,7 +101,14 @@ describe("useBatteryData — isOn threshold", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			current: {
-				stern_port: { v: "1", type: "current", timestamp_ms: 0, location: "stern_port", raw_adc: 0, amperes: 0.51 },
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 0.51,
+				},
 				stern_star: null,
 				bow: null,
 			},
@@ -106,7 +121,14 @@ describe("useBatteryData — isOn threshold", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			current: {
-				stern_port: { v: "1", type: "current", timestamp_ms: 0, location: "stern_port", raw_adc: 0, amperes: 0.49 },
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 0.49,
+				},
 				stern_star: null,
 				bow: null,
 			},

@@ -27,6 +27,7 @@ const base: BridgeData = {
 	lidarScan: null,
 	activeWaypointList: null,
 	missionSendStatus: null,
+	missionExecutionStatus: null,
 	cameraStatus: null,
 	wsConnected: true,
 	bridgeConnected: true,
@@ -71,7 +72,11 @@ describe("useLidarData", () => {
 	});
 
 	it("computes correct Cartesian for angle=π/2 (point along +Y axis)", () => {
-		const scan = makeScan({ angle_min: Math.PI / 2, angle_increment: Math.PI / 2, ranges: [3] });
+		const scan = makeScan({
+			angle_min: Math.PI / 2,
+			angle_increment: Math.PI / 2,
+			ranges: [3],
+		});
 		mockUseBridgeData.mockReturnValue({ ...base, lidarScan: scan });
 		const { result } = renderHook(() => useLidarData());
 		const p = result.current.points[0] as { x: number; y: number };

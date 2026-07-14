@@ -100,13 +100,13 @@ The backend reaches the vessel over Tailscale. A Tailscale sidecar container run
 
 **To connect to the vessel:**
 
-1. Generate an ephemeral auth key at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) (use *ephemeral* so the node is removed when the container stops)
+1. Generate an ephemeral auth key at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) (use _ephemeral_ so the node is removed when the container stops)
 2. Add it to your `.env`:
-   ```
-   TAILSCALE_AUTHKEY=tskey-auth-...
-   VESSEL_HOST=revolt-onboard
-   ROS2_BRIDGE_PORT=9090
-   ```
+    ```
+    TAILSCALE_AUTHKEY=tskey-auth-...
+    VESSEL_HOST=revolt-onboard
+    ROS2_BRIDGE_PORT=9090
+    ```
 3. Run `docker compose up` — the sidecar joins the tailnet automatically and the backend resolves `revolt-onboard` whether you are on local WiFi or remote 5G. No code changes needed either way.
 
 Leave `TAILSCALE_AUTHKEY` empty to run without joining the tailnet (local development without the vessel).
@@ -121,12 +121,12 @@ The pipeline is defined in `azure-pipelines.yml` and uses templates under `.azur
 
 ### What runs and when
 
-| Event | Stages |
-| ----- | ------ |
-| PR into `dev` or `main` | `ci` only (used as branch policy gate) |
-| Push to `dev` | `ci` → `push_images` → `deploy_staging` (stub) |
-| Push to `main` | `ci` → `push_images` → `deploy_prod` (manual approval required) |
-| Push to feature branches | nothing (pipeline fires only when a PR is opened) |
+| Event                    | Stages                                                          |
+| ------------------------ | --------------------------------------------------------------- |
+| PR into `dev` or `main`  | `ci` only (used as branch policy gate)                          |
+| Push to `dev`            | `ci` → `push_images` → `deploy_staging` (stub)                  |
+| Push to `main`           | `ci` → `push_images` → `deploy_prod` (manual approval required) |
+| Push to feature branches | nothing (pipeline fires only when a PR is opened)               |
 
 The `push_images` and deploy stages are currently gated by `AZURE_READY: "false"` in `azure-pipelines.yml` and will be skipped until an Azure subscription and ACR are in place. Change the value to `"true"` to enable them.
 
@@ -148,12 +148,12 @@ These steps are one-time portal configuration and are not in code:
 
 2. **Variable groups** — create the following groups in Pipelines → Library and link them to the pipeline:
 
-   | Group | Variables |
-   | ----- | --------- |
-   | `revolt-acr` | `ACR_LOGIN_SERVER` |
-   | `revolt-staging-env` | `DATABASE_URL`, `SECRET_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
-   | `revolt-prod-env` | same shape as staging, with production values |
-   | `revolt-azure-deploy` | `AZURE_SUBSCRIPTION`, `AZURE_RESOURCE_GROUP`, ARM service connection name |
+    | Group                 | Variables                                                                         |
+    | --------------------- | --------------------------------------------------------------------------------- |
+    | `revolt-acr`          | `ACR_LOGIN_SERVER`                                                                |
+    | `revolt-staging-env`  | `DATABASE_URL`, `SECRET_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+    | `revolt-prod-env`     | same shape as staging, with production values                                     |
+    | `revolt-azure-deploy` | `AZURE_SUBSCRIPTION`, `AZURE_RESOURCE_GROUP`, ARM service connection name         |
 
 3. **Register the pipeline** — point Azure DevOps at `azure-pipelines.yml` in the repo root.
 

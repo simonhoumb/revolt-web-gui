@@ -5,9 +5,9 @@ import "@testing-library/jest-dom";
 // that use it (TileGrid, LidarWidget, MapWidget) can mount without throwing
 // in tests.
 global.ResizeObserver = class ResizeObserver {
-	observe() {}
-	unobserve() {}
-	disconnect() {}
+	observe = () => undefined;
+	unobserve = () => undefined;
+	disconnect = () => undefined;
 };
 
 // jsdom's fetch (undici) requires an absolute URL, so a component that fetches a relative

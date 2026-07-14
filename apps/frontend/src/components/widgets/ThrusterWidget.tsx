@@ -84,11 +84,7 @@ export function ThrusterWidget() {
 			</div>
 			<div className={styles.thrusterList}>
 				<ThrusterRow label="Port" status={stern_port} isSimulation={isSimulation} />
-				<ThrusterRow
-					label="Starboard"
-					status={stern_star}
-					isSimulation={isSimulation}
-				/>
+				<ThrusterRow label="Starboard" status={stern_star} isSimulation={isSimulation} />
 				<ThrusterRow
 					label="Bow"
 					status={bow}

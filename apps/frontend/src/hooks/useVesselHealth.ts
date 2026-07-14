@@ -74,7 +74,8 @@ export function useVesselHealth(): VesselHealth {
 			result.push({
 				id: "bat-alarm",
 				title: "Battery voltage critical",
-				description: "Voltage below 11.0 V — approaching Arduino emergency cutoff at 10.0 V.",
+				description:
+					"Voltage below 11.0 V — approaching Arduino emergency cutoff at 10.0 V.",
 				level: "alarm",
 			});
 		} else if (batStatus === "overvolt") {

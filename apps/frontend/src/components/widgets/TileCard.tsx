@@ -22,7 +22,13 @@ export function TileCard({ title, widgetId, editMode, onRemove, children }: Tile
 				<ObcTitleContainer
 					titleValue={title}
 					state={ObcTitleContainerState.Enabled}
-					onActionClick={editMode ? () => { onRemove(widgetId); } : undefined}
+					onActionClick={
+						editMode
+							? () => {
+									onRemove(widgetId);
+								}
+							: undefined
+					}
 				>
 					{editMode && (
 						<ObcIconButton

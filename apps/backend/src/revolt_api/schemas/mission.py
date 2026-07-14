@@ -8,6 +8,7 @@ from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from shapely.geometry import Point
 
+from revolt_api.bridge.contracts import MissionExecutionState
 from revolt_api.enc_validation import HazardHit, ValidationStatus
 from revolt_api.models.mission import MissionStatus
 from revolt_api.schemas.vessel import Position
@@ -120,3 +121,13 @@ class MissionValidationResult(BaseModel):
 	status: ValidationStatus
 	hazards: list[HazardHit]
 	checked_at: datetime
+
+
+class MissionExecutionResult(BaseModel):
+	status: str
+	state: MissionExecutionState
+	autonomy_engaged: bool
+	# Explains the physical-target limitation when relevant: engaging autonomy on the real
+	# vessel is the RC operator's action (hardware/RC-owned), not something this endpoint can do.
+	autonomy_note: str | None
+	waypoint_count: int

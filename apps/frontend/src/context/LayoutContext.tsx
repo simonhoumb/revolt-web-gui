@@ -55,6 +55,7 @@ const DEFAULT_TILES: TileLayout[] = [
 	{ i: "camera", x: 0, y: 5, w: 3, h: 7 },
 	{ i: "map", x: 0, y: 12, w: 6, h: 8 },
 	{ i: "mission", x: 6, y: 12, w: 4, h: 8 },
+	{ i: "mission_control", x: 6, y: 20, w: 4, h: 6 },
 ];
 
 const DEFAULT_HIDDEN: WidgetId[] = [];

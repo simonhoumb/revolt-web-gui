@@ -1,11 +1,4 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useMemo,
-	useReducer,
-	type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 import type {
 	BatteryMsg,
 	BridgeMessage,
@@ -19,6 +12,7 @@ import type {
 	GnssVelocityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
+	MissionExecutionStatusMsg,
 	MissionSendStatusMsg,
 	SimGnssVelocityMsg,
 	SimThrusterFeedbackMsg,
@@ -54,6 +48,7 @@ export interface BridgeData {
 	lidarScan: LidarScanMsg | null;
 	activeWaypointList: SimWaypointListMsg | null;
 	missionSendStatus: MissionSendStatusMsg | null;
+	missionExecutionStatus: MissionExecutionStatusMsg | null;
 	wsConnected: boolean;
 	bridgeConnected: boolean;
 	latencyMs: number | null;
@@ -62,7 +57,7 @@ export interface BridgeData {
 const initialCurrent: CurrentReadings = { stern_port: null, stern_star: null, bow: null };
 const initialThrusterFeedback: ThrusterFeedback = { bow: null, port: null, starboard: null };
 
-const initialData: BridgeData = {
+export const initialData: BridgeData = {
 	battery: null,
 	current: initialCurrent,
 	gnssFix: null,
@@ -78,12 +73,13 @@ const initialData: BridgeData = {
 	lidarScan: null,
 	activeWaypointList: null,
 	missionSendStatus: null,
+	missionExecutionStatus: null,
 	wsConnected: false,
 	bridgeConnected: false,
 	latencyMs: null,
 };
 
-function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
+export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 	switch (msg.type) {
 		case "battery":
 			return { ...state, battery: msg };
@@ -121,6 +117,8 @@ function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 			return { ...state, activeWaypointList: msg };
 		case "mission_send_status":
 			return { ...state, missionSendStatus: msg };
+		case "mission_execution_status":
+			return { ...state, missionExecutionStatus: msg };
 		default:
 			return state;
 	}

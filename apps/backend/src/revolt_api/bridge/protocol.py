@@ -8,8 +8,12 @@ from typing_extensions import TypedDict
 class TopicSpec:
 	topic: str
 	ros_type: str
-	throttle_rate_ms: int = 0        # rosbridge inbound throttle: drops messages before they reach the backend
-	frontend_throttle_ms: int = 0    # backend fan-out throttle: drops messages before they reach browser queues
+	throttle_rate_ms: int = (
+		0  # rosbridge inbound throttle: drops messages before they reach the backend
+	)
+	frontend_throttle_ms: int = (
+		0  # backend fan-out throttle: drops messages before they reach browser queues
+	)
 	description: str = ""
 
 
@@ -241,6 +245,7 @@ def get_publish_topics(target: str) -> list[TopicSpec]:
 
 
 # rosbridge wire protocol types
+
 
 class RosBridgeSubscribe(TypedDict):
 	op: Literal["subscribe"]

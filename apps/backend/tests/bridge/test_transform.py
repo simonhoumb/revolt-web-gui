@@ -177,7 +177,10 @@ _WAYPOINT_LIST = {
 			"id": 1,
 			"pose": {
 				"header": {"seq": 0, "stamp": {"secs": 0, "nsecs": 0}, "frame_id": "map"},
-				"pose": {"position": {"x": 59.001, "y": 10.501, "z": 0.0}, "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
+				"pose": {
+					"position": {"x": 59.001, "y": 10.501, "z": 0.0},
+					"orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+				},
 			},
 			"switch_radius": 5.0,
 			"desired_speed": 1.5,
@@ -228,8 +231,12 @@ def test_sim_gnss_antenna2_returns_none(client: RosBridgeClient) -> None:
 
 def test_physical_gnss_fix(client: RosBridgeClient) -> None:
 	msg = {
-		"latitude": 59.9083, "longitude": 10.7512, "altitude": 5.2,
-		"status": {}, "position_covariance": [], "position_covariance_type": 0,
+		"latitude": 59.9083,
+		"longitude": 10.7512,
+		"altitude": 5.2,
+		"status": {},
+		"position_covariance": [],
+		"position_covariance_type": 0,
 	}
 	result = client._transform("/fix", msg)
 	assert result is not None
@@ -242,9 +249,12 @@ def test_physical_gnss_fix(client: RosBridgeClient) -> None:
 
 def test_physical_gnss_fix_with_status(client: RosBridgeClient) -> None:
 	msg = {
-		"latitude": 59.9083, "longitude": 10.7512, "altitude": 5.2,
+		"latitude": 59.9083,
+		"longitude": 10.7512,
+		"altitude": 5.2,
 		"status": {"status": 0, "service": 1},
-		"position_covariance": [], "position_covariance_type": 0,
+		"position_covariance": [],
+		"position_covariance_type": 0,
 	}
 	result = client._transform("/fix", msg)
 	assert result is not None
@@ -294,11 +304,14 @@ def test_sim_imu(client: RosBridgeClient) -> None:
 	assert result["ang_vel_x"] == pytest.approx(4.4)
 
 
-@pytest.mark.parametrize("topic,expected_thruster", [
-	("/thruster/bow", "bow"),
-	("/thruster/port", "port"),
-	("/thruster/starboard", "starboard"),
-])
+@pytest.mark.parametrize(
+	"topic,expected_thruster",
+	[
+		("/thruster/bow", "bow"),
+		("/thruster/port", "port"),
+		("/thruster/starboard", "starboard"),
+	],
+)
 def test_sim_thruster_feedback(client: RosBridgeClient, topic: str, expected_thruster: str) -> None:
 	result = client._transform(topic, _FLOAT32MA_2)
 	assert result is not None
@@ -394,7 +407,9 @@ def test_camera_frame_counter_increments(client: RosBridgeClient) -> None:
 
 
 def test_camera_empty_data_returns_none(client: RosBridgeClient) -> None:
-	result = client._transform("/camera/camera/color/image_raw/compressed", {"format": "jpeg", "data": ""})
+	result = client._transform(
+		"/camera/camera/color/image_raw/compressed", {"format": "jpeg", "data": ""}
+	)
 	assert result is None
 	assert "main" not in client.latest_camera_frames
 

@@ -63,7 +63,11 @@ function isCoverageFeature(feature: MapGeoJSONFeature): boolean {
 // covered feature appear anywhere in this box" was silently reporting the whole leg as covered
 // whenever just one end was. Confirmed live: a leg from an inside-coverage point to an
 // outside-coverage point stayed green until this per-endpoint check replaced the shared one.
-function isCoveredAt(map: MapLibreMap, point: { x: number; y: number }, paddingPx: number): boolean {
+function isCoveredAt(
+	map: MapLibreMap,
+	point: { x: number; y: number },
+	paddingPx: number,
+): boolean {
 	// If the layer doesn't currently exist in the style (mid theme-transition, see the hazard-layer
 	// comment below), skip the check rather than concluding "not covered" -- a missing layer means
 	// "this evaluation finds nothing new", not a false negative.
@@ -125,7 +129,8 @@ function evaluateLeg(map: MapLibreMap, leg: LegPositions, safetyContourM: number
 	if (!isCoveredAt(map, p1, paddingPx) || !isCoveredAt(map, p2, paddingPx)) {
 		return {
 			status: "no_data",
-			description: "No charted ENC data covers this leg -- not verified safe, just unchecked.",
+			description:
+				"No charted ENC data covers this leg -- not verified safe, just unchecked.",
 		};
 	}
 	for (const feature of features) {
