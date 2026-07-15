@@ -4,6 +4,7 @@ import contextlib
 import json
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -39,6 +40,7 @@ from revolt_api.bridge.contracts import (
 	SimWaypointListMsg,
 	TemperatureMsg,
 )
+from revolt_api.bridge.mission_tracker import MissionExecutionTracker
 from revolt_api.bridge.protocol import (
 	PHYSICAL_SUBSCRIBE_TOPICS,
 	SIMULATION_SUBSCRIBE_TOPICS,
@@ -46,6 +48,7 @@ from revolt_api.bridge.protocol import (
 	RosBridgeSubscribe,
 	get_subscribe_topics,
 )
+from revolt_api.geo import latlon_to_local_cartesian, local_cartesian_to_latlon
 
 logger = structlog.get_logger(__name__)
 
@@ -94,20 +97,7 @@ class RosBridgeClient:
 		self._camera_last_frame_time: dict[str, float] = {}
 		self._camera_connected: dict[str, bool] = {}
 		self._pending_ack: PendingAck | None = None
-
-		# Latest /waypoint_list echo, i.e. whatever the vessel's queue actually still contains
-		# right now (already reflects any waypoints it has popped as reached). Used both to
-		# snapshot a resume point on pause and to derive live current-waypoint/progress status.
-		self.latest_waypoint_list: list[SimWaypoint] | None = None
-		# Snapshot of the remaining queue taken at pause time, keyed by mission id, so a
-		# subsequent Start resumes from where the vessel actually was instead of resending the
-		# full original mission. In-memory by design: it must always match the vessel's real
-		# queue, which a DB-persisted guess could drift from; lost on backend restart, same as
-		# the rest of this client's connection state.
-		self.resume_cache: dict[str, list[SimWaypoint]] = {}
-		self._tracked_mission_id: str | None = None
-		self._tracked_total_count: int = 0
-		self._tracked_state: MissionExecutionState = "active"
+		self._mission_tracker = MissionExecutionTracker()
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
@@ -118,6 +108,37 @@ class RosBridgeClient:
 			if spec.frontend_throttle_ms > 0
 		}
 		self._topic_last_emit: dict[str, float] = {}
+
+		self._topic_handlers: dict[str, Callable[[dict, int], BridgeMessage | None]] = {
+			"/arduino/stern/battery_voltage": self._handle_battery,
+			"/arduino/stern/port/current": self._handle_current_stern_port,
+			"/arduino/stern/starboard/current": self._handle_current_stern_starboard,
+			"/arduino/bow/current": self._handle_current_bow,
+			"/arduino/stern/dht22/temperature": self._handle_temperature_stern,
+			"/arduino/stern/dht22/humidity": self._handle_humidity_stern,
+			"/arduino/bow/dht22/temperature": self._handle_temperature_bow,
+			"/arduino/bow/dht22/humidity": self._handle_humidity_bow,
+			"/arduino/stern/emergency_stop_status": self._handle_emergency_stop,
+			"/arduino/bow/linear_actuator_retract_state": self._handle_linear_actuator,
+			"/control_mode": self._handle_control_mode,
+			"/revolt/sim/stc/position/hull": self._handle_sim_hull_position,
+			"/revolt/sim/stc/position/velocity": self._handle_sim_hull_velocity,
+			"/revolt/sim/stc/gnss/antenna1/position": self._handle_sim_gnss_fix,
+			"/revolt/sim/stc/gnss/antenna2/position": self._handle_gnss_antenna2_ignored,
+			"/fix": self._handle_physical_gnss_fix,
+			"/heading": self._handle_gnss_heading,
+			"/vel": self._handle_gnss_velocity,
+			"/revolt/sim/stc/gnss/velocity_vector": self._handle_sim_gnss_velocity,
+			"/revolt/sim/stc/imu/data": self._handle_sim_imu,
+			"/thruster/bow": lambda msg, now: self._handle_sim_thruster(msg, now, "bow"),
+			"/thruster/port": lambda msg, now: self._handle_sim_thruster(msg, now, "port"),
+			"/thruster/starboard": lambda msg, now: self._handle_sim_thruster(
+				msg, now, "starboard"
+			),
+			"/waypoint_list": self._handle_waypoint_list,
+			"/camera/camera/color/image_raw/compressed": self._handle_camera_frame,
+			"/scan": self._handle_lidar_scan,
+		}
 
 	async def start(self) -> None:
 		self._receive_task = asyncio.create_task(self._run(), name="rosbridge_receive")
@@ -218,14 +239,11 @@ class RosBridgeClient:
 		not after -- so the echo that resolves publish_and_await_ack's own wait attributes
 		correctly to this mission rather than whatever was tracked previously. Defaults to
 		"starting" rather than "active" since the ack hasn't landed yet at this point."""
-		self._tracked_mission_id = mission_id
-		self._tracked_total_count = total_count
-		self._tracked_state = "starting"
+		self._mission_tracker.track(mission_id, total_count)
 
 	def untrack_mission(self) -> None:
 		"""Stop deriving live execution status. Called by the terminate endpoint."""
-		self._tracked_mission_id = None
-		self._tracked_total_count = 0
+		self._mission_tracker.untrack()
 
 	def broadcast_tracked_status(
 		self,
@@ -239,11 +257,14 @@ class RosBridgeClient:
 		just relabels its state, so a resumed Start still has the right denominator for
 		progress). No-op if mission_id isn't the one currently tracked -- only one mission is
 		tracked at a time by design, so this guards against broadcasting under the wrong id."""
-		if self._tracked_mission_id != mission_id:
+		if not self._mission_tracker.set_state_if_tracked(mission_id, state):
 			return
-		self._tracked_state = state
 		self.broadcast_mission_execution_status(
-			mission_id, state, current_waypoint_seq, remaining_count, self._tracked_total_count
+			mission_id,
+			state,
+			current_waypoint_seq,
+			remaining_count,
+			self._mission_tracker.tracked_total_count,
 		)
 
 	def broadcast_mission_execution_status(
@@ -270,28 +291,26 @@ class RosBridgeClient:
 
 	def get_resume_point(self, mission_id: str) -> list[SimWaypoint] | None:
 		"""The remaining queue snapshotted at pause time for this mission, if any."""
-		return self.resume_cache.get(mission_id)
+		return self._mission_tracker.get_resume_point(mission_id)
 
 	def set_resume_point(self, mission_id: str, remaining: list[SimWaypoint]) -> None:
 		"""Snapshot the vessel's actual remaining queue as a resume point. Called by pause."""
-		self.resume_cache[mission_id] = remaining
+		self._mission_tracker.set_resume_point(mission_id, remaining)
 
 	def pop_resume_point(self, mission_id: str) -> list[SimWaypoint] | None:
 		"""Consume and discard this mission's resume point, if any. Called on a successful
 		resume-start (the snapshot has now been used) and on terminate (no resume should
 		survive an abort)."""
-		return self.resume_cache.pop(mission_id, None)
+		return self._mission_tracker.pop_resume_point(mission_id)
 
 	def has_resume_points(self) -> bool:
-		return bool(self.resume_cache)
+		return self._mission_tracker.has_resume_points()
 
 	def clear_resume_cache(self) -> list[str]:
 		"""Discard every resume point and return the mission ids that were invalidated. Called
 		when a publish to /update_waypoint_list replaces the vessel's entire queue, since any
 		previously-paused mission's snapshot no longer reflects reality."""
-		invalidated = list(self.resume_cache)
-		self.resume_cache.clear()
-		return invalidated
+		return self._mission_tracker.clear_resume_cache()
 
 	def get_camera_frame_count(self, camera_id: str) -> int:
 		return self._camera_frame_counters.get(camera_id, 0)
@@ -302,9 +321,7 @@ class RosBridgeClient:
 	def latlon_to_cartesian(self, lat: float, lon: float) -> tuple[float, float]:
 		"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North). Inverse of
 		_cartesian_to_latlon, used when serialising outbound waypoints for the sim."""
-		x = (lon - self._gnss_origin_lon) * 111320.0 * math.cos(math.radians(self._gnss_origin_lat))
-		y = (lat - self._gnss_origin_lat) * 111320.0
-		return x, y
+		return latlon_to_local_cartesian(lat, lon, self._gnss_origin_lat, self._gnss_origin_lon)
 
 	@property
 	def connected(self) -> bool:
@@ -316,11 +333,17 @@ class RosBridgeClient:
 
 	@property
 	def tracked_mission_id(self) -> str | None:
-		return self._tracked_mission_id
+		return self._mission_tracker.tracked_mission_id
 
 	@property
 	def tracked_state(self) -> MissionExecutionState:
-		return self._tracked_state
+		return self._mission_tracker.tracked_state
+
+	@property
+	def latest_waypoint_list(self) -> list[SimWaypoint] | None:
+		"""Whatever the vessel's queue actually still contains right now, as of the last
+		/waypoint_list echo (already reflects any waypoints it has popped as reached)."""
+		return self._mission_tracker.latest_waypoint_list
 
 	async def _run(self) -> None:
 		while True:
@@ -393,308 +416,285 @@ class RosBridgeClient:
 			logger.warning("rosbridge_queue_full", dropped=dropped, topic=topic)
 
 	def _transform(self, topic: str, msg: dict) -> BridgeMessage | None:
+		"""Dispatch to the per-topic handler registered in self._topic_handlers (built in
+		__init__), or None for topics this bridge doesn't forward. Replaces what used to be one
+		large match statement -- each handler below is now small and independently callable/
+		testable, and adding a topic means adding one method plus one dict entry rather than
+		growing a single branch further."""
+		handler = self._topic_handlers.get(topic)
+		if handler is None:
+			return None
 		now = int(time.time() * 1000)
-		match topic:
-			case "/arduino/stern/battery_voltage":
-				return BatteryMsg(
-					v="1", type="battery", timestamp_ms=now, voltage_v=float(msg["data"])
-				)
-			case "/arduino/stern/port/current":
-				raw = int(msg["data"])
-				return CurrentMsg(
-					v="1",
-					type="current",
-					timestamp_ms=now,
-					location="stern_port",
-					raw_adc=raw,
-					amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
-				)
-			case "/arduino/stern/starboard/current":
-				raw = int(msg["data"])
-				return CurrentMsg(
-					v="1",
-					type="current",
-					timestamp_ms=now,
-					location="stern_star",
-					raw_adc=raw,
-					amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
-				)
-			case "/arduino/bow/current":
-				raw = int(msg["data"])
-				return CurrentMsg(
-					v="1",
-					type="current",
-					timestamp_ms=now,
-					location="bow",
-					raw_adc=raw,
-					amperes=round(raw * _ADC_TO_AMPS, 2),
-				)
-			case "/arduino/stern/dht22/temperature":
-				return TemperatureMsg(
-					v="1",
-					type="temperature",
-					timestamp_ms=now,
-					location="stern",
-					value_c=float(msg["data"]),
-				)
-			case "/arduino/stern/dht22/humidity":
-				return HumidityMsg(
-					v="1",
-					type="humidity",
-					timestamp_ms=now,
-					location="stern",
-					value_pct=float(msg["data"]),
-				)
-			case "/arduino/bow/dht22/temperature":
-				return TemperatureMsg(
-					v="1",
-					type="temperature",
-					timestamp_ms=now,
-					location="bow",
-					value_c=float(msg["data"]),
-				)
-			case "/arduino/bow/dht22/humidity":
-				return HumidityMsg(
-					v="1",
-					type="humidity",
-					timestamp_ms=now,
-					location="bow",
-					value_pct=float(msg["data"]),
-				)
-			case "/arduino/stern/emergency_stop_status":
-				return EmergencyStopMsg(
-					v="1",
-					type="emergency_stop",
-					timestamp_ms=now,
-					active=int(msg["data"]) != 0,
-				)
-			case "/arduino/bow/linear_actuator_retract_state":
-				return LinearActuatorMsg(
-					v="1",
-					type="linear_actuator",
-					timestamp_ms=now,
-					retracted=int(msg["data"]) == 1,
-				)
-			case "/control_mode":
-				raw_mode = int(msg["data"])
-				return ControlModeMsg(
-					v="1",
-					type="control_mode",
-					timestamp_ms=now,
-					mode=_CONTROL_MODE_MAP.get(raw_mode, "miscommunication"),  # type: ignore[arg-type]
-				)
-			case "/revolt/sim/stc/position/hull":
-				pos = msg["pose"]["position"]
-				ori = msg["pose"]["orientation"]
-				return SimHullPositionMsg(
-					v="1",
-					type="sim_hull_position",
-					timestamp_ms=now,
-					pos_x=float(pos["x"]),
-					pos_y=float(pos["y"]),
-					pos_z=float(pos["z"]),
-					orient_x=float(ori["x"]),
-					orient_y=float(ori["y"]),
-					orient_z=float(ori["z"]),
-					orient_w=float(ori["w"]),
-				)
-			case "/revolt/sim/stc/position/velocity":
-				lin = msg["linear"]
-				ang = msg["angular"]
-				return SimHullVelocityMsg(
-					v="1",
-					type="sim_hull_velocity",
-					timestamp_ms=now,
-					vel_x=float(lin["x"]),
-					vel_y=float(lin["y"]),
-					vel_z=float(lin["z"]),
-					ang_vel_x=float(ang["x"]),
-					ang_vel_y=float(ang["y"]),
-					ang_vel_z=float(ang["z"]),
-				)
-			case "/revolt/sim/stc/gnss/antenna1/position":
-				pt = msg["point"]
-				lat, lon = self._cartesian_to_latlon(float(pt["x"]), float(pt["y"]))
-				return GnssFixMsg(
-					v="1",
-					type="gnss_fix",
-					timestamp_ms=now,
-					latitude=lat,
-					longitude=lon,
-					altitude_m=float(pt["z"]),
-					fix_status=0,  # simulation always has a fix; no NavSatFix status field available
-				)
-			case "/revolt/sim/stc/gnss/antenna2/position":
-				return None  # antenna2 not forwarded; antenna1 is the primary position source
-			case "/fix":
-				lat = msg.get("latitude")
-				lon = msg.get("longitude")
-				alt = msg.get("altitude")
-				if lat is None or lon is None or alt is None:
-					logger.warning("rosbridge_gnss_fix_missing_fields", keys=list(msg.keys()))
-					return None
-				raw_status = msg.get("status", {})
-				fix_status = (
-					int(raw_status["status"])
-					if isinstance(raw_status, dict) and "status" in raw_status
-					else -1
-				)
-				return GnssFixMsg(
-					v="1",
-					type="gnss_fix",
-					timestamp_ms=now,
-					latitude=float(lat),
-					longitude=float(lon),
-					altitude_m=float(alt),
-					fix_status=fix_status,
-				)
-			case "/heading":
-				# nmea_navsat builds this as a pure yaw rotation (quaternion_from_euler(0, 0, heading)),
-				# so a general yaw extraction recovers the original NMEA HDT heading in degrees.
-				q = msg["quaternion"]
-				w, x, y, z = float(q["w"]), float(q["x"]), float(q["y"]), float(q["z"])
-				yaw_rad = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
-				return GnssHeadingMsg(
-					v="1",
-					type="gnss_heading",
-					timestamp_ms=now,
-					heading_deg=math.degrees(yaw_rad) % 360,
-				)
-			case "/vel":
-				# nmea_navsat encodes VTG speed/course as ENU components:
-				# linear.x = speed*sin(course), linear.y = speed*cos(course).
-				lin = msg["twist"]["linear"]
-				vx, vy = float(lin["x"]), float(lin["y"])
-				return GnssVelocityMsg(
-					v="1",
-					type="gnss_velocity",
-					timestamp_ms=now,
-					speed_ms=math.hypot(vx, vy),
-					course_deg=math.degrees(math.atan2(vx, vy)) % 360,
-				)
-			case "/revolt/sim/stc/gnss/velocity_vector":
-				data = msg["data"]
-				return SimGnssVelocityMsg(
-					v="1",
-					type="sim_gnss_velocity",
-					timestamp_ms=now,
-					speed=float(data[0]),
-					heading_rad=float(data[1]),
-				)
-			case "/revolt/sim/stc/imu/data":
-				lin = msg["linear"]
-				ang = msg["angular"]
-				return SimImuMsg(
-					v="1",
-					type="sim_imu",
-					timestamp_ms=now,
-					accel_x=float(lin["x"]),
-					accel_y=float(lin["y"]),
-					accel_z=float(lin["z"]),
-					ang_vel_x=float(ang["x"]),
-					ang_vel_y=float(ang["y"]),
-					ang_vel_z=float(ang["z"]),
-				)
-			case "/thruster/bow":
-				data = msg["data"]
-				return SimThrusterFeedbackMsg(
-					v="1",
-					type="sim_thruster_feedback",
-					timestamp_ms=now,
-					thruster="bow",
-					force=float(data[0]),
-					angle=float(data[1]),
-				)
-			case "/thruster/port":
-				data = msg["data"]
-				return SimThrusterFeedbackMsg(
-					v="1",
-					type="sim_thruster_feedback",
-					timestamp_ms=now,
-					thruster="port",
-					force=float(data[0]),
-					angle=float(data[1]),
-				)
-			case "/thruster/starboard":
-				data = msg["data"]
-				return SimThrusterFeedbackMsg(
-					v="1",
-					type="sim_thruster_feedback",
-					timestamp_ms=now,
-					thruster="starboard",
-					force=float(data[0]),
-					angle=float(data[1]),
-				)
-			case "/waypoint_list":
-				waypoints = [
-					SimWaypoint(
-						id=int(wp["id"]),
-						pos_x=float(wp["pose"]["pose"]["position"]["x"]),
-						pos_y=float(wp["pose"]["pose"]["position"]["y"]),
-						pos_z=float(wp["pose"]["pose"]["position"]["z"]),
-						switch_radius=float(wp["switch_radius"]),
-						desired_speed=float(wp["desired_speed"]),
-						heading_mode=int(wp["heading_mode"]),
-						heading_rad=float(wp["heading"]),
-					)
-					for wp in msg["waypoints"]
-				]
-				self._check_pending_ack(waypoints)
-				self.latest_waypoint_list = waypoints
-				if self._tracked_mission_id is not None:
-					self.broadcast_mission_execution_status(
-						self._tracked_mission_id,
-						self._tracked_state,
-						waypoints[0]["id"] if waypoints else None,
-						len(waypoints),
-						self._tracked_total_count,
-					)
-				return SimWaypointListMsg(
-					v="1",
-					type="sim_waypoint_list",
-					timestamp_ms=now,
-					waypoints=waypoints,
-				)
-			case "/camera/camera/color/image_raw/compressed":
-				data_b64 = msg.get("data", "")
-				if not data_b64:
-					return None
-				try:
-					self.latest_camera_frames["main"] = base64.b64decode(data_b64)
-					self._camera_frame_counters["main"] = (
-						self._camera_frame_counters.get("main", 0) + 1
-					)
-					self._camera_last_frame_time["main"] = time.monotonic()
-				except Exception:
-					logger.warning("camera_frame_decode_error")
-				return None  # served via MJPEG endpoint, not forwarded through WebSocket
-			case "/scan":
-				range_max = float(msg.get("range_max", 25.0))
-				raw_ranges: list[float] = msg.get("ranges", [])
-				ranges = [
-					r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges
-				]
-				return LidarScanMsg(
-					v="1",
-					type="lidar_scan",
-					timestamp_ms=now,
-					angle_min=float(msg.get("angle_min", 0.0)),
-					angle_max=float(msg.get("angle_max", 2 * math.pi)),
-					angle_increment=float(msg.get("angle_increment", 0.0)),
-					range_min=float(msg.get("range_min", 0.1)),
-					range_max=range_max,
-					ranges=ranges,
-				)
-			case _:
-				return None
+		return handler(msg, now)
+
+	def _handle_battery(self, msg: dict, now: int) -> BridgeMessage | None:
+		return BatteryMsg(v="1", type="battery", timestamp_ms=now, voltage_v=float(msg["data"]))
+
+	def _handle_current_stern_port(self, msg: dict, now: int) -> BridgeMessage | None:
+		raw = int(msg["data"])
+		return CurrentMsg(
+			v="1",
+			type="current",
+			timestamp_ms=now,
+			location="stern_port",
+			raw_adc=raw,
+			amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
+		)
+
+	def _handle_current_stern_starboard(self, msg: dict, now: int) -> BridgeMessage | None:
+		raw = int(msg["data"])
+		return CurrentMsg(
+			v="1",
+			type="current",
+			timestamp_ms=now,
+			location="stern_star",
+			raw_adc=raw,
+			amperes=float(raw),  # firmware sends Amps (ACS712 formula applied on Arduino)
+		)
+
+	def _handle_current_bow(self, msg: dict, now: int) -> BridgeMessage | None:
+		raw = int(msg["data"])
+		return CurrentMsg(
+			v="1",
+			type="current",
+			timestamp_ms=now,
+			location="bow",
+			raw_adc=raw,
+			amperes=round(raw * _ADC_TO_AMPS, 2),
+		)
+
+	def _handle_temperature_stern(self, msg: dict, now: int) -> BridgeMessage | None:
+		return TemperatureMsg(
+			v="1",
+			type="temperature",
+			timestamp_ms=now,
+			location="stern",
+			value_c=float(msg["data"]),
+		)
+
+	def _handle_humidity_stern(self, msg: dict, now: int) -> BridgeMessage | None:
+		return HumidityMsg(
+			v="1", type="humidity", timestamp_ms=now, location="stern", value_pct=float(msg["data"])
+		)
+
+	def _handle_temperature_bow(self, msg: dict, now: int) -> BridgeMessage | None:
+		return TemperatureMsg(
+			v="1", type="temperature", timestamp_ms=now, location="bow", value_c=float(msg["data"])
+		)
+
+	def _handle_humidity_bow(self, msg: dict, now: int) -> BridgeMessage | None:
+		return HumidityMsg(
+			v="1", type="humidity", timestamp_ms=now, location="bow", value_pct=float(msg["data"])
+		)
+
+	def _handle_emergency_stop(self, msg: dict, now: int) -> BridgeMessage | None:
+		return EmergencyStopMsg(
+			v="1", type="emergency_stop", timestamp_ms=now, active=int(msg["data"]) != 0
+		)
+
+	def _handle_linear_actuator(self, msg: dict, now: int) -> BridgeMessage | None:
+		return LinearActuatorMsg(
+			v="1", type="linear_actuator", timestamp_ms=now, retracted=int(msg["data"]) == 1
+		)
+
+	def _handle_control_mode(self, msg: dict, now: int) -> BridgeMessage | None:
+		raw_mode = int(msg["data"])
+		return ControlModeMsg(
+			v="1",
+			type="control_mode",
+			timestamp_ms=now,
+			mode=_CONTROL_MODE_MAP.get(raw_mode, "miscommunication"),  # type: ignore[arg-type]
+		)
+
+	def _handle_sim_hull_position(self, msg: dict, now: int) -> BridgeMessage | None:
+		pos = msg["pose"]["position"]
+		ori = msg["pose"]["orientation"]
+		return SimHullPositionMsg(
+			v="1",
+			type="sim_hull_position",
+			timestamp_ms=now,
+			pos_x=float(pos["x"]),
+			pos_y=float(pos["y"]),
+			pos_z=float(pos["z"]),
+			orient_x=float(ori["x"]),
+			orient_y=float(ori["y"]),
+			orient_z=float(ori["z"]),
+			orient_w=float(ori["w"]),
+		)
+
+	def _handle_sim_hull_velocity(self, msg: dict, now: int) -> BridgeMessage | None:
+		lin = msg["linear"]
+		ang = msg["angular"]
+		return SimHullVelocityMsg(
+			v="1",
+			type="sim_hull_velocity",
+			timestamp_ms=now,
+			vel_x=float(lin["x"]),
+			vel_y=float(lin["y"]),
+			vel_z=float(lin["z"]),
+			ang_vel_x=float(ang["x"]),
+			ang_vel_y=float(ang["y"]),
+			ang_vel_z=float(ang["z"]),
+		)
+
+	def _handle_sim_gnss_fix(self, msg: dict, now: int) -> BridgeMessage | None:
+		pt = msg["point"]
+		lat, lon = self._cartesian_to_latlon(float(pt["x"]), float(pt["y"]))
+		return GnssFixMsg(
+			v="1",
+			type="gnss_fix",
+			timestamp_ms=now,
+			latitude=lat,
+			longitude=lon,
+			altitude_m=float(pt["z"]),
+			fix_status=0,  # simulation always has a fix; no NavSatFix status field available
+		)
+
+	def _handle_gnss_antenna2_ignored(self, msg: dict, now: int) -> BridgeMessage | None:
+		return None  # antenna2 not forwarded; antenna1 is the primary position source
+
+	def _handle_physical_gnss_fix(self, msg: dict, now: int) -> BridgeMessage | None:
+		lat = msg.get("latitude")
+		lon = msg.get("longitude")
+		alt = msg.get("altitude")
+		if lat is None or lon is None or alt is None:
+			logger.warning("rosbridge_gnss_fix_missing_fields", keys=list(msg.keys()))
+			return None
+		raw_status = msg.get("status", {})
+		fix_status = (
+			int(raw_status["status"])
+			if isinstance(raw_status, dict) and "status" in raw_status
+			else -1
+		)
+		return GnssFixMsg(
+			v="1",
+			type="gnss_fix",
+			timestamp_ms=now,
+			latitude=float(lat),
+			longitude=float(lon),
+			altitude_m=float(alt),
+			fix_status=fix_status,
+		)
+
+	def _handle_gnss_heading(self, msg: dict, now: int) -> BridgeMessage | None:
+		# nmea_navsat builds this as a pure yaw rotation (quaternion_from_euler(0, 0, heading)),
+		# so a general yaw extraction recovers the original NMEA HDT heading in degrees.
+		q = msg["quaternion"]
+		w, x, y, z = float(q["w"]), float(q["x"]), float(q["y"]), float(q["z"])
+		yaw_rad = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+		return GnssHeadingMsg(
+			v="1", type="gnss_heading", timestamp_ms=now, heading_deg=math.degrees(yaw_rad) % 360
+		)
+
+	def _handle_gnss_velocity(self, msg: dict, now: int) -> BridgeMessage | None:
+		# nmea_navsat encodes VTG speed/course as ENU components:
+		# linear.x = speed*sin(course), linear.y = speed*cos(course).
+		lin = msg["twist"]["linear"]
+		vx, vy = float(lin["x"]), float(lin["y"])
+		return GnssVelocityMsg(
+			v="1",
+			type="gnss_velocity",
+			timestamp_ms=now,
+			speed_ms=math.hypot(vx, vy),
+			course_deg=math.degrees(math.atan2(vx, vy)) % 360,
+		)
+
+	def _handle_sim_gnss_velocity(self, msg: dict, now: int) -> BridgeMessage | None:
+		data = msg["data"]
+		return SimGnssVelocityMsg(
+			v="1",
+			type="sim_gnss_velocity",
+			timestamp_ms=now,
+			speed=float(data[0]),
+			heading_rad=float(data[1]),
+		)
+
+	def _handle_sim_imu(self, msg: dict, now: int) -> BridgeMessage | None:
+		lin = msg["linear"]
+		ang = msg["angular"]
+		return SimImuMsg(
+			v="1",
+			type="sim_imu",
+			timestamp_ms=now,
+			accel_x=float(lin["x"]),
+			accel_y=float(lin["y"]),
+			accel_z=float(lin["z"]),
+			ang_vel_x=float(ang["x"]),
+			ang_vel_y=float(ang["y"]),
+			ang_vel_z=float(ang["z"]),
+		)
+
+	def _handle_sim_thruster(self, msg: dict, now: int, thruster: str) -> BridgeMessage | None:
+		data = msg["data"]
+		return SimThrusterFeedbackMsg(
+			v="1",
+			type="sim_thruster_feedback",
+			timestamp_ms=now,
+			thruster=thruster,  # type: ignore[arg-type]
+			force=float(data[0]),
+			angle=float(data[1]),
+		)
+
+	def _handle_waypoint_list(self, msg: dict, now: int) -> BridgeMessage | None:
+		waypoints = [
+			SimWaypoint(
+				id=int(wp["id"]),
+				pos_x=float(wp["pose"]["pose"]["position"]["x"]),
+				pos_y=float(wp["pose"]["pose"]["position"]["y"]),
+				pos_z=float(wp["pose"]["pose"]["position"]["z"]),
+				switch_radius=float(wp["switch_radius"]),
+				desired_speed=float(wp["desired_speed"]),
+				heading_mode=int(wp["heading_mode"]),
+				heading_rad=float(wp["heading"]),
+			)
+			for wp in msg["waypoints"]
+		]
+		self._check_pending_ack(waypoints)
+		self._mission_tracker.record_waypoint_list_echo(waypoints)
+		tracked_mission_id = self._mission_tracker.tracked_mission_id
+		if tracked_mission_id is not None:
+			self.broadcast_mission_execution_status(
+				tracked_mission_id,
+				self._mission_tracker.tracked_state,
+				waypoints[0]["id"] if waypoints else None,
+				len(waypoints),
+				self._mission_tracker.tracked_total_count,
+			)
+		return SimWaypointListMsg(
+			v="1", type="sim_waypoint_list", timestamp_ms=now, waypoints=waypoints
+		)
+
+	def _handle_camera_frame(self, msg: dict, now: int) -> BridgeMessage | None:
+		data_b64 = msg.get("data", "")
+		if not data_b64:
+			return None
+		try:
+			self.latest_camera_frames["main"] = base64.b64decode(data_b64)
+			self._camera_frame_counters["main"] = self._camera_frame_counters.get("main", 0) + 1
+			self._camera_last_frame_time["main"] = time.monotonic()
+		except Exception:
+			logger.warning("camera_frame_decode_error")
+		return None  # served via MJPEG endpoint, not forwarded through WebSocket
+
+	def _handle_lidar_scan(self, msg: dict, now: int) -> BridgeMessage | None:
+		range_max = float(msg.get("range_max", 25.0))
+		raw_ranges: list[float] = msg.get("ranges", [])
+		ranges = [r if (r is not None and math.isfinite(r)) else range_max for r in raw_ranges]
+		return LidarScanMsg(
+			v="1",
+			type="lidar_scan",
+			timestamp_ms=now,
+			angle_min=float(msg.get("angle_min", 0.0)),
+			angle_max=float(msg.get("angle_max", 2 * math.pi)),
+			angle_increment=float(msg.get("angle_increment", 0.0)),
+			range_min=float(msg.get("range_min", 0.1)),
+			range_max=range_max,
+			ranges=ranges,
+		)
 
 	def _cartesian_to_latlon(self, x_m: float, y_m: float) -> tuple[float, float]:
 		"""Convert local Cartesian metres (X=East, Y=North) to WGS84 degrees."""
-		lat = self._gnss_origin_lat + y_m / 111320.0
-		lon = self._gnss_origin_lon + x_m / (
-			111320.0 * math.cos(math.radians(self._gnss_origin_lat))
-		)
-		return lat, lon
+		return local_cartesian_to_latlon(x_m, y_m, self._gnss_origin_lat, self._gnss_origin_lon)
 
 	def _make_status_msg(self) -> BridgeStatusMsg:
 		return BridgeStatusMsg(
@@ -732,22 +732,24 @@ class RosBridgeClient:
 		_push_status_to/_push_camera_status_to -- otherwise a client that connects (or
 		reconnects, e.g. on page refresh) after a mission was already started has no way to learn
 		its live state until the next /waypoint_list echo or command broadcast happens to fire."""
-		if self._tracked_mission_id is None:
+		tracked_mission_id = self._mission_tracker.tracked_mission_id
+		if tracked_mission_id is None:
 			return
-		waypoints = self.latest_waypoint_list
+		waypoints = self._mission_tracker.latest_waypoint_list
 		current_waypoint_seq = waypoints[0]["id"] if waypoints else None
-		remaining_count = len(waypoints) if waypoints is not None else self._tracked_total_count
+		total_count = self._mission_tracker.tracked_total_count
+		remaining_count = len(waypoints) if waypoints is not None else total_count
 		with contextlib.suppress(asyncio.QueueFull):
 			q.put_nowait(
 				MissionExecutionStatusMsg(
 					v="1",
 					type="mission_execution_status",
 					timestamp_ms=int(time.time() * 1000),
-					mission_id=self._tracked_mission_id,
-					state=self._tracked_state,
+					mission_id=tracked_mission_id,
+					state=self._mission_tracker.tracked_state,
 					current_waypoint_seq=current_waypoint_seq,
 					remaining_count=remaining_count,
-					total_count=self._tracked_total_count,
+					total_count=total_count,
 				)
 			)
 

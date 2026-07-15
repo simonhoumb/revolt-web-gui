@@ -10,6 +10,8 @@ from revolt_api.geo import (
 	compute_turn_arc,
 	destination_point,
 	haversine_distance_m,
+	latlon_to_local_cartesian,
+	local_cartesian_to_latlon,
 )
 
 
@@ -135,3 +137,21 @@ def test_build_route_points_passes_straight_through_zero_radius_waypoint() -> No
 	]
 	path = build_route_points(waypoints)
 	assert path == [_PREV, _TURN, _NEXT]
+
+
+_ORIGIN_LAT = 59.9083
+_ORIGIN_LON = 10.7512
+
+
+def test_latlon_to_local_cartesian_origin_maps_to_zero() -> None:
+	x, y = latlon_to_local_cartesian(_ORIGIN_LAT, _ORIGIN_LON, _ORIGIN_LAT, _ORIGIN_LON)
+	assert x == 0
+	assert y == 0
+
+
+def test_latlon_to_local_cartesian_is_inverse_of_local_cartesian_to_latlon() -> None:
+	lat, lon = 59.91, 10.76
+	x, y = latlon_to_local_cartesian(lat, lon, _ORIGIN_LAT, _ORIGIN_LON)
+	round_trip_lat, round_trip_lon = local_cartesian_to_latlon(x, y, _ORIGIN_LAT, _ORIGIN_LON)
+	assert round_trip_lat == pytest.approx(lat, abs=1e-9)
+	assert round_trip_lon == pytest.approx(lon, abs=1e-9)
