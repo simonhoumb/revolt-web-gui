@@ -17,6 +17,7 @@ import { ObiMediaPause } from "@oicl/openbridge-webcomponents-react/icons/icon-m
 import { ObiMediaStop } from "@oicl/openbridge-webcomponents-react/icons/icon-media-stop.js";
 import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
+import { useMissionExecutionStatus } from "../../hooks/useMissionExecutionStatus.js";
 import { formatDuration, formatLatLon } from "../../lib/format.js";
 import { haversineDistanceM } from "../../lib/geo.js";
 import { accumulateRouteEta, type DistanceSpeedLeg, type RouteEta } from "../../lib/missionMath.js";
@@ -121,18 +122,14 @@ type DialogKind = "start" | "pause" | "terminate" | null;
 
 export function MissionControlWidget() {
 	const { loadedMission, startMission, pauseMission, terminateMission } = useMission();
-	const { missionExecutionStatus, gnssFix, bridgeStatus } = useBridgeData();
+	const { gnssFix, bridgeStatus } = useBridgeData();
+	const liveStatus = useMissionExecutionStatus(loadedMission?.id ?? null);
 
 	const [openDialog, setOpenDialog] = useState<DialogKind>(null);
 	const [pending, setPending] = useState(false);
 	const [blockedError, setBlockedError] = useState<MissionBlockedError | null>(null);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [autonomyNote, setAutonomyNote] = useState<string | null>(null);
-
-	const liveStatus =
-		loadedMission && missionExecutionStatus?.mission_id === loadedMission.id
-			? missionExecutionStatus
-			: null;
 
 	const currentWaypoint = useMemo(() => {
 		if (!loadedMission || liveStatus?.current_waypoint_seq == null) return null;

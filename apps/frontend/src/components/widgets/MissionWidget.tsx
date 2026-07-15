@@ -14,8 +14,8 @@ import {
 	ProgressButtonType,
 	ProgressMode,
 } from "@oicl/openbridge-webcomponents/dist/components/progress-button/progress-button.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
+import { useMissionSendStatus } from "../../hooks/useMissionSendStatus.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import { inputValue } from "../../lib/dom.js";
 import { formatDuration } from "../../lib/format.js";
@@ -85,7 +85,7 @@ export function MissionWidget() {
 		sendActiveMission,
 	} = useMission();
 	const { legs } = useWaypointDraft();
-	const { missionSendStatus } = useBridgeData();
+	const sendStatus = useMissionSendStatus(activeMission?.id ?? null);
 
 	const [newMissionName, setNewMissionName] = useState("");
 	const [renameDraft, setRenameDraft] = useState("");
@@ -120,11 +120,6 @@ export function MissionWidget() {
 			setSendPending(false);
 		}
 	}
-
-	const sendStatus =
-		activeMission && missionSendStatus?.mission_id === activeMission.id
-			? missionSendStatus
-			: null;
 
 	useEffect(() => {
 		setRenameDraft(activeMission?.name ?? "");
