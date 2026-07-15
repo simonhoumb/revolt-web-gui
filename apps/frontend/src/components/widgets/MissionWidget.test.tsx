@@ -63,7 +63,6 @@ function setMission(
 		loading: false,
 		activeMissionId: activeMission.id,
 		activeMission,
-		legValidation: {},
 		loadMissions: vi.fn(),
 		createMission: vi.fn(),
 		selectMission: vi.fn(),
@@ -74,7 +73,6 @@ function setMission(
 		updateWaypointSpeed: overrides.updateWaypointSpeed ?? vi.fn(),
 		reorderWaypoints: vi.fn(),
 		deleteWaypoint: vi.fn(),
-		setLegValidation: vi.fn(),
 		sendActiveMission: overrides.sendActiveMission ?? vi.fn(),
 	});
 }

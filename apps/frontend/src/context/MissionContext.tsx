@@ -8,14 +8,13 @@ import {
 	type ReactNode,
 } from "react";
 import type {
-	HazardSummary,
 	Mission,
 	MissionExecutionResult,
 	MissionSendResult,
 	Waypoint,
 } from "@revolt/shared-types";
 import { missionApi } from "../lib/missionApi.js";
-import { useBridgeData } from "./BridgeDataContext.js";
+import { useMissionStatusSync } from "../hooks/useMissionStatusSync.js";
 
 interface MissionContextValue {
 	missions: Mission[];
@@ -25,9 +24,6 @@ interface MissionContextValue {
 	// The mission most recently sent to the vessel (max non-null last_sent_at), independent of
 	// activeMissionId/the planning dropdown. Mission Control targets this, not the dropdown.
 	loadedMission: Mission | null;
-	// Keyed by waypoint id (the leg ending at that waypoint). Written by MapWidget's client-side
-	// ENC check once that lands; empty until then.
-	legValidation: Record<string, HazardSummary>;
 	loadMissions: () => Promise<void>;
 	createMission: (name: string) => Promise<void>;
 	selectMission: (id: string | null) => void;
@@ -42,7 +38,6 @@ interface MissionContextValue {
 	updateWaypointSpeed: (waypointId: string, knots: number) => Promise<void>;
 	reorderWaypoints: (orderedWaypointIds: string[]) => Promise<void>;
 	deleteWaypoint: (waypointId: string) => Promise<void>;
-	setLegValidation: (result: Record<string, HazardSummary>) => void;
 	sendActiveMission: () => Promise<MissionSendResult | null>;
 	startMission: (missionId: string) => Promise<MissionExecutionResult>;
 	pauseMission: (missionId: string) => Promise<MissionExecutionResult>;
@@ -69,7 +64,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	const [missions, setMissions] = useState<Mission[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
-	const [legValidation, setLegValidationState] = useState<Record<string, HazardSummary>>({});
 
 	const loadMissions = useCallback(async () => {
 		setLoading(true);
@@ -115,7 +109,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
 	const selectMission = useCallback((id: string | null) => {
 		setActiveMissionId(id);
-		setLegValidationState({});
 	}, []);
 
 	const renameMission = useCallback(
@@ -271,10 +264,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 		[activeMissionId, missions, loadMissions],
 	);
 
-	const setLegValidation = useCallback((result: Record<string, HazardSummary>) => {
-		setLegValidationState(result);
-	}, []);
-
 	const sendActiveMission = useCallback(async () => {
 		if (!activeMissionId) return null;
 		// The ack status (acknowledged/timed_out/etc) is broadcast over the WebSocket as a
@@ -336,12 +325,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
 	// last_sent_at drives loadedMission, so it must stay fresh in every open tab, not just the
 	// one that issued the send -- mission_send_status is broadcast over the WS to all of them.
-	// Ignore the transient "sending" status; only refresh once the outcome is final.
-	const missionSendStatus = useBridgeData().missionSendStatus;
-	useEffect(() => {
-		if (!missionSendStatus || missionSendStatus.status === "sending") return;
-		void refreshMission(missionSendStatus.mission_id);
-	}, [missionSendStatus, refreshMission]);
+	useMissionStatusSync(refreshMission);
 
 	const value = useMemo<MissionContextValue>(
 		() => ({
@@ -350,7 +334,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			activeMissionId,
 			activeMission,
 			loadedMission,
-			legValidation,
 			loadMissions,
 			createMission,
 			selectMission,
@@ -361,7 +344,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			updateWaypointSpeed,
 			reorderWaypoints,
 			deleteWaypoint,
-			setLegValidation,
 			sendActiveMission,
 			startMission,
 			pauseMission,
@@ -373,7 +355,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			activeMissionId,
 			activeMission,
 			loadedMission,
-			legValidation,
 			loadMissions,
 			createMission,
 			selectMission,
@@ -384,7 +365,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			updateWaypointSpeed,
 			reorderWaypoints,
 			deleteWaypoint,
-			setLegValidation,
 			sendActiveMission,
 			startMission,
 			pauseMission,

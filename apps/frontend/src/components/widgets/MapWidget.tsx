@@ -14,6 +14,7 @@ import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import { useMission } from "../../context/MissionContext.js";
+import { useLegHazards } from "../../context/LegHazardsContext.js";
 import { useMapLibreInstance, scaleNmForZoom } from "../../hooks/useMapLibreInstance.js";
 import { useOwnShipMarker } from "../../hooks/useOwnShipMarker.js";
 import { useVesselTrackLayer } from "../../hooks/useVesselTrackLayer.js";
@@ -32,7 +33,8 @@ export function MapWidget() {
 	const { latitude, longitude, headingDeg, courseDeg } = useGnssData();
 	const track = useVesselTrack();
 	const { waypoints } = useWaypointDraft();
-	const { legValidation, addWaypoint, updateWaypointPosition, setLegValidation } = useMission();
+	const { addWaypoint, updateWaypointPosition } = useMission();
+	const { legValidation, setLegValidation } = useLegHazards();
 
 	// Call order matters: useOwnShipMarker/useVesselTrackLayer/useWaypointMarkers all read
 	// mapRef.current inside a mount effect of their own, relying on useMapLibreInstance's mount
