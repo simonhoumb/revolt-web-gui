@@ -175,6 +175,45 @@ describe("LayoutProvider", () => {
 		expect(result.current.config.tiles.map((t) => t.i)).toContain("thruster");
 	});
 
+	it("every widget id is accounted for in the Instruments only template's tiles or hiddenWidgets, never neither", () => {
+		// Regression test: mission_control used to be missing from both the hand-listed tiles
+		// array and the hand-listed hiddenWidgets array for this template, so loading it left
+		// mission_control neither shown nor tracked as hidden. Deriving both lists from the
+		// registry (see registry.ts's instrumentsOnlyPosition) makes that structurally
+		// impossible now -- this asserts the invariant holds for every widget, not just the one
+		// that happened to be missing before.
+		const { result } = renderLayout();
+		act(() => {
+			result.current.loadTemplate("Instruments only");
+		});
+		const accounted = new Set([
+			...result.current.config.tiles.map((t) => t.i),
+			...result.current.config.hiddenWidgets,
+		]);
+		for (const id of ALL_WIDGET_IDS) {
+			expect(accounted.has(id)).toBe(true);
+		}
+		expect(result.current.config.hiddenWidgets).toContain("mission_control");
+	});
+
+	it("the default layout's tile positions/sizes are unchanged by deriving them from the registry", () => {
+		// Locks in that switching DEFAULT_TILES from a hand-listed array to a registry-derived
+		// one didn't silently change the curated dashboard's appearance -- particularly for
+		// camera/mission/mission_control, whose default-layout size deliberately differs from
+		// their own defaultW/defaultH (see registry.ts's comments on those entries).
+		const { result } = renderLayout();
+		const byId = new Map(result.current.config.tiles.map((t) => [t.i, t]));
+		expect(byId.get("camera")).toEqual({ i: "camera", x: 0, y: 5, w: 3, h: 7 });
+		expect(byId.get("mission")).toEqual({ i: "mission", x: 6, y: 12, w: 4, h: 8 });
+		expect(byId.get("mission_control")).toEqual({
+			i: "mission_control",
+			x: 6,
+			y: 20,
+			w: 4,
+			h: 6,
+		});
+	});
+
 	it("loadTemplate applies a user-saved template", () => {
 		const { result } = renderLayout();
 		act(() => {

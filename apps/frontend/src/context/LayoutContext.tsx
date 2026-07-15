@@ -46,17 +46,13 @@ interface LayoutContextValue {
 const LAYOUT_KEY = "revolt-dashboard-layout";
 const TEMPLATES_KEY = "revolt-dashboard-templates";
 
-const DEFAULT_TILES: TileLayout[] = [
-	{ i: "battery", x: 0, y: 0, w: 3, h: 5 },
-	{ i: "gnss", x: 3, y: 0, w: 3, h: 5 },
-	{ i: "connection", x: 6, y: 0, w: 3, h: 4 },
-	{ i: "thruster", x: 6, y: 4, w: 3, h: 7 },
-	{ i: "lidar", x: 3, y: 5, w: 3, h: 5 },
-	{ i: "camera", x: 0, y: 5, w: 3, h: 7 },
-	{ i: "map", x: 0, y: 12, w: 6, h: 8 },
-	{ i: "mission", x: 6, y: 12, w: 4, h: 8 },
-	{ i: "mission_control", x: 6, y: 20, w: 4, h: 6 },
-];
+// Derived from each widget's own defaultPosition in registry.ts, rather than a second
+// hand-maintained list of widget-id literals here that has to be kept in sync by hand whenever a
+// widget is added, removed, or repositioned.
+const DEFAULT_TILES: TileLayout[] = ALL_WIDGET_IDS.map((id) => ({
+	i: id,
+	...WIDGET_REGISTRY[id].defaultPosition,
+}));
 
 const DEFAULT_HIDDEN: WidgetId[] = [];
 
@@ -64,6 +60,19 @@ const DEFAULT_CONFIG: LayoutConfig = {
 	tiles: DEFAULT_TILES,
 	hiddenWidgets: DEFAULT_HIDDEN,
 };
+
+// Every widget with an instrumentsOnlyPosition gets a tile there; every other widget is derived
+// as hidden -- structurally, not by hand-listing both a tiles array and a hiddenWidgets array
+// that must together cover every widget id (a real bug this app shipped with: mission_control
+// was missing from both lists here, so loading this template left it neither shown nor tracked
+// as hidden -- not reachable from WidgetPicker's toggle state either way until this fix).
+const INSTRUMENTS_ONLY_TILES: TileLayout[] = ALL_WIDGET_IDS.flatMap((id) => {
+	const position = WIDGET_REGISTRY[id].instrumentsOnlyPosition;
+	return position ? [{ i: id, ...position }] : [];
+});
+const INSTRUMENTS_ONLY_HIDDEN: WidgetId[] = ALL_WIDGET_IDS.filter(
+	(id) => !WIDGET_REGISTRY[id].instrumentsOnlyPosition,
+);
 
 const BUILTIN_TEMPLATES: LayoutTemplate[] = [
 	{
@@ -74,14 +83,8 @@ const BUILTIN_TEMPLATES: LayoutTemplate[] = [
 	},
 	{
 		name: "Instruments only",
-		tiles: [
-			{ i: "battery", x: 0, y: 0, w: 4, h: 5 },
-			{ i: "gnss", x: 4, y: 0, w: 4, h: 5 },
-			{ i: "connection", x: 8, y: 0, w: 4, h: 4 },
-			{ i: "thruster", x: 0, y: 5, w: 4, h: 7 },
-			{ i: "lidar", x: 4, y: 5, w: 4, h: 5 },
-		],
-		hiddenWidgets: ["camera", "map", "mission"],
+		tiles: INSTRUMENTS_ONLY_TILES,
+		hiddenWidgets: INSTRUMENTS_ONLY_HIDDEN,
 		savedAt: 0,
 	},
 ];

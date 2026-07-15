@@ -34,4 +34,43 @@ describe("WIDGET_REGISTRY", () => {
 	it("ALL_WIDGET_IDS has no duplicate entries", () => {
 		expect(new Set(ALL_WIDGET_IDS).size).toBe(ALL_WIDGET_IDS.length);
 	});
+
+	it("every entry has a defaultPosition with positive width/height", () => {
+		for (const def of Object.values(WIDGET_REGISTRY)) {
+			expect(def.defaultPosition.w).toBeGreaterThan(0);
+			expect(def.defaultPosition.h).toBeGreaterThan(0);
+		}
+	});
+
+	it("no two widgets' defaultPosition tiles overlap", () => {
+		const defs = Object.values(WIDGET_REGISTRY);
+		for (let i = 0; i < defs.length; i++) {
+			for (let j = i + 1; j < defs.length; j++) {
+				const a = defs[i]?.defaultPosition;
+				const b = defs[j]?.defaultPosition;
+				if (!a || !b) continue;
+				const overlaps =
+					a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+				expect(overlaps).toBe(false);
+			}
+		}
+	});
+
+	it("every widget with an instrumentsOnlyPosition has positive width/height, and none overlap", () => {
+		const defs = Object.values(WIDGET_REGISTRY).filter((d) => d.instrumentsOnlyPosition);
+		for (const def of defs) {
+			expect(def.instrumentsOnlyPosition?.w).toBeGreaterThan(0);
+			expect(def.instrumentsOnlyPosition?.h).toBeGreaterThan(0);
+		}
+		for (let i = 0; i < defs.length; i++) {
+			for (let j = i + 1; j < defs.length; j++) {
+				const a = defs[i]?.instrumentsOnlyPosition;
+				const b = defs[j]?.instrumentsOnlyPosition;
+				if (!a || !b) continue;
+				const overlaps =
+					a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+				expect(overlaps).toBe(false);
+			}
+		}
+	});
 });

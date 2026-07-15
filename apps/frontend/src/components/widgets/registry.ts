@@ -29,6 +29,13 @@ export type WidgetId =
 	| "mission"
 	| "mission_control";
 
+export interface TilePosition {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
 export interface WidgetDefinition {
 	id: WidgetId;
 	label: string;
@@ -38,6 +45,16 @@ export interface WidgetDefinition {
 	defaultH: number;
 	minW?: number;
 	minH?: number;
+	// This widget's tile in the built-in "Default" dashboard layout (LayoutContext.tsx's
+	// DEFAULT_TILES is derived from these). Curated by hand, and not always the same size as
+	// defaultW/defaultH above -- that's the size a widget gets when freshly re-added via the
+	// picker after being removed, a different concern from its place in the curated layout.
+	defaultPosition: TilePosition;
+	// This widget's tile in the built-in "Instruments only" template (LayoutContext.tsx's
+	// BUILTIN_TEMPLATES), if it appears there at all. Widgets with no entry here are derived as
+	// hidden in that template, rather than needing a second hand-maintained hiddenWidgets list
+	// that can silently drift out of sync with this one (see git history for the bug that caused).
+	instrumentsOnlyPosition?: TilePosition;
 }
 
 export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
@@ -50,6 +67,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 5,
 		minW: 2,
 		minH: 3,
+		defaultPosition: { x: 0, y: 0, w: 3, h: 5 },
+		instrumentsOnlyPosition: { x: 0, y: 0, w: 4, h: 5 },
 	},
 	gnss: {
 		id: "gnss",
@@ -60,6 +79,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 5,
 		minW: 2,
 		minH: 3,
+		defaultPosition: { x: 3, y: 0, w: 3, h: 5 },
+		instrumentsOnlyPosition: { x: 4, y: 0, w: 4, h: 5 },
 	},
 	thruster: {
 		id: "thruster",
@@ -70,6 +91,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 7,
 		minW: 2,
 		minH: 4,
+		defaultPosition: { x: 6, y: 4, w: 3, h: 7 },
+		instrumentsOnlyPosition: { x: 0, y: 5, w: 4, h: 7 },
 	},
 	connection: {
 		id: "connection",
@@ -80,6 +103,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 4,
 		minW: 2,
 		minH: 3,
+		defaultPosition: { x: 6, y: 0, w: 3, h: 4 },
+		instrumentsOnlyPosition: { x: 8, y: 0, w: 4, h: 4 },
 	},
 	lidar: {
 		id: "lidar",
@@ -90,6 +115,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 5,
 		minW: 3,
 		minH: 5,
+		defaultPosition: { x: 3, y: 5, w: 3, h: 5 },
+		instrumentsOnlyPosition: { x: 4, y: 5, w: 4, h: 5 },
 	},
 	camera: {
 		id: "camera",
@@ -100,6 +127,10 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 8,
 		minW: 3,
 		minH: 4,
+		// Deliberately not the same size as defaultW/defaultH (4x8) -- the curated dashboard
+		// layout has always shown this tile smaller (3x7) than what re-adding it via the picker
+		// gives you.
+		defaultPosition: { x: 0, y: 5, w: 3, h: 7 },
 	},
 	map: {
 		id: "map",
@@ -110,6 +141,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 8,
 		minW: 3,
 		minH: 5,
+		defaultPosition: { x: 0, y: 12, w: 6, h: 8 },
 	},
 	mission: {
 		id: "mission",
@@ -120,6 +152,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 8,
 		minW: 3,
 		minH: 4,
+		// See camera's note above -- the curated layout is wider (4) than defaultW (3).
+		defaultPosition: { x: 6, y: 12, w: 4, h: 8 },
 	},
 	mission_control: {
 		id: "mission_control",
@@ -130,6 +164,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultH: 6,
 		minW: 3,
 		minH: 4,
+		// See camera's note above -- the curated layout is wider (4) than defaultW (3).
+		defaultPosition: { x: 6, y: 20, w: 4, h: 6 },
 	},
 };
 
