@@ -1,7 +1,12 @@
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
+import { formatCoordinate } from "../../lib/format.js";
 import styles from "./GnssWidget.module.css";
+
+// Higher precision than mission-planning displays (formatLatLon's default of 5) -- a live GNSS
+// fix benefits from finer resolution for monitoring, not an oversight.
+const GNSS_COORDINATE_PRECISION = 6;
 
 function fixIndicatorStatus(fixStatus: number | null): StatusIndicatorStatus {
 	if (fixStatus === null) return StatusIndicatorStatus.inactive;
@@ -23,11 +28,19 @@ export function GnssWidget() {
 			<dl className={styles.dataList}>
 				<div className={styles.dataRow}>
 					<dt>Lat</dt>
-					<dd>{latitude !== null ? `${latitude.toFixed(6)}°` : "—"}</dd>
+					<dd>
+						{latitude !== null
+							? formatCoordinate(latitude, GNSS_COORDINATE_PRECISION)
+							: "—"}
+					</dd>
 				</div>
 				<div className={styles.dataRow}>
 					<dt>Lon</dt>
-					<dd>{longitude !== null ? `${longitude.toFixed(6)}°` : "—"}</dd>
+					<dd>
+						{longitude !== null
+							? formatCoordinate(longitude, GNSS_COORDINATE_PRECISION)
+							: "—"}
+					</dd>
 				</div>
 				<div className={styles.dataRow}>
 					<dt>Alt</dt>

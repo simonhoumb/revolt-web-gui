@@ -92,6 +92,14 @@ export interface HazardHit {
 	count: number;
 }
 
+// Per-leg hazard summary computed client-side (Phase 1 ENC check, apps/frontend/src/lib/
+// encValidation.ts) against currently-rendered map layers -- distinct from HazardHit above, which
+// is the server-side (Phase 2) PostGIS check's per-layer aggregate hit count.
+export interface HazardSummary {
+	status: "safe" | "warning" | "no_data" | "blocked";
+	description: string;
+}
+
 export interface MissionSendResult {
 	status: string;
 	waypoint_count: number;

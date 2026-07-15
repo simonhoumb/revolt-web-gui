@@ -7,6 +7,7 @@ import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useMission } from "../../context/MissionContext.js";
+import { useLegHazards } from "../../context/LegHazardsContext.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
 
@@ -19,10 +20,14 @@ vi.mock("../../hooks/useVesselTrack.js", () => ({
 vi.mock("../../context/MissionContext.js", () => ({
 	useMission: vi.fn(),
 }));
+vi.mock("../../context/LegHazardsContext.js", () => ({
+	useLegHazards: vi.fn(),
+}));
 
 const mockUseGnssData = useGnssData as Mock;
 const mockUseVesselTrack = useVesselTrack as Mock;
 const mockUseMission = useMission as Mock;
+const mockUseLegHazards = useLegHazards as Mock;
 
 const baseGnss: GnssData = {
 	latitude: null,
@@ -80,7 +85,6 @@ function setMission(waypoints: Waypoint[] = []) {
 		loading: false,
 		activeMissionId: activeMission?.id ?? null,
 		activeMission,
-		legValidation: {},
 		loadMissions: vi.fn(),
 		createMission: vi.fn(),
 		selectMission: vi.fn(),
@@ -91,6 +95,9 @@ function setMission(waypoints: Waypoint[] = []) {
 		updateWaypointSpeed: vi.fn(),
 		reorderWaypoints: vi.fn(),
 		deleteWaypoint: vi.fn(),
+	});
+	mockUseLegHazards.mockReturnValue({
+		legValidation: {},
 		setLegValidation: mockSetLegValidation,
 	});
 }

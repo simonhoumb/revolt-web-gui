@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import type { Waypoint } from "@revolt/shared-types";
-import { useMission, type HazardSummary } from "../context/MissionContext.js";
+import type { HazardSummary, Waypoint } from "@revolt/shared-types";
+import { useMission } from "../context/MissionContext.js";
+import { useLegHazards } from "../context/LegHazardsContext.js";
 import { computeLegPositions, haversineDistanceM, bearingDeg } from "../lib/geo.js";
 
 export interface Leg {
@@ -21,7 +22,8 @@ export interface WaypointDraft {
 const EMPTY_WAYPOINTS: Waypoint[] = [];
 
 export function useWaypointDraft(): WaypointDraft {
-	const { activeMission, legValidation } = useMission();
+	const { activeMission } = useMission();
+	const { legValidation } = useLegHazards();
 	const waypoints = activeMission?.waypoints ?? EMPTY_WAYPOINTS;
 
 	const legs = useMemo(() => {

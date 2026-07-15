@@ -1,6 +1,7 @@
 import type { Waypoint } from "@revolt/shared-types";
 
 const EARTH_RADIUS_M = 6_371_000;
+export const METERS_PER_NM = 1852;
 
 function toRad(deg: number): number {
 	return (deg * Math.PI) / 180;

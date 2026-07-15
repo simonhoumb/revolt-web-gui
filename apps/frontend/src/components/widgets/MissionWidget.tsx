@@ -1,19 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { HazardHit, Waypoint } from "@revolt/shared-types";
 import { ObcDropdownButton } from "@oicl/openbridge-webcomponents-react/components/dropdown-button/dropdown-button.js";
 import { ObcTextInputField } from "@oicl/openbridge-webcomponents-react/components/text-input-field/text-input-field.js";
-import { ObcNumberInputField } from "@oicl/openbridge-webcomponents-react/components/number-input-field/number-input-field.js";
-import {
-	ObcNumberInputField as ObcNumberInputFieldElement,
-	ObcNumberInputFieldSize,
-} from "@oicl/openbridge-webcomponents/dist/components/number-input-field/number-input-field.js";
 import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
 import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
 import { ObiDelete } from "@oicl/openbridge-webcomponents-react/icons/icon-delete.js";
 import { ObiWidgetAddGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-widget-add-google.js";
-import { ObiArrowUpGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-up-google.js";
-import { ObiArrowDownGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-down-google.js";
-import { ObiWaypointDeleteIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-delete-iec.js";
 import { ObiRouteExportIec } from "@oicl/openbridge-webcomponents-react/icons/icon-route-export-iec.js";
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
@@ -22,12 +14,16 @@ import {
 	ProgressButtonType,
 	ProgressMode,
 } from "@oicl/openbridge-webcomponents/dist/components/progress-button/progress-button.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
+import { useMissionSendStatus } from "../../hooks/useMissionSendStatus.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
+import { inputValue } from "../../lib/dom.js";
 import { formatDuration } from "../../lib/format.js";
+import { accumulateRouteEta } from "../../lib/missionMath.js";
 import { MissionBlockedError } from "../../lib/missionApi.js";
+import { statusIndicatorFor } from "../../lib/statusIndicator.js";
 import { HazardList } from "./HazardList.js";
+import { WaypointRow } from "./WaypointRow.js";
 import styles from "./MissionWidget.module.css";
 
 const SEND_STATUS_LABEL: Record<string, string> = {
@@ -49,24 +45,13 @@ const SEND_NOTICE_MESSAGE: Record<SendNotice["status"], string> = {
 		"Sent, but part of the route has no charted ENC data — not verified safe, just unchecked:",
 };
 
-function sendIndicatorStatus(status: string): StatusIndicatorStatus {
-	switch (status) {
-		case "sending":
-			return StatusIndicatorStatus.active;
-		case "acknowledged":
-			return StatusIndicatorStatus.running;
-		case "timed_out":
-		case "not_connected":
-		case "mismatched":
-			return StatusIndicatorStatus.alarm;
-		default:
-			return StatusIndicatorStatus.inactive;
-	}
-}
-
-function inputValue(e: { target: EventTarget | null }): string {
-	return (e.target as { value?: string } | null)?.value ?? "";
-}
+const SEND_INDICATOR_STATUS: Partial<Record<string, StatusIndicatorStatus>> = {
+	sending: StatusIndicatorStatus.active,
+	acknowledged: StatusIndicatorStatus.running,
+	timed_out: StatusIndicatorStatus.alarm,
+	not_connected: StatusIndicatorStatus.alarm,
+	mismatched: StatusIndicatorStatus.alarm,
+};
 
 export function moveWaypointId(
 	waypoints: Waypoint[],
@@ -82,108 +67,6 @@ export function moveWaypointId(
 		if (i === target) return ids[index] ?? id;
 		return id;
 	});
-}
-
-const METERS_PER_NM = 1852;
-
-interface WaypointRowProps {
-	waypoint: Waypoint;
-	index: number;
-	total: number;
-	onMoveUp: () => void;
-	onMoveDown: () => void;
-	onDelete: () => void;
-	onSpeedCommit: (knots: number) => void;
-}
-
-function WaypointRow({
-	waypoint,
-	index,
-	total,
-	onMoveUp,
-	onMoveDown,
-	onDelete,
-	onSpeedCommit,
-}: WaypointRowProps) {
-	const [speedDraft, setSpeedDraft] = useState(String(waypoint.target_speed));
-	const speedInputRef = useRef<ObcNumberInputFieldElement | null>(null);
-
-	useEffect(() => {
-		setSpeedDraft(String(waypoint.target_speed));
-	}, [waypoint.target_speed]);
-
-	const commitSpeed = useCallback(() => {
-		const parsed = Number.parseFloat(speedDraft);
-		if (Number.isFinite(parsed) && parsed >= 0 && parsed !== waypoint.target_speed) {
-			onSpeedCommit(parsed);
-		} else {
-			setSpeedDraft(String(waypoint.target_speed));
-		}
-	}, [speedDraft, waypoint.target_speed, onSpeedCommit]);
-
-	// ObcNumberInputField's onBlur *prop* is unreliable here: the underlying Lit element defines
-	// its own private onBlur() method, and @lit/react's createComponent only special-cases props
-	// listed in its `events` map (just onInput for this component) -- anything else, including
-	// onBlur, falls through to a plain `node.onBlur = value` property assignment. That silently
-	// clobbers the Lit element's own onBlur method, and because the assignment happens on React's
-	// next commit (one tick behind Lit's own re-render triggered by typing), the listener Lit
-	// actually binds always reflects the *previous* keystroke's closure -- exactly the "one digit
-	// behind" bug reported. `blur` itself doesn't bubble out of the shadow root, but `focusout`
-	// does (it's composed), so attaching it directly via a ref sidesteps the wrapper entirely.
-	useEffect(() => {
-		const el = speedInputRef.current;
-		if (!el) return;
-		el.addEventListener("focusout", commitSpeed);
-		return () => {
-			el.removeEventListener("focusout", commitSpeed);
-		};
-	}, [commitSpeed]);
-
-	return (
-		<div className={styles.waypointRow}>
-			<div className={styles.waypointMeta}>
-				<span className={styles.sequenceBadge}>{index + 1}</span>
-				<span className={styles.coords}>
-					{waypoint.position.latitude.toFixed(5)}°,{" "}
-					{waypoint.position.longitude.toFixed(5)}°
-				</span>
-			</div>
-			<ObcNumberInputField
-				ref={speedInputRef}
-				size={ObcNumberInputFieldSize.Regular}
-				unit="kt"
-				value={speedDraft}
-				onInput={(e) => {
-					setSpeedDraft(inputValue(e));
-				}}
-			/>
-			<div className={styles.waypointActions}>
-				<ObcIconButton
-					variant={IconButtonVariant.flat}
-					aria-label="Move waypoint up"
-					disabled={index === 0}
-					onClick={onMoveUp}
-				>
-					<ObiArrowUpGoogle />
-				</ObcIconButton>
-				<ObcIconButton
-					variant={IconButtonVariant.flat}
-					aria-label="Move waypoint down"
-					disabled={index === total - 1}
-					onClick={onMoveDown}
-				>
-					<ObiArrowDownGoogle />
-				</ObcIconButton>
-				<ObcIconButton
-					variant={IconButtonVariant.flat}
-					aria-label="Delete waypoint"
-					onClick={onDelete}
-				>
-					<ObiWaypointDeleteIec />
-				</ObcIconButton>
-			</div>
-		</div>
-	);
 }
 
 export function MissionWidget() {
@@ -202,7 +85,7 @@ export function MissionWidget() {
 		sendActiveMission,
 	} = useMission();
 	const { legs } = useWaypointDraft();
-	const { missionSendStatus } = useBridgeData();
+	const sendStatus = useMissionSendStatus(activeMission?.id ?? null);
 
 	const [newMissionName, setNewMissionName] = useState("");
 	const [renameDraft, setRenameDraft] = useState("");
@@ -238,11 +121,6 @@ export function MissionWidget() {
 		}
 	}
 
-	const sendStatus =
-		activeMission && missionSendStatus?.mission_id === activeMission.id
-			? missionSendStatus
-			: null;
-
 	useEffect(() => {
 		setRenameDraft(activeMission?.name ?? "");
 	}, [activeMission?.id, activeMission?.name]);
@@ -271,11 +149,12 @@ export function MissionWidget() {
 	const missionOptions = missions.map((m) => ({ value: m.id, label: m.name }));
 
 	const waypointById = new Map((activeMission?.waypoints ?? []).map((w) => [w.id, w]));
-	const totalDistanceNm = legs.reduce((sum, leg) => sum + leg.distanceM / METERS_PER_NM, 0);
-	const totalDurationHours = legs.reduce((sum, leg) => {
-		const speedKt = waypointById.get(leg.toId)?.target_speed ?? 0;
-		return speedKt > 0 ? sum + leg.distanceM / METERS_PER_NM / speedKt : sum;
-	}, 0);
+	const { distanceNm: totalDistanceNm, hours: totalDurationHours } = accumulateRouteEta(
+		legs.map((leg) => ({
+			distanceM: leg.distanceM,
+			speedKt: waypointById.get(leg.toId)?.target_speed ?? 0,
+		})),
+	);
 
 	return (
 		<div className={styles.content}>
@@ -394,7 +273,12 @@ export function MissionWidget() {
 					</ObcProgressButton>
 					{sendStatus && (
 						<>
-							<ObcStatusIndicator status={sendIndicatorStatus(sendStatus.status)} />
+							<ObcStatusIndicator
+								status={statusIndicatorFor(
+									sendStatus.status,
+									SEND_INDICATOR_STATUS,
+								)}
+							/>
 							<span className={styles.sendStatus}>
 								{SEND_STATUS_LABEL[sendStatus.status] ?? sendStatus.status}
 							</span>
