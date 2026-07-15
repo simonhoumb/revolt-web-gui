@@ -358,9 +358,9 @@ def test_track_mission_sets_starting_state_and_total_count() -> None:
 	# so the tracked state must not claim active until broadcast_tracked_status confirms it.
 	client = RosBridgeClient(DEAD_URL, "simulation")
 	client.track_mission("mission-1", 3)
-	assert client._tracked_mission_id == "mission-1"
-	assert client._tracked_total_count == 3
-	assert client._tracked_state == "starting"
+	assert client._mission_tracker.tracked_mission_id == "mission-1"
+	assert client._mission_tracker.tracked_total_count == 3
+	assert client._mission_tracker.tracked_state == "starting"
 
 
 def test_tracked_mission_id_and_state_public_properties_reflect_current_tracking() -> None:
@@ -382,8 +382,8 @@ def test_untrack_mission_clears_tracking() -> None:
 	client = RosBridgeClient(DEAD_URL, "simulation")
 	client.track_mission("mission-1", 3)
 	client.untrack_mission()
-	assert client._tracked_mission_id is None
-	assert client._tracked_total_count == 0
+	assert client._mission_tracker.tracked_mission_id is None
+	assert client._mission_tracker.tracked_total_count == 0
 
 
 def test_waypoint_list_echo_broadcasts_execution_status_when_tracked() -> None:
@@ -459,7 +459,7 @@ def test_broadcast_tracked_status_updates_state_for_matching_mission() -> None:
 	assert msg["type"] == "mission_execution_status"
 	assert msg["state"] == "paused"
 	assert msg["total_count"] == 3
-	assert client._tracked_state == "paused"
+	assert client._mission_tracker.tracked_state == "paused"
 	client.unsubscribe(q)
 
 

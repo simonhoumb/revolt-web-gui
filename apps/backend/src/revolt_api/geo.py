@@ -17,6 +17,12 @@ _MIN_TURN_DEG = 2.0
 # Points sampled along each arc -- mirrors geo.ts's ARC_SEGMENTS.
 _ARC_SEGMENTS = 16
 
+# WGS84-equatorial-radius-based metres-per-degree-of-latitude approximation, used only by the
+# local Cartesian projection below -- deliberately not EARTH_RADIUS_M's mean-radius great-circle
+# value above, since that's a different (and for this flat-earth-over-a-small-area use, needlessly
+# more complex) approximation than what the simulation's own coordinate frame was built against.
+_METRES_PER_DEGREE_LAT = 111320.0
+
 
 def haversine_distance_m(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
 	d_lat = math.radians(b_lat - a_lat)
@@ -102,6 +108,28 @@ def compute_turn_arc(
 			destination_point(center[0], center[1], bearing_center_to_tangent_in + sweep, radius_m)
 		)
 	return points
+
+
+def latlon_to_local_cartesian(
+	lat: float, lon: float, origin_lat: float, origin_lon: float
+) -> tuple[float, float]:
+	"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North) relative to
+	origin_lat/origin_lon, using a flat-earth equirectangular approximation -- valid only over the
+	small area around a simulation's GNSS origin, unlike this module's great-circle
+	haversine/bearing/destination_point functions above. Used to translate outbound waypoints into
+	the simulation's own local coordinate frame. Inverse of local_cartesian_to_latlon."""
+	x = (lon - origin_lon) * _METRES_PER_DEGREE_LAT * math.cos(math.radians(origin_lat))
+	y = (lat - origin_lat) * _METRES_PER_DEGREE_LAT
+	return x, y
+
+
+def local_cartesian_to_latlon(
+	x_m: float, y_m: float, origin_lat: float, origin_lon: float
+) -> tuple[float, float]:
+	"""Inverse of latlon_to_local_cartesian."""
+	lat = origin_lat + y_m / _METRES_PER_DEGREE_LAT
+	lon = origin_lon + x_m / (_METRES_PER_DEGREE_LAT * math.cos(math.radians(origin_lat)))
+	return lat, lon
 
 
 @dataclass(frozen=True)
