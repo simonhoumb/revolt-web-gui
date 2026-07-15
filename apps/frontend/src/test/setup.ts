@@ -10,6 +10,25 @@ global.ResizeObserver = class ResizeObserver {
 	disconnect = () => undefined;
 };
 
+// jsdom does not implement IntersectionObserver either; ObcAlertMenu's internal
+// obc-alert-list building block creates one in connectedCallback purely to track whether the
+// panel is scrolled into view, which none of this app's tests care about -- a no-op observer
+// that never fires an entry is a faithful enough stand-in.
+global.IntersectionObserver = class IntersectionObserver {
+	observe = () => undefined;
+	unobserve = () => undefined;
+	disconnect = () => undefined;
+	takeRecords = () => [];
+	root = null;
+	rootMargin = "";
+	thresholds: number[] = [];
+};
+
+// jsdom does not implement Element.checkVisibility either, which the same obc-alert-list
+// building block guards a mutation-observer callback with. lib.dom types this as always present,
+// so the usual feature-detection guard is unnecessary here -- just stub it unconditionally.
+Element.prototype.checkVisibility = () => true;
+
 // jsdom's fetch (undici) requires an absolute URL, so a component that fetches a relative
 // endpoint on mount (e.g. MissionContext's loadMissions()) throws an unhandled rejection in any
 // test that mounts the full App tree without its own mock. Stub a benign empty-array response by
