@@ -14,9 +14,9 @@ async def camera_stream(camera_id: str, bridge: RosBridgeClient = Depends(get_br
 		boundary = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
 		last_counter = -1
 		while True:
-			counter = bridge._camera_frame_counters.get(camera_id, 0)
+			counter = bridge.get_camera_frame_count(camera_id)
 			if counter != last_counter:
-				frame = bridge.latest_camera_frames.get(camera_id)
+				frame = bridge.get_camera_frame(camera_id)
 				if frame:
 					yield boundary + frame + b"\r\n"
 					last_counter = counter

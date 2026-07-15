@@ -39,13 +39,29 @@ def _latlon_to_cartesian(lat: float, lon: float) -> tuple[float, float]:
 
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
-	app.state.bridge = MagicMock(spec=RosBridgeClient)
-	app.state.bridge.connected = False
-	app.state.bridge.latlon_to_cartesian.side_effect = _latlon_to_cartesian
+	bridge = app.state.bridge = MagicMock(spec=RosBridgeClient)
+	bridge.connected = False
+	bridge.latlon_to_cartesian.side_effect = _latlon_to_cartesian
 	# Real dict, not a MagicMock's auto-generated dunder methods -- resume_cache needs actual
 	# get/pop/item-assignment semantics across calls within a test, which a spec'd MagicMock's
-	# independent per-call magic methods don't provide.
-	app.state.bridge.resume_cache = {}
+	# independent per-call magic methods don't provide. The accessor methods below are wired with
+	# real side effects (rather than left as auto-mocked stubs returning MagicMock()) so
+	# routers/mission.py's calls through RosBridgeClient's public resume-cache API actually
+	# observe and mutate this dict, matching the real implementation in bridge/client.py.
+	bridge.resume_cache = {}
+	bridge.get_resume_point.side_effect = bridge.resume_cache.get
+	bridge.set_resume_point.side_effect = bridge.resume_cache.__setitem__
+	bridge.pop_resume_point.side_effect = lambda mission_id: bridge.resume_cache.pop(
+		mission_id, None
+	)
+	bridge.has_resume_points.side_effect = lambda: bool(bridge.resume_cache)
+
+	def _clear_resume_cache() -> list[str]:
+		invalidated = list(bridge.resume_cache)
+		bridge.resume_cache.clear()
+		return invalidated
+
+	bridge.clear_resume_cache.side_effect = _clear_resume_cache
 	app.state.bridge.latest_waypoint_list = None
 	app.state.bridge.target = "physical"
 	# None (nothing tracked) is the correct default -- individual tests that need to simulate a

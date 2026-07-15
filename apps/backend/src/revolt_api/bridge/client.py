@@ -268,6 +268,37 @@ class RosBridgeClient:
 			)
 		)
 
+	def get_resume_point(self, mission_id: str) -> list[SimWaypoint] | None:
+		"""The remaining queue snapshotted at pause time for this mission, if any."""
+		return self.resume_cache.get(mission_id)
+
+	def set_resume_point(self, mission_id: str, remaining: list[SimWaypoint]) -> None:
+		"""Snapshot the vessel's actual remaining queue as a resume point. Called by pause."""
+		self.resume_cache[mission_id] = remaining
+
+	def pop_resume_point(self, mission_id: str) -> list[SimWaypoint] | None:
+		"""Consume and discard this mission's resume point, if any. Called on a successful
+		resume-start (the snapshot has now been used) and on terminate (no resume should
+		survive an abort)."""
+		return self.resume_cache.pop(mission_id, None)
+
+	def has_resume_points(self) -> bool:
+		return bool(self.resume_cache)
+
+	def clear_resume_cache(self) -> list[str]:
+		"""Discard every resume point and return the mission ids that were invalidated. Called
+		when a publish to /update_waypoint_list replaces the vessel's entire queue, since any
+		previously-paused mission's snapshot no longer reflects reality."""
+		invalidated = list(self.resume_cache)
+		self.resume_cache.clear()
+		return invalidated
+
+	def get_camera_frame_count(self, camera_id: str) -> int:
+		return self._camera_frame_counters.get(camera_id, 0)
+
+	def get_camera_frame(self, camera_id: str) -> bytes | None:
+		return self.latest_camera_frames.get(camera_id)
+
 	def latlon_to_cartesian(self, lat: float, lon: float) -> tuple[float, float]:
 		"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North). Inverse of
 		_cartesian_to_latlon, used when serialising outbound waypoints for the sim."""

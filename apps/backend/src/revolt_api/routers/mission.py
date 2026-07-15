@@ -19,7 +19,7 @@ from revolt_api.bridge.waypoint_codec import (
 )
 from revolt_api.config import settings
 from revolt_api.database import get_db
-from revolt_api.enc_validation import evaluate_route_hazards
+from revolt_api.enc_validation import ValidationResult, evaluate_route_hazards
 from revolt_api.models.mission import Mission, MissionStatus, Waypoint
 from revolt_api.schemas.mission import (
 	MissionCreate,
@@ -50,6 +50,15 @@ async def _get_mission_or_404(db: AsyncSession, mission_id: uuid.UUID) -> Missio
 	if mission is None:
 		raise HTTPException(status_code=404, detail="Mission not found")
 	return mission
+
+
+async def _get_waypoint_or_404(
+	db: AsyncSession, mission_id: uuid.UUID, waypoint_id: uuid.UUID
+) -> Waypoint:
+	waypoint = await db.get(Waypoint, waypoint_id)
+	if waypoint is None or waypoint.mission_id != mission_id:
+		raise HTTPException(status_code=404, detail="Waypoint not found")
+	return waypoint
 
 
 async def _get_loaded_mission_id(db: AsyncSession) -> uuid.UUID | None:
@@ -151,6 +160,52 @@ def _invalidate_load_if_edited(mission: Mission) -> None:
 	if mission.status in _EDITABLE_WITHOUT_VESSEL_IMPACT and mission.last_sent_at is not None:
 		mission.last_sent_at = None
 		mission.last_send_status = None
+
+
+async def _validate_mission_hazards(db: AsyncSession, mission: Mission) -> ValidationResult:
+	"""Run the Phase 2 authoritative ENC hazard check and persist the result onto the mission.
+	Shared by validate_mission, send_mission, and start_mission -- all three must re-run this
+	fresh rather than trusting a stale mission.last_validation_status."""
+	result = await evaluate_route_hazards(
+		db, mission.waypoints, settings.safety_margin_m, settings.safety_contour_m
+	)
+	mission.last_validated_at = datetime.now(UTC)
+	mission.last_validation_status = result.status
+	await db.commit()
+	return result
+
+
+async def _reject_if_hazards_blocked(
+	db: AsyncSession,
+	session_id: str,
+	mission_id: uuid.UUID,
+	validation: ValidationResult,
+	*,
+	action: str,
+	verb: str,
+) -> None:
+	"""Refuse a send/start whose route was found blocked -- shared by send_mission and
+	start_mission, the two endpoints that actually publish to the vessel."""
+	if validation.status != "blocked":
+		return
+	await log_action(
+		db,
+		session_id=session_id,
+		action=f"mission.{action}.blocked",
+		severity="warning",
+		params={
+			"mission_id": str(mission_id),
+			"hazards": [h.model_dump() for h in validation.hazards],
+		},
+	)
+	raise HTTPException(
+		status_code=409,
+		detail={
+			"message": f"Route crosses a charted hazard and cannot be {verb}.",
+			"hazards": [h.model_dump() for h in validation.hazards],
+			"reason": "hazard_blocked",
+		},
+	)
 
 
 def _heading_rad(heading_deg: float | None) -> float | None:
@@ -291,9 +346,7 @@ async def update_waypoint(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Waypoint:
-	waypoint = await db.get(Waypoint, waypoint_id)
-	if waypoint is None or waypoint.mission_id != mission_id:
-		raise HTTPException(status_code=404, detail="Waypoint not found")
+	waypoint = await _get_waypoint_or_404(db, mission_id, waypoint_id)
 	if (body.latitude is None) != (body.longitude is None):
 		raise HTTPException(
 			status_code=400, detail="latitude and longitude must be provided together"
@@ -329,9 +382,7 @@ async def delete_waypoint(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> None:
-	waypoint = await db.get(Waypoint, waypoint_id)
-	if waypoint is None or waypoint.mission_id != mission_id:
-		raise HTTPException(status_code=404, detail="Waypoint not found")
+	waypoint = await _get_waypoint_or_404(db, mission_id, waypoint_id)
 	await db.delete(waypoint)
 	await db.flush()
 	remaining = (
@@ -395,13 +446,7 @@ async def validate_mission(
 	send at all, not as the only gate.
 	"""
 	mission = await _get_mission_or_404(db, mission_id)
-	result = await evaluate_route_hazards(
-		db, mission.waypoints, settings.safety_margin_m, settings.safety_contour_m
-	)
-	checked_at = datetime.now(UTC)
-	mission.last_validated_at = checked_at
-	mission.last_validation_status = result.status
-	await db.commit()
+	result = await _validate_mission_hazards(db, mission)
 	await log_action(
 		db,
 		session_id=session_id,
@@ -413,7 +458,7 @@ async def validate_mission(
 		},
 	)
 	return MissionValidationResult(
-		status=result.status, hazards=result.hazards, checked_at=checked_at
+		status=result.status, hazards=result.hazards, checked_at=mission.last_validated_at
 	)
 
 
@@ -442,31 +487,10 @@ async def send_mission(
 	mission = await _get_mission_or_404(db, mission_id)
 	waypoints = mission.waypoints
 
-	validation = await evaluate_route_hazards(
-		db, waypoints, settings.safety_margin_m, settings.safety_contour_m
+	validation = await _validate_mission_hazards(db, mission)
+	await _reject_if_hazards_blocked(
+		db, session_id, mission_id, validation, action="send", verb="sent"
 	)
-	mission.last_validated_at = datetime.now(UTC)
-	mission.last_validation_status = validation.status
-	await db.commit()
-	if validation.status == "blocked":
-		await log_action(
-			db,
-			session_id=session_id,
-			action="mission.send.blocked",
-			severity="warning",
-			params={
-				"mission_id": str(mission_id),
-				"hazards": [h.model_dump() for h in validation.hazards],
-			},
-		)
-		raise HTTPException(
-			status_code=409,
-			detail={
-				"message": "Route crosses a charted hazard and cannot be sent.",
-				"hazards": [h.model_dump() for h in validation.hazards],
-				"reason": "hazard_blocked",
-			},
-		)
 
 	_reject_if_superseding_mission(bridge, mission_id)
 
@@ -478,12 +502,11 @@ async def send_mission(
 		"/update_waypoint_list", "custom_msgs/WaypointList", ros_msg, expected
 	)
 
-	if status != "not_connected" and bridge.resume_cache:
+	if status != "not_connected" and bridge.has_resume_points():
 		# Any publish to /update_waypoint_list replaces the vessel's entire queue -- whatever any
 		# previously-paused mission's resume snapshot remembered (including this same mission's
 		# own stale one, if re-sending after edits) no longer reflects reality.
-		invalidated = list(bridge.resume_cache)
-		bridge.resume_cache.clear()
+		invalidated = bridge.clear_resume_cache()
 		await log_action(
 			db,
 			session_id=session_id,
@@ -550,34 +573,13 @@ async def start_mission(
 	_reject_invalid_transition(mission, _START_ALLOWED_STATUSES, "start")
 	waypoints = mission.waypoints
 
-	validation = await evaluate_route_hazards(
-		db, waypoints, settings.safety_margin_m, settings.safety_contour_m
+	validation = await _validate_mission_hazards(db, mission)
+	await _reject_if_hazards_blocked(
+		db, session_id, mission_id, validation, action="start", verb="started"
 	)
-	mission.last_validated_at = datetime.now(UTC)
-	mission.last_validation_status = validation.status
-	await db.commit()
-	if validation.status == "blocked":
-		await log_action(
-			db,
-			session_id=session_id,
-			action="mission.start.blocked",
-			severity="warning",
-			params={
-				"mission_id": str(mission_id),
-				"hazards": [h.model_dump() for h in validation.hazards],
-			},
-		)
-		raise HTTPException(
-			status_code=409,
-			detail={
-				"message": "Route crosses a charted hazard and cannot be started.",
-				"hazards": [h.model_dump() for h in validation.hazards],
-				"reason": "hazard_blocked",
-			},
-		)
 
 	resume_key = str(mission_id)
-	resumed = bridge.resume_cache.get(resume_key)
+	resumed = bridge.get_resume_point(resume_key)
 	autonomy_engaged = False
 	autonomy_note: str | None = None
 
@@ -603,7 +605,7 @@ async def start_mission(
 		)
 		succeeded = status == "acknowledged"
 		if succeeded:
-			bridge.resume_cache.pop(resume_key, None)
+			bridge.pop_resume_point(resume_key)
 	else:
 		# Fresh start: the waypoints must already be loaded via a prior /send -- nothing is
 		# published here, so there's no ack to gate on; the loaded-check is the only precondition.
@@ -684,7 +686,7 @@ async def pause_mission(
 
 	remaining = bridge.latest_waypoint_list
 	if remaining:
-		bridge.resume_cache[resume_key] = remaining
+		bridge.set_resume_point(resume_key, remaining)
 	else:
 		await log_action(
 			db,
@@ -742,7 +744,7 @@ async def terminate_mission(
 	)
 	resume_key = str(mission_id)
 	_reject_if_stale_mission(bridge, mission_id)
-	bridge.resume_cache.pop(resume_key, None)
+	bridge.pop_resume_point(resume_key)
 
 	status = await bridge.publish_and_await_ack(
 		"/update_waypoint_list", "custom_msgs/WaypointList", {"waypoints": []}, []
