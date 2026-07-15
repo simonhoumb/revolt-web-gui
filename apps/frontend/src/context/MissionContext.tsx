@@ -8,6 +8,7 @@ import {
 	type ReactNode,
 } from "react";
 import type {
+	HazardSummary,
 	Mission,
 	MissionExecutionResult,
 	MissionSendResult,
@@ -15,11 +16,6 @@ import type {
 } from "@revolt/shared-types";
 import { missionApi } from "../lib/missionApi.js";
 import { useBridgeData } from "./BridgeDataContext.js";
-
-export interface HazardSummary {
-	status: "safe" | "warning" | "no_data" | "blocked";
-	description: string;
-}
 
 interface MissionContextValue {
 	missions: Mission[];

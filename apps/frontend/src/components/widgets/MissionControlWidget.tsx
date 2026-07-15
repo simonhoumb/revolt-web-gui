@@ -17,18 +17,18 @@ import { ObiMediaPause } from "@oicl/openbridge-webcomponents-react/icons/icon-m
 import { ObiMediaStop } from "@oicl/openbridge-webcomponents-react/icons/icon-media-stop.js";
 import { useBridgeData } from "../../context/BridgeDataContext.js";
 import { useMission } from "../../context/MissionContext.js";
-import { formatDuration } from "../../lib/format.js";
+import { formatDuration, formatLatLon } from "../../lib/format.js";
 import { haversineDistanceM } from "../../lib/geo.js";
+import { accumulateRouteEta, type DistanceSpeedLeg, type RouteEta } from "../../lib/missionMath.js";
 import {
 	MissionBlockedError,
 	MissionConflictError,
 	MissionNotLoadedError,
 } from "../../lib/missionApi.js";
+import { statusIndicatorFor } from "../../lib/statusIndicator.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 import { HazardList } from "./HazardList.js";
 import styles from "./MissionControlWidget.module.css";
-
-const METERS_PER_NM = 1852;
 
 const STATE_LABEL: Record<MissionExecutionState, string> = {
 	starting: "Starting…",
@@ -40,22 +40,13 @@ const STATE_LABEL: Record<MissionExecutionState, string> = {
 	completed: "Completed",
 };
 
-function stateIndicatorStatus(state: MissionExecutionState): StatusIndicatorStatus {
-	switch (state) {
-		case "starting":
-		case "active":
-			return StatusIndicatorStatus.active;
-		case "completed":
-			return StatusIndicatorStatus.running;
-		case "terminating":
-		case "aborted":
-			return StatusIndicatorStatus.alarm;
-		case "paused":
-		case "pausing":
-		default:
-			return StatusIndicatorStatus.inactive;
-	}
-}
+const EXECUTION_INDICATOR_STATUS: Partial<Record<MissionExecutionState, StatusIndicatorStatus>> = {
+	starting: StatusIndicatorStatus.active,
+	active: StatusIndicatorStatus.active,
+	completed: StatusIndicatorStatus.running,
+	terminating: StatusIndicatorStatus.alarm,
+	aborted: StatusIndicatorStatus.alarm,
+};
 
 // Falls back to persisted Mission.status (draft/active/paused/completed/aborted) only until the
 // vessel's first live execution status arrives for this mission (e.g. right after page load,
@@ -91,46 +82,39 @@ function fallbackExecutionState(missionStatus: MissionStatus): MissionExecutionS
 	}
 }
 
-interface RemainingEta {
-	distanceNm: number;
-	hours: number;
-}
-
 // Best-effort dead reckoning, not authoritative: sums straight-line legs from own-ship position
 // (when a GNSS fix is available) through the remaining waypoints in sequence order, dividing each
 // leg by its target waypoint's speed -- the same distance/speed/duration idiom MissionWidget uses
-// for its planning-time ETE, just starting from wherever the vessel currently is instead of
-// waypoint zero.
+// for its planning-time ETE (see lib/missionMath.ts's accumulateRouteEta), just starting from
+// wherever the vessel currently is instead of waypoint zero.
 function computeRemainingEta(
 	waypoints: Waypoint[],
 	currentSeq: number | null,
 	ownship: { lat: number; lon: number } | null,
-): RemainingEta | null {
+): RouteEta | null {
 	if (currentSeq === null) return null;
 	const remaining = waypoints
 		.filter((w) => w.sequence_number >= currentSeq)
 		.sort((a, b) => a.sequence_number - b.sequence_number);
 	if (remaining.length === 0) return null;
 
-	let distanceM = 0;
-	let hours = 0;
+	const legs: DistanceSpeedLeg[] = [];
 	let prev = ownship;
 	for (const wp of remaining) {
 		if (prev) {
-			const legM = haversineDistanceM(
-				prev.lat,
-				prev.lon,
-				wp.position.latitude,
-				wp.position.longitude,
-			);
-			distanceM += legM;
-			if (wp.target_speed > 0) {
-				hours += legM / METERS_PER_NM / wp.target_speed;
-			}
+			legs.push({
+				distanceM: haversineDistanceM(
+					prev.lat,
+					prev.lon,
+					wp.position.latitude,
+					wp.position.longitude,
+				),
+				speedKt: wp.target_speed,
+			});
 		}
 		prev = { lat: wp.position.latitude, lon: wp.position.longitude };
 	}
-	return { distanceNm: distanceM / METERS_PER_NM, hours };
+	return accumulateRouteEta(legs);
 }
 
 type DialogKind = "start" | "pause" | "terminate" | null;
@@ -274,8 +258,9 @@ export function MissionControlWidget() {
 			<div className={styles.loadedHeader}>{"Current Mission: " + loadedMission.name}</div>
 			<div className={styles.statusRow}>
 				<ObcStatusIndicator
-					status={stateIndicatorStatus(
+					status={statusIndicatorFor(
 						liveStatus ? liveStatus.state : fallbackExecutionState(missionStatus),
+						EXECUTION_INDICATOR_STATUS,
 					)}
 				/>
 				<span className={styles.statusLabel}>
@@ -289,7 +274,7 @@ export function MissionControlWidget() {
 						<span className={styles.waypointLabel}>Current waypoint</span>
 						<span>
 							{currentWaypoint
-								? `#${String(currentWaypoint.sequence_number + 1)} — ${currentWaypoint.position.latitude.toFixed(5)}°, ${currentWaypoint.position.longitude.toFixed(5)}°`
+								? `#${String(currentWaypoint.sequence_number + 1)} — ${formatLatLon(currentWaypoint.position.latitude, currentWaypoint.position.longitude)}`
 								: "—"}
 						</span>
 					</div>

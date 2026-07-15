@@ -1,6 +1,6 @@
 import type { Map as MapLibreMap, MapGeoJSONFeature, PointLike } from "maplibre-gl";
+import type { HazardSummary } from "@revolt/shared-types";
 import type { LegPositions } from "./geo.js";
-import type { HazardSummary } from "../context/MissionContext.js";
 
 // "lndare" (land area) was missing here from the start -- the check only ever inferred hazard
 // from depare (water depth)/resare/obstrn/uwtroc presence, so a waypoint placed on land was never

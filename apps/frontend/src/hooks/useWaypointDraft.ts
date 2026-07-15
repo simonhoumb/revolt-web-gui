@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import type { Waypoint } from "@revolt/shared-types";
-import { useMission, type HazardSummary } from "../context/MissionContext.js";
+import type { HazardSummary, Waypoint } from "@revolt/shared-types";
+import { useMission } from "../context/MissionContext.js";
 import { computeLegPositions, haversineDistanceM, bearingDeg } from "../lib/geo.js";
 
 export interface Leg {

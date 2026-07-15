@@ -20,10 +20,11 @@ import "@oicl/openbridge-webcomponents/dist/icons/icon-own-ship-iec.js";
 import "@oicl/openbridge-webcomponents/dist/icons/icon-waypoint-optional-iec.js";
 import "@oicl/openbridge-webcomponents/dist/icons/icon-waypoint-active-iec.js";
 import "@oicl/openbridge-webcomponents/dist/icons/icon-waypoint-active-filled.js";
+import type { HazardSummary } from "@revolt/shared-types";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack, type TrackPoint } from "../../hooks/useVesselTrack.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
-import { useMission, type HazardSummary } from "../../context/MissionContext.js";
+import { useMission } from "../../context/MissionContext.js";
 import {
 	computeLegPositions,
 	computeTurnArcs,
