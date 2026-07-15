@@ -126,4 +126,30 @@ export interface MissionExecutionResult {
 	waypoint_count: number;
 }
 
+export interface RosCommandParamMeta {
+	name: string;
+	label: string;
+	kind: "topic_select" | "text";
+	required: boolean;
+	// Populated only for kind="topic_select", resolved server-side per the live bridge target --
+	// the frontend never keeps its own copy of the backend's topic allow-lists.
+	allowed_values: string[] | null;
+}
+
+export interface RosCommandMeta {
+	command_id: string;
+	label: string;
+	description: string;
+	params: RosCommandParamMeta[];
+}
+
+export interface RosCommandResult {
+	command_id: string;
+	ok: boolean;
+	// "not_connected" | "timed_out" | "service_call_failed" | "no_data_yet" | null
+	error: string | null;
+	result: Record<string, unknown> | null;
+	executed_at: string;
+}
+
 export * from "./bridge.js";

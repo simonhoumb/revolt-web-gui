@@ -1,0 +1,111 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+	min-height: 0;
+	padding: 4px;
+}
+
+.loadError {
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--alarm-color, #d32f2f);
+}
+
+.promptRow {
+	position: relative;
+}
+
+.promptRow > obc-context-menu-input {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	z-index: 1;
+}
+
+.selectedCommand {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px 8px;
+	border: 1px solid var(--border-divider-color, #271b10);
+	border-radius: 4px;
+	background: var(--container-section-color, #271b10);
+}
+
+.selectedCommandHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.selectedCommandLabel {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.selectedCommandDescription {
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.history {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.emptyState {
+	font-size: 0.8rem;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+}
+
+.historyEntry {
+	padding: 6px 8px;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.historyEntryFailed {
+	padding: 6px 8px;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+	border-left: 2px solid var(--alarm-color, #d32f2f);
+}
+
+.historyHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.historyCommand {
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--element-active-color, #eaa75e);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.historyTimestamp {
+	font-size: 0.7rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-inactive-color, #9c6a34);
+	flex-shrink: 0;
+}
+
+.historyBody {
+	margin: 4px 0 0;
+	font-size: 0.75rem;
+	font-family: monospace;
+	white-space: pre-wrap;
+	word-break: break-word;
+}

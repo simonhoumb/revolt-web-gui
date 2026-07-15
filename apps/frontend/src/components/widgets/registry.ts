@@ -8,6 +8,7 @@ import { CameraWidget } from "./CameraWidget.js";
 import { MapWidget } from "./MapWidget.js";
 import { MissionWidget } from "./MissionWidget.js";
 import { MissionControlWidget } from "./MissionControlWidget.js";
+import { RosCommandWidget } from "./RosCommandWidget.js";
 import { ObiBatteryHorizontal100 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-100.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -17,6 +18,7 @@ import { ObiCamera } from "@oicl/openbridge-webcomponents-react/icons/icon-camer
 import { ObiChart } from "@oicl/openbridge-webcomponents-react/icons/icon-chart.js";
 import { ObiNavigationRoute } from "@oicl/openbridge-webcomponents-react/icons/icon-navigation-route.js";
 import { ObiMonitoringRoute } from "@oicl/openbridge-webcomponents-react/icons/icon-monitoring-route.js";
+import { ObiLogEditGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-log-edit-google.js";
 
 export type WidgetId =
 	| "battery"
@@ -27,7 +29,8 @@ export type WidgetId =
 	| "camera"
 	| "map"
 	| "mission"
-	| "mission_control";
+	| "mission_control"
+	| "ros_commands";
 
 export interface TilePosition {
 	x: number;
@@ -167,6 +170,19 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		// See camera's note above -- the curated layout is wider (4) than defaultW (3).
 		defaultPosition: { x: 6, y: 20, w: 4, h: 6 },
 	},
+	ros_commands: {
+		id: "ros_commands",
+		label: "ROS Commands",
+		component: RosCommandWidget,
+		icon: ObiLogEditGoogle,
+		defaultW: 4,
+		defaultH: 8,
+		minW: 3,
+		minH: 4,
+		defaultPosition: { x: 0, y: 20, w: 4, h: 8 },
+		// No instrumentsOnlyPosition -- an operator/debug tool, not an at-a-glance instrument,
+		// same as map/mission/mission_control.
+	},
 };
 
 export const ALL_WIDGET_IDS: WidgetId[] = [
@@ -179,4 +195,5 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"map",
 	"mission",
 	"mission_control",
+	"ros_commands",
 ];

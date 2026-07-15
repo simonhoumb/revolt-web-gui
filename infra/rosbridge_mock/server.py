@@ -4,6 +4,10 @@ Emulates a subset of rosbridge_suite sufficient for the backend bridge client:
 - Accepts subscribe frames and starts emitting fake telemetry for each subscribed topic
 - Accepts publish frames (logs them, takes no further action)
 - Sends realistic values at rates matching real hardware
+- Accepts call_service frames for a fake rosapi (Feature 16, ROS2 command execution): this is a
+  hand-rolled server, not real rosbridge_suite, so rosapi isn't available for free the way it
+  would be against a real vessel/simulation rosbridge -- these handlers exist purely so
+  RosCommandWidget and the backend's call_service path have something to talk to locally.
 """
 
 import asyncio
@@ -98,6 +102,65 @@ INTERVALS_SIMULATION: dict[str, float] = {
 INTERVALS = (
     INTERVALS_SIMULATION if BRIDGE_TARGET == "simulation" else INTERVALS_PHYSICAL
 )
+
+# Message types per topic, mirroring apps/backend/src/revolt_api/bridge/protocol.py's TopicSpec
+# entries -- kept as a plain dict here since this script is standalone (runs in its own
+# container, not importing the backend package) and only needs the type string, not the full spec.
+TOPIC_TYPES_PHYSICAL: dict[str, str] = {
+    "/arduino/stern/battery_voltage": "std_msgs/Float32",
+    "/arduino/stern/port/current": "std_msgs/Int16",
+    "/arduino/stern/starboard/current": "std_msgs/Int16",
+    "/arduino/bow/current": "std_msgs/Int16",
+    "/arduino/stern/dht22/temperature": "std_msgs/Float32",
+    "/arduino/stern/dht22/humidity": "std_msgs/Float32",
+    "/arduino/bow/dht22/temperature": "std_msgs/Float32",
+    "/arduino/bow/dht22/humidity": "std_msgs/Float32",
+    "/arduino/stern/emergency_stop_status": "std_msgs/UInt16",
+    "/arduino/bow/linear_actuator_retract_state": "std_msgs/UInt16",
+    "/control_mode": "std_msgs/UInt8",
+    "/fix": "sensor_msgs/NavSatFix",
+    "/vel": "geometry_msgs/TwistStamped",
+    "/heading": "geometry_msgs/QuaternionStamped",
+    "/camera/camera/color/image_raw/compressed": "sensor_msgs/CompressedImage",
+    "/scan": "sensor_msgs/LaserScan",
+}
+TOPIC_TYPES_SIMULATION: dict[str, str] = {
+    "/revolt/sim/stc/position/hull": "geometry_msgs/PoseStamped",
+    "/revolt/sim/stc/position/velocity": "geometry_msgs/Twist",
+    "/revolt/sim/stc/gnss/antenna1/position": "geometry_msgs/PointStamped",
+    "/revolt/sim/stc/gnss/antenna2/position": "geometry_msgs/PointStamped",
+    "/revolt/sim/stc/gnss/velocity_vector": "std_msgs/Float32MultiArray",
+    "/revolt/sim/stc/imu/data": "geometry_msgs/Twist",
+    "/thruster/bow": "std_msgs/Float32MultiArray",
+    "/thruster/port": "std_msgs/Float32MultiArray",
+    "/thruster/starboard": "std_msgs/Float32MultiArray",
+    "/waypoint_list": "custom_msgs/WaypointList",
+}
+TOPIC_TYPES = TOPIC_TYPES_SIMULATION if BRIDGE_TARGET == "simulation" else TOPIC_TYPES_PHYSICAL
+
+# Fake ROS graph state for the rosapi call_service handlers below -- not derived from anything
+# real, just enough shape for RosCommandWidget's introspection commands to have data to show.
+FAKE_NODE_DETAILS: dict[str, dict[str, list[str]]] = {
+    "/waypoint_switcher_node": {
+        "subscribing": ["/update_waypoint_list"],
+        "publishing": ["/waypoint_list"],
+        "services": ["/waypoint_switcher_node/get_parameters"],
+    },
+    "/los_guidance_node": {
+        "subscribing": ["/waypoint_list", "/fix", "/heading"],
+        "publishing": ["/control_mode"],
+        "services": ["/los_guidance_node/get_parameters"],
+    },
+    "/rosbridge_websocket": {
+        "subscribing": [],
+        "publishing": [],
+        "services": ["/rosapi/topics", "/rosapi/nodes", "/rosapi/services"],
+    },
+}
+FAKE_PARAMS: dict[str, str] = {
+    "/waypoint_switcher_node/default_switch_radius": "5.0",
+    "/los_guidance_node/lookahead_distance": "10.0",
+}
 
 _start_time = time.time()
 
@@ -430,6 +493,33 @@ async def _auto_pop_waypoints(ws: ServerConnection, interval_s: float = 8.0) -> 
             return
 
 
+def _handle_rosapi_call(service: str, args: dict) -> tuple[dict, bool]:
+    """Fake rosapi service handlers backing Feature 16's introspection commands. Returns
+    (values, result) matching the call_service response shape (op=service_response)."""
+    match service:
+        case "/rosapi/topics":
+            topics = list(TOPIC_TYPES.keys())
+            return {"topics": topics, "types": [TOPIC_TYPES[t] for t in topics]}, True
+        case "/rosapi/nodes":
+            return {"nodes": list(FAKE_NODE_DETAILS.keys())}, True
+        case "/rosapi/services":
+            services = sorted({s for node in FAKE_NODE_DETAILS.values() for s in node["services"]})
+            return {"services": services}, True
+        case "/rosapi/node_details":
+            node = args.get("node", "")
+            details = FAKE_NODE_DETAILS.get(node)
+            if details is None:
+                return {"subscribing": [], "publishing": [], "services": []}, False
+            return dict(details), True
+        case "/rosapi/get_param":
+            name = args.get("name", "")
+            if name in FAKE_PARAMS:
+                return {"value": FAKE_PARAMS[name], "successful": True, "reason": ""}, True
+            return {"value": "", "successful": False, "reason": "parameter not set"}, True
+        case _:
+            return {}, False
+
+
 async def _handle(ws: ServerConnection) -> None:
     log.info("client connected: %s", ws.remote_address)
     tasks: list[asyncio.Task] = []
@@ -471,6 +561,22 @@ async def _handle(ws: ServerConnection) -> None:
                         name="echo:/waypoint_list",
                     )
                     tasks.append(task)
+
+            elif op == "call_service":
+                service = frame.get("service", "")
+                values, result = _handle_rosapi_call(service, frame.get("args") or {})
+                log.info("call_service %s -> result=%s", service, result)
+                await ws.send(
+                    json.dumps(
+                        {
+                            "op": "service_response",
+                            "id": frame.get("id", ""),
+                            "service": service,
+                            "values": values,
+                            "result": result,
+                        }
+                    )
+                )
 
     except Exception:
         pass
