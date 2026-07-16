@@ -9,7 +9,7 @@ import { MapWidget } from "./MapWidget.js";
 import { MissionWidget } from "./MissionWidget.js";
 import { MissionControlWidget } from "./MissionControlWidget.js";
 import { RosCommandWidget } from "./RosCommandWidget.js";
-import { ObiBatteryHorizontal100 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-100.js";
+import { ObiBatteryHorizontal75 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-75.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
 import { ObiCellFull } from "@oicl/openbridge-webcomponents-react/icons/icon-cell-full.js";
@@ -65,7 +65,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		id: "battery",
 		label: "Battery",
 		component: BatteryWidget,
-		icon: ObiBatteryHorizontal100,
+		icon: ObiBatteryHorizontal75,
 		defaultW: 3,
 		defaultH: 5,
 		minW: 2,
