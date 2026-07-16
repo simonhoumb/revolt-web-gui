@@ -178,7 +178,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultW: 4,
 		defaultH: 8,
 		minW: 3,
-		minH: 4,
+		minH: 5,
 		defaultPosition: { x: 0, y: 20, w: 4, h: 8 },
 		// No instrumentsOnlyPosition -- an operator/debug tool, not an at-a-glance instrument,
 		// same as map/mission/mission_control.
