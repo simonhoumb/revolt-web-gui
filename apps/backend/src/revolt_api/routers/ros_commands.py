@@ -17,10 +17,10 @@ async def _session_id(x_session_id: str | None = Header(default=None)) -> str:
 async def list_ros_commands(
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> list[RosCommandMeta]:
-	"""The allow-listed introspection command registry, with topic_select params' allowed
-	values resolved against the live bridge target -- see ros_command_service.describe_commands
+	"""The allow-listed introspection command registry, with topic_select/param_select params'
+	allowed values resolved against the live bridge -- see ros_command_service.describe_commands
 	for the full rationale."""
-	return ros_command_service.describe_commands(bridge.target)
+	return await ros_command_service.describe_commands(bridge)
 
 
 @router.post("/ros-commands/{command_id}", response_model=RosCommandResult)

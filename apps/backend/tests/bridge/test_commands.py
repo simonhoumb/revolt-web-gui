@@ -44,6 +44,15 @@ def test_node_details_has_a_required_text_node_param() -> None:
 	assert param.kind == "text"
 
 
+def test_get_param_has_a_required_param_select_name_param() -> None:
+	spec = COMMANDS["get_param"]
+	assert len(spec.params) == 1
+	param = spec.params[0]
+	assert param.name == "name"
+	assert param.kind == "param_select"
+	assert param.required is True
+
+
 def test_list_commands_have_no_params() -> None:
-	for command_id in ("list_topics", "list_nodes", "list_services"):
+	for command_id in ("list_topics", "list_nodes", "list_services", "get_param_names"):
 		assert COMMANDS[command_id].params == ()

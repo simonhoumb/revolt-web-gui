@@ -157,9 +157,13 @@ FAKE_NODE_DETAILS: dict[str, dict[str, list[str]]] = {
         "services": ["/rosapi/topics", "/rosapi/nodes", "/rosapi/services"],
     },
 }
+
+# Keys use rosapi's real "<node>:<param>" format (verified against rosapi_node's
+# _get_node_and_param_name, which splits get_param's request.name on ":" -- get_param_names
+# returns entries in this same format, and the two are designed to be used as a pair).
 FAKE_PARAMS: dict[str, str] = {
-    "/waypoint_switcher_node/default_switch_radius": "5.0",
-    "/los_guidance_node/lookahead_distance": "10.0",
+    "/waypoint_switcher_node:default_switch_radius": "5.0",
+    "/los_guidance_node:lookahead_distance": "10.0",
 }
 
 _start_time = time.time()
@@ -516,6 +520,8 @@ def _handle_rosapi_call(service: str, args: dict) -> tuple[dict, bool]:
             if name in FAKE_PARAMS:
                 return {"value": FAKE_PARAMS[name], "successful": True, "reason": ""}, True
             return {"value": "", "successful": False, "reason": "parameter not set"}, True
+        case "/rosapi/get_param_names":
+            return {"names": list(FAKE_PARAMS.keys())}, True
         case _:
             return {}, False
 

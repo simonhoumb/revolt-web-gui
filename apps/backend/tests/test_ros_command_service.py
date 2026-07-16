@@ -176,15 +176,66 @@ async def test_audit_log_records_failure_outcomes_too() -> None:
 	assert mock_log.await_args.kwargs["params"]["ok"] is False
 
 
-def test_describe_commands_resolves_topic_select_allowed_values_per_target() -> None:
-	metas = ros_command_service.describe_commands("physical")
+async def test_describe_commands_resolves_topic_select_allowed_values_per_target() -> None:
+	bridge = FakeBridge(target="physical")
+	metas = await ros_command_service.describe_commands(bridge)
 	echo = next(m for m in metas if m.command_id == "echo_topic")
 	assert echo.params[0].kind == "topic_select"
 	assert "/fix" in (echo.params[0].allowed_values or [])
 	assert "/waypoint_list" not in (echo.params[0].allowed_values or [])
 
 
-def test_describe_commands_non_topic_select_params_have_no_allowed_values() -> None:
-	metas = ros_command_service.describe_commands("physical")
+async def test_describe_commands_text_params_have_no_allowed_values() -> None:
+	bridge = FakeBridge(target="physical")
+	metas = await ros_command_service.describe_commands(bridge)
+	node_details = next(m for m in metas if m.command_id == "node_details")
+	assert node_details.params[0].kind == "text"
+	assert node_details.params[0].allowed_values is None
+
+
+async def test_describe_commands_resolves_param_select_allowed_values_from_get_param_names() -> (
+	None
+):
+	bridge = FakeBridge(
+		service_responses={
+			"/rosapi/get_param_names": ServiceCallResult(
+				ok=True,
+				values={"names": ["/waypoint_switcher_node:default_switch_radius"]},
+				error=None,
+			)
+		}
+	)
+	metas = await ros_command_service.describe_commands(bridge)
 	get_param = next(m for m in metas if m.command_id == "get_param")
-	assert get_param.params[0].allowed_values is None
+	assert get_param.params[0].kind == "param_select"
+	assert get_param.params[0].allowed_values == ["/waypoint_switcher_node:default_switch_radius"]
+	assert bridge.calls == [("/rosapi/get_param_names", "rosapi_msgs/GetParamNames", {})]
+
+
+async def test_describe_commands_param_select_allowed_values_empty_on_failed_call() -> None:
+	# A disconnected/timed-out bridge shouldn't fail the whole registry fetch -- just resolve to
+	# an empty (rather than missing) dropdown for that one param.
+	bridge = FakeBridge(
+		service_responses={
+			"/rosapi/get_param_names": ServiceCallResult(
+				ok=False, values=None, error="not_connected"
+			)
+		}
+	)
+	metas = await ros_command_service.describe_commands(bridge)
+	get_param = next(m for m in metas if m.command_id == "get_param")
+	assert get_param.params[0].allowed_values == []
+
+
+async def test_get_param_names_calls_the_right_rosapi_service() -> None:
+	bridge = FakeBridge(
+		service_responses={
+			"/rosapi/get_param_names": ServiceCallResult(
+				ok=True, values={"names": ["/some_node:some_param"]}, error=None
+			)
+		}
+	)
+	result, _ = await _execute(bridge, "get_param_names", {})
+	assert result.ok is True
+	assert result.result == {"names": ["/some_node:some_param"]}
+	assert bridge.calls == [("/rosapi/get_param_names", "rosapi_msgs/GetParamNames", {})]

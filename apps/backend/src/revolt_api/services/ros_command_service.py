@@ -32,10 +32,23 @@ class _Outcome:
 	result: dict[str, Any] | None
 
 
-def describe_commands(target: str) -> list[RosCommandMeta]:
-	"""Resolve topic_select params' allowed values against the live bridge target, so the
-	frontend never has to duplicate bridge/protocol.py's topic allow-lists."""
-	allowed_topics = [spec.topic for spec in get_subscribe_topics(target)]
+async def describe_commands(bridge: RosBridgeClient) -> list[RosCommandMeta]:
+	"""Resolve topic_select params' allowed values against the live bridge target (bridge/
+	protocol.py's topic allow-list) and param_select params' allowed values via a live
+	/rosapi/get_param_names call, so the frontend never keeps its own copy of either. A failed
+	get_param_names call (bridge disconnected, timed out) resolves to an empty list rather than
+	failing this whole endpoint -- the registry should still load with an empty/disabled
+	parameter dropdown, not a 500, when the bridge happens to be down."""
+	allowed_topics = [spec.topic for spec in get_subscribe_topics(bridge.target)]
+
+	known_param_names: list[str] = []
+	if any(param.kind == "param_select" for spec in COMMANDS.values() for param in spec.params):
+		param_names_result = await bridge.call_service(
+			"/rosapi/get_param_names", "rosapi_msgs/GetParamNames", {}
+		)
+		if param_names_result.ok:
+			known_param_names = (param_names_result.values or {}).get("names", [])
+
 	metas: list[RosCommandMeta] = []
 	for spec in COMMANDS.values():
 		params = [
@@ -44,7 +57,13 @@ def describe_commands(target: str) -> list[RosCommandMeta]:
 				label=param.label,
 				kind=param.kind,
 				required=param.required,
-				allowed_values=allowed_topics if param.kind == "topic_select" else None,
+				allowed_values=(
+					allowed_topics
+					if param.kind == "topic_select"
+					else known_param_names
+					if param.kind == "param_select"
+					else None
+				),
 			)
 			for param in spec.params
 		]

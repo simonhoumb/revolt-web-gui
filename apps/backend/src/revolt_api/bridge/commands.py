@@ -12,7 +12,12 @@ class CommandKind(enum.StrEnum):
 class CommandParamSpec:
 	name: str
 	label: str
-	kind: Literal["topic_select", "text"]
+	# topic_select: statically allow-listed against protocol.py's subscribe topics for the live
+	# target. param_select: dynamically populated from /rosapi/get_param_names -- unlike
+	# topic_select there's no static allow-list to validate against (the whole point is
+	# discovering names that can't be known ahead of time), so it's a discoverability aid, not a
+	# validated restriction (see ros_command_service._validate_static_params). text: free-form.
+	kind: Literal["topic_select", "param_select", "text"]
 	required: bool = True
 
 
@@ -32,8 +37,10 @@ class CommandSpec:
 # by Mission Control's start/pause/terminate state machine (services/mission_service.py) -- a
 # generic command console must not grow a second path to that safety-critical surface. Field
 # names for the rosapi services below (topics/types, nodes, services, subscribing/publishing/
-# services, name/default_value -> value/successful/reason) are verified against
-# RobotWebTools/rosbridge_suite's rosapi_msgs/srv definitions on the ros2 branch, not assumed.
+# services, name/default_value -> value/successful/reason, names) are verified against
+# RobotWebTools/rosbridge_suite's rosapi_msgs/srv definitions and rosapi_node's actual service
+# handlers on the ros2 branch, not assumed -- including get_param_names' "<node>:<param>" name
+# format and get_param's matching ":"-split parsing of that same format.
 COMMANDS: dict[str, CommandSpec] = {
 	"list_topics": CommandSpec(
 		command_id="list_topics",
@@ -68,6 +75,14 @@ COMMANDS: dict[str, CommandSpec] = {
 		rosapi_type="rosapi_msgs/NodeDetails",
 		params=(CommandParamSpec(name="node", label="Node name", kind="text"),),
 	),
+	"get_param_names": CommandSpec(
+		command_id="get_param_names",
+		label="List parameter names",
+		description="List every known parameter name, as <node>:<param> pairs.",
+		kind=CommandKind.SERVICE_CALL,
+		rosapi_service="/rosapi/get_param_names",
+		rosapi_type="rosapi_msgs/GetParamNames",
+	),
 	"get_param": CommandSpec(
 		command_id="get_param",
 		label="Get parameter",
@@ -75,7 +90,10 @@ COMMANDS: dict[str, CommandSpec] = {
 		kind=CommandKind.SERVICE_CALL,
 		rosapi_service="/rosapi/get_param",
 		rosapi_type="rosapi_msgs/GetParam",
-		params=(CommandParamSpec(name="name", label="Parameter name", kind="text"),),
+		# Sourced from get_param_names' response (a <node>:<param> string) -- rosapi's own
+		# service dispatcher (rosapi_node's _get_node_and_param_name) splits this same "name" on
+		# ":" to resolve which node's parameter to read, so the two are designed as a pair.
+		params=(CommandParamSpec(name="name", label="Parameter name", kind="param_select"),),
 	),
 	"echo_topic": CommandSpec(
 		command_id="echo_topic",

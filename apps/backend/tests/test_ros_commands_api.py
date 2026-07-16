@@ -27,13 +27,23 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
+_SERVICE_RESPONSES = {
+	"/rosapi/topics": ServiceCallResult(
+		ok=True, values={"topics": ["/fix"], "types": ["sensor_msgs/NavSatFix"]}, error=None
+	),
+	"/rosapi/get_param_names": ServiceCallResult(
+		ok=True, values={"names": ["/waypoint_switcher_node:default_switch_radius"]}, error=None
+	),
+}
+
+
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
 	bridge = app.state.bridge = MagicMock(spec=RosBridgeClient)
 	bridge.target = "physical"
 	bridge.call_service = AsyncMock(
-		return_value=ServiceCallResult(
-			ok=True, values={"topics": ["/fix"], "types": ["sensor_msgs/NavSatFix"]}, error=None
+		side_effect=lambda service, *_args, **_kwargs: _SERVICE_RESPONSES.get(
+			service, ServiceCallResult(ok=False, values=None, error="service_call_failed")
 		)
 	)
 	bridge.latest_raw_message = MagicMock(
@@ -65,6 +75,7 @@ async def test_list_ros_commands_returns_the_full_registry(client: AsyncClient) 
 		"list_nodes",
 		"list_services",
 		"node_details",
+		"get_param_names",
 		"get_param",
 		"echo_topic",
 	}
@@ -74,6 +85,23 @@ async def test_list_ros_commands_resolves_echo_topic_allowed_values(client: Asyn
 	resp = await client.get("/api/ros-commands")
 	echo = next(c for c in resp.json() if c["command_id"] == "echo_topic")
 	assert "/fix" in echo["params"][0]["allowed_values"]
+
+
+async def test_list_ros_commands_resolves_get_param_allowed_values(client: AsyncClient) -> None:
+	resp = await client.get("/api/ros-commands")
+	get_param = next(c for c in resp.json() if c["command_id"] == "get_param")
+	assert get_param["params"][0]["kind"] == "param_select"
+	assert get_param["params"][0]["allowed_values"] == [
+		"/waypoint_switcher_node:default_switch_radius"
+	]
+
+
+async def test_execute_get_param_names_returns_the_names_list(client: AsyncClient) -> None:
+	resp = await client.post("/api/ros-commands/get_param_names", json={"params": {}})
+	assert resp.status_code == 200
+	body = resp.json()
+	assert body["ok"] is True
+	assert body["result"] == {"names": ["/waypoint_switcher_node:default_switch_radius"]}
 
 
 async def test_execute_unknown_command_returns_404(client: AsyncClient) -> None:
