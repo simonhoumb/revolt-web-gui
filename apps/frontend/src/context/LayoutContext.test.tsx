@@ -273,6 +273,45 @@ describe("LayoutProvider", () => {
 		});
 	});
 
+	it("layoutGeneration bumps on structural changes (add/remove/reset/loadTemplate) but not on updateLayout", () => {
+		const { result } = renderLayout();
+		const initial = result.current.layoutGeneration;
+
+		act(() => {
+			result.current.updateLayout([{ i: "battery", x: 1, y: 1, w: 3, h: 5 }]);
+		});
+		expect(result.current.layoutGeneration).toBe(initial);
+
+		act(() => {
+			result.current.addWidget("gnss");
+		});
+		expect(result.current.layoutGeneration).toBe(initial + 1);
+
+		act(() => {
+			result.current.removeWidget("gnss");
+		});
+		expect(result.current.layoutGeneration).toBe(initial + 2);
+
+		act(() => {
+			result.current.resetLayout();
+		});
+		expect(result.current.layoutGeneration).toBe(initial + 3);
+
+		act(() => {
+			result.current.loadTemplate("Instruments only");
+		});
+		expect(result.current.layoutGeneration).toBe(initial + 4);
+	});
+
+	it("layoutGeneration does not bump when loadTemplate matches nothing", () => {
+		const { result } = renderLayout();
+		const initial = result.current.layoutGeneration;
+		act(() => {
+			result.current.loadTemplate("does not exist");
+		});
+		expect(result.current.layoutGeneration).toBe(initial);
+	});
+
 	it("toggleEditMode flips editMode on each call", () => {
 		const { result } = renderLayout();
 		expect(result.current.editMode).toBe(false);
