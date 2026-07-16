@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RosCommandMeta, RosCommandResult } from "@revolt/shared-types";
 import { ObcTextInputField } from "@oicl/openbridge-webcomponents-react/components/text-input-field/text-input-field.js";
 import { ObcContextMenuInput } from "@oicl/openbridge-webcomponents-react/components/context-menu-input/context-menu-input.js";
@@ -45,6 +45,14 @@ export function RosCommandWidget() {
 	const [paramValues, setParamValues] = useState<Record<string, string>>({});
 	const [running, setRunning] = useState(false);
 	const [history, setHistory] = useState<HistoryEntry[]>([]);
+	const [promptFocused, setPromptFocused] = useState(false);
+	const blurTimeoutRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		return () => {
+			if (blurTimeoutRef.current !== null) window.clearTimeout(blurTimeoutRef.current);
+		};
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -63,21 +71,42 @@ export function RosCommandWidget() {
 		};
 	}, []);
 
+	// Shown on focus even with nothing typed yet, like a command palette (VS Code's Ctrl+Shift+P,
+	// Slack's "/") -- with a fixed, small vocabulary there's no reason to make the operator guess
+	// a starting letter before anything is suggested.
 	const suggestions = useMemo(() => {
-		if (selectedCommand || promptValue.trim() === "") return [];
+		if (selectedCommand || !promptFocused) return [];
 		const needle = promptValue.trim().toLowerCase();
+		if (needle === "") return commands;
 		return commands.filter(
 			(c) =>
 				c.command_id.toLowerCase().includes(needle) ||
 				c.label.toLowerCase().includes(needle),
 		);
-	}, [commands, promptValue, selectedCommand]);
+	}, [commands, promptValue, selectedCommand, promptFocused]);
+
+	function handlePromptFocus() {
+		if (blurTimeoutRef.current !== null) {
+			window.clearTimeout(blurTimeoutRef.current);
+			blurTimeoutRef.current = null;
+		}
+		setPromptFocused(true);
+	}
+
+	function handlePromptBlur() {
+		// Clicking a suggestion blurs the text field before the menu's item-click event fires --
+		// delay hiding so the click still lands on a suggestion that's still mounted.
+		blurTimeoutRef.current = window.setTimeout(() => {
+			setPromptFocused(false);
+		}, 150);
+	}
 
 	function selectCommand(commandId: string) {
 		const command = commands.find((c) => c.command_id === commandId);
 		if (!command) return;
 		setSelectedCommand(command);
 		setPromptValue("");
+		setPromptFocused(false);
 		setParamValues({});
 	}
 
@@ -141,7 +170,17 @@ export function RosCommandWidget() {
 			{loadError && <p className={styles.loadError}>{loadError}</p>}
 
 			{!selectedCommand && (
-				<div className={styles.promptRow}>
+				// onFocus/onBlur live on this wrapper, not the field itself: ObcTextInputField's
+				// @lit/react wrapper only declares onInput/onChange/onClear/onBlur as real event
+				// listeners -- onFocus isn't wired at all, so it would silently no-op there. A
+				// container-level onFocus/onBlur (React's usual focusin/focusout-based "focus
+				// within a subtree" mechanism) also means a click landing on the suggestion menu
+				// below doesn't blur this the way it would if the listener sat only on the field.
+				<div
+					className={styles.promptRow}
+					onFocus={handlePromptFocus}
+					onBlur={handlePromptBlur}
+				>
 					<ObcTextInputField
 						placeholder="Type a command…"
 						value={promptValue}

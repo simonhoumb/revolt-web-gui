@@ -70,10 +70,31 @@ async function renderWidget() {
 	});
 }
 
+function promptField() {
+	return document.querySelector("obc-text-input-field") as HTMLElement & { value: string };
+}
+
+function focusPrompt() {
+	// React's onFocus is implemented via a delegated "focusin" listener (plain "focus" doesn't
+	// bubble), so that's the event that needs dispatching here -- same reasoning as dispatching
+	// "input" directly on the host for typing, rather than trying to reach the shadow-rendered
+	// <input> inside these OBC components.
+	act(() => {
+		promptField().dispatchEvent(new Event("focusin", { bubbles: true }));
+	});
+}
+
+function blurPrompt() {
+	// The listener lives on the wrapping div (see RosCommandWidget.tsx), reached via bubbling
+	// "focusout" from the field -- same reasoning as "focusin" for focus.
+	act(() => {
+		promptField().dispatchEvent(new Event("focusout", { bubbles: true }));
+	});
+}
+
 function typePrompt(value: string) {
-	const field = document.querySelector("obc-text-input-field") as HTMLElement & {
-		value: string;
-	};
+	focusPrompt();
+	const field = promptField();
 	act(() => {
 		field.value = value;
 		field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -111,9 +132,57 @@ describe("RosCommandWidget", () => {
 		expect(menu.options).toEqual([{ value: "echo_topic", label: "Echo topic" }]);
 	});
 
-	it("shows no suggestions for an empty prompt", async () => {
+	it("shows no suggestions before the prompt is focused", async () => {
 		await renderWidget();
 		expect(document.querySelector("obc-context-menu-input")).toBeNull();
+	});
+
+	it("shows every command on focus, before any text is typed", async () => {
+		await renderWidget();
+		focusPrompt();
+		const menu = document.querySelector("obc-context-menu-input") as HTMLElement & {
+			options: { value: string; label: string }[];
+		};
+		expect(menu).not.toBeNull();
+		expect(menu.options.map((o) => o.value)).toEqual(COMMANDS.map((c) => c.command_id));
+	});
+
+	it("hides suggestions shortly after the prompt is blurred without a selection", async () => {
+		vi.useFakeTimers();
+		try {
+			await renderWidget();
+			focusPrompt();
+			expect(document.querySelector("obc-context-menu-input")).not.toBeNull();
+
+			blurPrompt();
+			expect(document.querySelector("obc-context-menu-input")).not.toBeNull();
+
+			act(() => {
+				vi.advanceTimersByTime(150);
+			});
+			expect(document.querySelector("obc-context-menu-input")).toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not hide suggestions if the prompt regains focus before the blur delay elapses", async () => {
+		vi.useFakeTimers();
+		try {
+			await renderWidget();
+			focusPrompt();
+			blurPrompt();
+			act(() => {
+				vi.advanceTimersByTime(50);
+			});
+			focusPrompt();
+			act(() => {
+				vi.advanceTimersByTime(150);
+			});
+			expect(document.querySelector("obc-context-menu-input")).not.toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("selecting a command with no params shows it ready to run immediately", async () => {
