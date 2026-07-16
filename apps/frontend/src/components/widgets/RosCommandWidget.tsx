@@ -37,6 +37,18 @@ function paramsSummaryFor(params: Record<string, string>): string {
 	return entries.map(([name, value]) => `${name}=${value}`).join(" ");
 }
 
+// 0 if the match is at the start of the id/label, 1 if it only appears somewhere inside --
+// used to sort the best match first instead of leaving suggestions in registry order once
+// several of them match. ObcContextMenuInput's items only accept a plain string label (no rich/
+// bold content -- see the option considered and rejected for this), so ranking is the way this
+// app surfaces "which match is best" within that constraint.
+export function matchRank(command: RosCommandMeta, needle: string): number {
+	const startsWith =
+		command.command_id.toLowerCase().startsWith(needle) ||
+		command.label.toLowerCase().startsWith(needle);
+	return startsWith ? 0 : 1;
+}
+
 export function RosCommandWidget() {
 	const [commands, setCommands] = useState<RosCommandMeta[]>([]);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -46,13 +58,53 @@ export function RosCommandWidget() {
 	const [running, setRunning] = useState(false);
 	const [history, setHistory] = useState<HistoryEntry[]>([]);
 	const [promptFocused, setPromptFocused] = useState(false);
+	const [highlightedIndex, setHighlightedIndex] = useState(0);
+	// The suggestion dropdown is an absolutely-positioned overlay anchored below the prompt row,
+	// but TileCard's own body clips overflow (so tiles don't bleed into each other on the grid) --
+	// left unconstrained, a small tile just hides the bottom of the list with no way to reach it.
+	// Measured against the widget's own content box rather than fixed, since the tile can be
+	// resized to any height via its drag handle.
+	const [suggestionsMaxHeight, setSuggestionsMaxHeight] = useState(240);
 	const blurTimeoutRef = useRef<number | null>(null);
+	const historyRef = useRef<HTMLDivElement>(null);
+	const contentRef = useRef<HTMLDivElement>(null);
+	const promptRowRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		return () => {
 			if (blurTimeoutRef.current !== null) window.clearTimeout(blurTimeoutRef.current);
 		};
 	}, []);
+
+	function recomputeSuggestionsMaxHeight() {
+		const content = contentRef.current;
+		const promptRow = promptRowRef.current;
+		if (!content || !promptRow) return;
+		const available =
+			content.getBoundingClientRect().bottom - promptRow.getBoundingClientRect().bottom;
+		// A floor keeps the list usable even in a nearly-collapsed tile, rather than shrinking to
+		// a sliver; the list itself scrolls the rest of the way via overflow-y.
+		setSuggestionsMaxHeight(Math.max(80, available - 8));
+	}
+
+	useEffect(() => {
+		recomputeSuggestionsMaxHeight();
+		const el = contentRef.current;
+		if (!el) return;
+		const ro = new ResizeObserver(recomputeSuggestionsMaxHeight);
+		ro.observe(el);
+		return () => {
+			ro.disconnect();
+		};
+	}, []);
+
+	// New command run, or a running entry just settled -- both append/replace at the tail of
+	// history, so jumping to the bottom always surfaces the newest response.
+	useEffect(() => {
+		const el = historyRef.current;
+		if (!el) return;
+		el.scrollTop = el.scrollHeight;
+	}, [history]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -77,13 +129,34 @@ export function RosCommandWidget() {
 	const suggestions = useMemo(() => {
 		if (selectedCommand || !promptFocused) return [];
 		const needle = promptValue.trim().toLowerCase();
-		if (needle === "") return commands;
-		return commands.filter(
+		const matches = commands.filter(
 			(c) =>
 				c.command_id.toLowerCase().includes(needle) ||
 				c.label.toLowerCase().includes(needle),
 		);
+		if (needle === "") return matches;
+		return [...matches].sort((a, b) => matchRank(a, needle) - matchRank(b, needle));
 	}, [commands, promptValue, selectedCommand, promptFocused]);
+
+	const suggestionsKey = suggestions.map((c) => c.command_id).join(",");
+	useEffect(() => {
+		setHighlightedIndex(0);
+	}, [suggestionsKey]);
+
+	function handlePromptKeyDown(e: { key: string; preventDefault: () => void }) {
+		if (suggestions.length === 0) return;
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			setHighlightedIndex((i) => (i + 1) % suggestions.length);
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			setHighlightedIndex((i) => (i - 1 + suggestions.length) % suggestions.length);
+		} else if (e.key === "Enter") {
+			e.preventDefault();
+			const command = suggestions[highlightedIndex];
+			if (command) selectCommand(command.command_id);
+		}
+	}
 
 	function handlePromptFocus() {
 		if (blurTimeoutRef.current !== null) {
@@ -91,6 +164,7 @@ export function RosCommandWidget() {
 			blurTimeoutRef.current = null;
 		}
 		setPromptFocused(true);
+		recomputeSuggestionsMaxHeight();
 	}
 
 	function handlePromptBlur() {
@@ -166,7 +240,7 @@ export function RosCommandWidget() {
 	}
 
 	return (
-		<div className={styles.content}>
+		<div className={styles.content} ref={contentRef}>
 			{loadError && <p className={styles.loadError}>{loadError}</p>}
 
 			{!selectedCommand && (
@@ -178,6 +252,7 @@ export function RosCommandWidget() {
 				// below doesn't blur this the way it would if the listener sat only on the field.
 				<div
 					className={styles.promptRow}
+					ref={promptRowRef}
 					onFocus={handlePromptFocus}
 					onBlur={handlePromptBlur}
 				>
@@ -187,18 +262,40 @@ export function RosCommandWidget() {
 						onInput={(e) => {
 							setPromptValue(inputValue(e));
 						}}
+						onKeyDown={handlePromptKeyDown}
 					/>
 					{suggestions.length > 0 && (
-						<ObcContextMenuInput
-							type={ContextMenuType.Regular}
-							options={suggestions.map((c) => ({
-								value: c.command_id,
-								label: c.label,
-							}))}
-							onItemClick={(e) => {
-								selectCommand(e.detail.value);
-							}}
-						/>
+						// The scroll/clip boundary lives on this plain wrapper div, not on
+						// ObcContextMenuInput itself: the component's own shadow DOM already has
+						// an internal .context-menu box with its own overflow-y: auto and a
+						// fit-content width, independent of whatever's set on the host element --
+						// styling the host directly produced a scrollbar that didn't visually
+						// line up with the rendered dropdown. A normal light-DOM div has fully
+						// predictable box/scroll behavior, so it does the clipping instead.
+						<div
+							className={styles.suggestionsScroll}
+							style={{ maxHeight: suggestionsMaxHeight }}
+						>
+							<ObcContextMenuInput
+								type={ContextMenuType.Regular}
+								options={suggestions.map((c) => ({
+									value: c.command_id,
+									label: c.label,
+								}))}
+								// Reuses the component's own "selected" visual state to show which
+								// suggestion arrow-key navigation currently points at, rather than
+								// building a separate highlight style -- there's no meaningful
+								// difference before Enter actually commits the choice.
+								selectedValues={
+									suggestions[highlightedIndex]
+										? [suggestions[highlightedIndex].command_id]
+										: []
+								}
+								onItemClick={(e) => {
+									selectCommand(e.detail.value);
+								}}
+							/>
+						</div>
 					)}
 				</div>
 			)}
@@ -220,7 +317,7 @@ export function RosCommandWidget() {
 					</p>
 
 					{selectedCommand.params.map((param) =>
-						param.kind === "topic_select" ? (
+						param.kind === "topic_select" || param.kind === "param_select" ? (
 							<ObcDropdownButton
 								key={param.name}
 								options={(param.allowed_values ?? []).map((v) => ({
@@ -265,7 +362,7 @@ export function RosCommandWidget() {
 				</div>
 			)}
 
-			<div className={styles.history}>
+			<div className={styles.history} ref={historyRef}>
 				{history.length === 0 && (
 					<p className={styles.emptyState}>Command output will appear here.</p>
 				)}

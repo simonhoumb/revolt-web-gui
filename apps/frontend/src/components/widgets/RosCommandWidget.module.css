@@ -17,12 +17,23 @@
 	position: relative;
 }
 
-.promptRow > obc-context-menu-input {
+.suggestionsScroll {
 	position: absolute;
 	top: 100%;
 	left: 0;
-	right: 0;
+	/* No `right: 0` -- the visible dropdown (ObcContextMenuInput's shadow-internal .context-menu)
+	   sizes itself to fit its content (width: fit-content), not to the input's full width.
+	   Stretching this wrapper full-width (left+right both set) left a wide gap of invisible
+	   space between the actual dropdown box and this wrapper's own scrollbar, which then looked
+	   detached, floating over whatever was rendered underneath. Shrink-to-fit here (the default
+	   for an absolutely positioned box with only `left` set) keeps the wrapper -- and its
+	   scrollbar -- sized to match the dropdown it's actually clipping. */
 	z-index: 1;
+	overflow-y: auto;
+}
+
+.suggestionsScroll obc-context-menu-input {
+	display: block;
 }
 
 .selectedCommand {

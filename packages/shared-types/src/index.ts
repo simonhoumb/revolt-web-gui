@@ -129,10 +129,11 @@ export interface MissionExecutionResult {
 export interface RosCommandParamMeta {
 	name: string;
 	label: string;
-	kind: "topic_select" | "text";
+	kind: "topic_select" | "param_select" | "text";
 	required: boolean;
-	// Populated only for kind="topic_select", resolved server-side per the live bridge target --
-	// the frontend never keeps its own copy of the backend's topic allow-lists.
+	// Populated for kind="topic_select" (bridge/protocol.py's topic allow-list) and
+	// kind="param_select" (a live /rosapi/get_param_names call), both resolved server-side --
+	// the frontend never keeps its own copy of either list.
 	allowed_values: string[] | null;
 }
 
