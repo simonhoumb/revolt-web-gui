@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { TileGrid } from "./TileGrid.js";
+import { TileGrid, nextNeededRowsBasis } from "./TileGrid.js";
 import { useLayout } from "../../context/LayoutContext.js";
 
 vi.mock("../../context/LayoutContext.js", () => ({
@@ -77,6 +77,7 @@ function setLayout(overrides: Partial<ReturnType<typeof useLayout>> = {}) {
 		updateLayout: vi.fn(),
 		editMode: false,
 		removeWidget: vi.fn(),
+		layoutGeneration: 0,
 		...overrides,
 	});
 }
@@ -133,5 +134,43 @@ describe("TileGrid", () => {
 		setLayout({ editMode: false });
 		render(<TileGrid />);
 		expect(lastGridLayoutProps?.dragConfig.enabled).toBe(false);
+	});
+});
+
+describe("nextNeededRowsBasis", () => {
+	// Regression coverage for the "shrinking a tile doesn't visibly shrink it" bug: a tile's
+	// pixel height is h * rowHeight, and rowHeight is derived from neededRows, so a naive
+	// Math.max(...) recomputed every render would let shrinking the deepest tile grow rowHeight
+	// right back. See TileGrid.tsx's comment on nextNeededRowsBasis for the full mechanism.
+
+	it("adopts the raw value on the very first call (generation -1 sentinel)", () => {
+		const result = nextNeededRowsBasis({ generation: -1, rows: 1 }, 0, 28);
+		expect(result).toEqual({ generation: 0, rows: 28 });
+	});
+
+	it("does not shrink within the same generation, even if the raw value drops", () => {
+		const afterFirstFit = nextNeededRowsBasis({ generation: -1, rows: 1 }, 0, 28);
+		// Operator shrinks the deepest tile's h -- raw value drops to 24, same generation.
+		const afterShrink = nextNeededRowsBasis(afterFirstFit, 0, 24);
+		expect(afterShrink.rows).toBe(28);
+	});
+
+	it("grows within the same generation if a tile is resized/moved taller than the basis", () => {
+		const afterFirstFit = nextNeededRowsBasis({ generation: -1, rows: 1 }, 0, 28);
+		const afterGrow = nextNeededRowsBasis(afterFirstFit, 0, 32);
+		expect(afterGrow.rows).toBe(32);
+	});
+
+	it("re-fits to the raw value when the generation changes, even if that's smaller", () => {
+		const afterFirstFit = nextNeededRowsBasis({ generation: -1, rows: 1 }, 0, 28);
+		// A widget was removed (layoutGeneration bumped to 1): the grid should re-fit tighter,
+		// not stay pinned at the old, now-irrelevant basis.
+		const afterRemoval = nextNeededRowsBasis(afterFirstFit, 1, 20);
+		expect(afterRemoval).toEqual({ generation: 1, rows: 20 });
+	});
+
+	it("returns the same object reference when nothing changes, for stability", () => {
+		const basis = { generation: 0, rows: 28 };
+		expect(nextNeededRowsBasis(basis, 0, 20)).toBe(basis);
 	});
 });

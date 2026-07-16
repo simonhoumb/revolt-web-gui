@@ -41,6 +41,11 @@ interface LayoutContextValue {
 	deleteTemplate: (name: string) => void;
 	editMode: boolean;
 	toggleEditMode: () => void;
+	// Bumped only by structural changes to the tile set (add/remove/reset/load template), never by
+	// updateLayout's ordinary drag/resize commits -- TileGrid uses this to know when it's safe to
+	// re-fit the grid's row height to a *smaller* total row count. See TileGrid.tsx's neededRows
+	// comment for why that distinction matters.
+	layoutGeneration: number;
 }
 
 const LAYOUT_KEY = "revolt-dashboard-layout";
@@ -166,6 +171,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 	const [config, setConfig] = useState<LayoutConfig>(loadConfig);
 	const [userTemplates, setUserTemplates] = useState<LayoutTemplate[]>(loadTemplates);
 	const [editMode, setEditMode] = useState(false);
+	const [layoutGeneration, setLayoutGeneration] = useState(0);
 
 	useEffect(() => {
 		saveConfig(config);
@@ -195,6 +201,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 				hiddenWidgets: prev.hiddenWidgets.filter((w) => w !== id),
 			};
 		});
+		setLayoutGeneration((g) => g + 1);
 	}, []);
 
 	const removeWidget = useCallback((id: WidgetId) => {
@@ -202,10 +209,12 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 			tiles: prev.tiles.filter((t) => t.i !== id),
 			hiddenWidgets: [...prev.hiddenWidgets, id],
 		}));
+		setLayoutGeneration((g) => g + 1);
 	}, []);
 
 	const resetLayout = useCallback(() => {
 		setConfig(DEFAULT_CONFIG);
+		setLayoutGeneration((g) => g + 1);
 	}, []);
 
 	const saveTemplate = useCallback(
@@ -229,11 +238,13 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 			const builtin = BUILTIN_TEMPLATES.find((t) => t.name === name);
 			if (builtin) {
 				setConfig({ tiles: builtin.tiles, hiddenWidgets: builtin.hiddenWidgets });
+				setLayoutGeneration((g) => g + 1);
 				return;
 			}
 			const found = userTemplates.find((t) => t.name === name);
 			if (found) {
 				setConfig({ tiles: found.tiles, hiddenWidgets: found.hiddenWidgets });
+				setLayoutGeneration((g) => g + 1);
 			}
 		},
 		[userTemplates],
@@ -263,6 +274,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 				deleteTemplate,
 				editMode,
 				toggleEditMode,
+				layoutGeneration,
 			}}
 		>
 			{children}

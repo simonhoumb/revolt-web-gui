@@ -264,3 +264,19 @@ class RosBridgePublishIn(TypedDict):
 	op: Literal["publish"]
 	topic: str
 	msg: dict[str, Any]
+
+
+class RosBridgeCallService(TypedDict):
+	op: Literal["call_service"]
+	id: str
+	service: str
+	type: str
+	args: dict[str, Any]
+
+
+class RosBridgeServiceResponse(TypedDict):
+	op: Literal["service_response"]
+	id: str
+	service: str
+	values: dict[str, Any] | None
+	result: bool

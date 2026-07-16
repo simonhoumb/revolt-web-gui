@@ -16,6 +16,33 @@ const GRID_CONFIG = {
 // into an unusable size.
 const MIN_ROW_HEIGHT = 48;
 
+export interface NeededRowsBasis {
+	generation: number;
+	rows: number;
+}
+
+// Deliberately not just Math.max(...) over the live config.tiles every render: a tile's pixel
+// height is h * rowHeight, and rowHeight is itself derived from neededRows -- so shrinking
+// whichever tile currently reaches deepest would shrink neededRows, which grows rowHeight, which
+// grows that same tile's own rendered height right back, largely canceling the resize the
+// operator just made (confirmed against a real drag: this is why height resizing felt "locked"
+// while width, computed independent of any tile's depth, worked fine). Extracted as a pure
+// function since TileGrid's own rowHeight is masked to MIN_ROW_HEIGHT in tests (the ResizeObserver
+// stub in test/setup.ts never delivers a nonzero height), so this is tested directly instead.
+export function nextNeededRowsBasis(
+	current: NeededRowsBasis,
+	generation: number,
+	rawNeededRows: number,
+): NeededRowsBasis {
+	// A new generation (add/remove/reset/load template -- see LayoutContext's layoutGeneration)
+	// always re-fits to the live value; within the same generation, the basis only grows, so
+	// shrinking a tile via ordinary drag/resize always visibly shrinks it.
+	if (current.generation !== generation || rawNeededRows > current.rows) {
+		return { generation, rows: rawNeededRows };
+	}
+	return current;
+}
+
 function useContainerSize(initialWidth: number) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [width, setWidth] = useState(initialWidth);
@@ -42,7 +69,7 @@ function useContainerSize(initialWidth: number) {
 
 export function TileGrid() {
 	const { containerRef, width, height, mounted } = useContainerSize(1280);
-	const { config, updateLayout, editMode, removeWidget } = useLayout();
+	const { config, updateLayout, editMode, removeWidget, layoutGeneration } = useLayout();
 	// Incremented when drag/resize produces an out-of-bounds layout; forces GridLayout
 	// to remount and re-initialize from the valid propsLayout, snapping tiles back.
 	const [gridKey, setGridKey] = useState(0);
@@ -71,7 +98,15 @@ export function TileGrid() {
 	// this and the container's height, exactly mirroring how column width is already
 	// derived from containerWidth / cols -- so the whole layout always fits vertically,
 	// on any window size, instead of a fixed pixel rowHeight running past the bottom.
-	const neededRows = Math.max(1, ...config.tiles.map((tile) => tile.y + tile.h));
+	// See nextNeededRowsBasis's own comment for why this isn't just a live Math.max(...).
+	const rawNeededRows = Math.max(1, ...config.tiles.map((tile) => tile.y + tile.h));
+	const neededRowsBasisRef = useRef<NeededRowsBasis>({ generation: -1, rows: 1 });
+	neededRowsBasisRef.current = nextNeededRowsBasis(
+		neededRowsBasisRef.current,
+		layoutGeneration,
+		rawNeededRows,
+	);
+	const neededRows = neededRowsBasisRef.current.rows;
 
 	// containerPadding defaults to margin=[8,8]; each row occupies rowHeight+marginY pixels
 	// minus one marginY for the last row, plus 2*containerPaddingY total.

@@ -4,9 +4,10 @@ import contextlib
 import json
 import math
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from websockets.asyncio.client import connect
@@ -44,6 +45,7 @@ from revolt_api.bridge.mission_tracker import MissionExecutionTracker
 from revolt_api.bridge.protocol import (
 	PHYSICAL_SUBSCRIBE_TOPICS,
 	SIMULATION_SUBSCRIBE_TOPICS,
+	RosBridgeCallService,
 	RosBridgePublishOut,
 	RosBridgeSubscribe,
 	get_subscribe_topics,
@@ -66,6 +68,28 @@ class PendingAck:
 	expected: list[tuple[int, float, float]]
 	event: asyncio.Event = field(default_factory=asyncio.Event)
 	result: AckStatus = "timed_out"
+
+
+ServiceCallError = Literal["not_connected", "timed_out", "service_call_failed"]
+
+
+@dataclass
+class ServiceCallResult:
+	ok: bool
+	values: dict[str, Any] | None
+	error: ServiceCallError | None
+
+
+@dataclass
+class PendingServiceCall:
+	event: asyncio.Event = field(default_factory=asyncio.Event)
+	result: ServiceCallResult | None = None
+
+
+@dataclass
+class LatestRawMessage:
+	msg: dict[str, Any]
+	timestamp_ms: int
 
 
 class RosBridgeClient:
@@ -97,6 +121,8 @@ class RosBridgeClient:
 		self._camera_last_frame_time: dict[str, float] = {}
 		self._camera_connected: dict[str, bool] = {}
 		self._pending_ack: PendingAck | None = None
+		self._pending_service_calls: dict[str, PendingServiceCall] = {}
+		self._latest_raw_by_topic: dict[str, LatestRawMessage] = {}
 		self._mission_tracker = MissionExecutionTracker()
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
@@ -203,6 +229,68 @@ class RosBridgeClient:
 		finally:
 			if self._pending_ack is pending:
 				self._pending_ack = None
+
+	async def call_service(
+		self,
+		service: str,
+		ros_type: str,
+		args: dict[str, Any] | None = None,
+		timeout_s: float = 5.0,
+	) -> ServiceCallResult:
+		"""Call a rosbridge/rosapi service and await its response via the call_service op.
+
+		Deliberately not built on PendingAck/self._pending_ack -- that mechanism is single-flight
+		by design for a specific vessel side-effect (see publish_and_await_ack's docstring: "only
+		one send can be pending at a time"). Service calls have no such constraint (e.g. two
+		browser tabs issuing different introspection commands concurrently), so correlation is by
+		the call_service op's own "id" field against a dict of pending calls, not a single slot.
+		"""
+		if not self._connected:
+			return ServiceCallResult(ok=False, values=None, error="not_connected")
+		call_id = f"call_service:{uuid.uuid4()}"
+		pending = PendingServiceCall()
+		self._pending_service_calls[call_id] = pending
+		try:
+			frame: RosBridgeCallService = {
+				"op": "call_service",
+				"id": call_id,
+				"service": service,
+				"type": ros_type,
+				"args": args or {},
+			}
+			await self._conn.send(json.dumps(frame))  # type: ignore[union-attr]
+			try:
+				await asyncio.wait_for(pending.event.wait(), timeout=timeout_s)
+			except TimeoutError:
+				return ServiceCallResult(ok=False, values=None, error="timed_out")
+			if pending.result is not None:
+				return pending.result
+			return ServiceCallResult(ok=False, values=None, error="service_call_failed")
+		finally:
+			self._pending_service_calls.pop(call_id, None)
+
+	def _handle_service_response(self, data: dict) -> None:
+		call_id = data.get("id")
+		pending = self._pending_service_calls.get(call_id) if call_id else None
+		if pending is None:
+			return
+		result_ok = bool(data.get("result"))
+		values = data.get("values")
+		pending.result = ServiceCallResult(
+			ok=result_ok,
+			values=values if isinstance(values, dict) else None,
+			error=None if result_ok else "service_call_failed",
+		)
+		pending.event.set()
+
+	def latest_raw_message(self, topic: str) -> LatestRawMessage | None:
+		"""The last raw (untransformed) message received on this topic since connect, if any.
+
+		Only ever populated for topics this client actually subscribes to (get_subscribe_topics,
+		applied in _send_subscriptions) -- echo_topic's "must be an already-allow-listed topic"
+		restriction is therefore structural here, not just validated by the caller.
+		"""
+		return self._latest_raw_by_topic.get(topic)
 
 	def _check_pending_ack(self, waypoints: list[SimWaypoint]) -> None:
 		pending = self._pending_ack
@@ -389,9 +477,19 @@ class RosBridgeClient:
 		except json.JSONDecodeError:
 			logger.warning("rosbridge_invalid_json")
 			return
-		if data.get("op") != "publish":
+		op = data.get("op")
+		if op == "service_response":
+			self._handle_service_response(data)
+			return
+		if op != "publish":
 			return
 		topic = data.get("topic", "")
+		# Populated unconditionally, before the frontend fan-out throttle below -- echo_topic
+		# must reflect the true latest wire message, not whatever the browser-facing throttle
+		# happens to have let through.
+		self._latest_raw_by_topic[topic] = LatestRawMessage(
+			msg=data.get("msg") or {}, timestamp_ms=int(time.time() * 1000)
+		)
 		throttle_s = self._topic_throttle.get(topic, 0.0)
 		if throttle_s:
 			now = time.monotonic()

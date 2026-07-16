@@ -48,6 +48,36 @@ async def _mock_server(websocket) -> None:
 			await websocket.send(
 				json.dumps({"op": "publish", "topic": "/waypoint_list", "msg": frame["msg"]})
 			)
+		elif frame.get("op") == "call_service":
+			service = frame.get("service")
+			call_id = frame.get("id")
+			if service == "/rosapi/topics":
+				await websocket.send(
+					json.dumps(
+						{
+							"op": "service_response",
+							"id": call_id,
+							"service": service,
+							"values": {"topics": ["/fix"], "types": ["sensor_msgs/NavSatFix"]},
+							"result": True,
+						}
+					)
+				)
+			elif service == "/rosapi/get_param_slow":
+				# Deliberately never responds, so callers awaiting this service time out.
+				pass
+			elif service == "/rosapi/fails":
+				await websocket.send(
+					json.dumps(
+						{
+							"op": "service_response",
+							"id": call_id,
+							"service": service,
+							"values": None,
+							"result": False,
+						}
+					)
+				)
 
 
 @pytest.fixture
@@ -297,6 +327,120 @@ async def test_publish_and_await_ack_returns_not_connected_when_disconnected() -
 		"/update_waypoint_list", "custom_msgs/WaypointList", {}, expected=[]
 	)
 	assert status == "not_connected"
+
+
+async def test_call_service_resolves_ok_with_values(mock_bridge_url: str) -> None:
+	client = RosBridgeClient(mock_bridge_url, "physical")
+	await client.start()
+	try:
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		result = await client.call_service("/rosapi/topics", "rosapi_msgs/Topics", timeout_s=5.0)
+		assert result.ok is True
+		assert result.error is None
+		assert result.values == {"topics": ["/fix"], "types": ["sensor_msgs/NavSatFix"]}
+	finally:
+		await client.stop()
+
+
+async def test_call_service_resolves_not_ok_on_result_false(mock_bridge_url: str) -> None:
+	client = RosBridgeClient(mock_bridge_url, "physical")
+	await client.start()
+	try:
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		result = await client.call_service("/rosapi/fails", "rosapi_msgs/GetParam", timeout_s=5.0)
+		assert result.ok is False
+		assert result.error == "service_call_failed"
+		assert result.values is None
+	finally:
+		await client.stop()
+
+
+async def test_call_service_times_out_with_no_response(mock_bridge_url: str) -> None:
+	client = RosBridgeClient(mock_bridge_url, "physical")
+	await client.start()
+	try:
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		result = await client.call_service(
+			"/rosapi/get_param_slow", "rosapi_msgs/GetParam", timeout_s=0.3
+		)
+		assert result.ok is False
+		assert result.error == "timed_out"
+		# The abandoned call must not linger in the pending-calls table forever.
+		assert len(client._pending_service_calls) == 0
+	finally:
+		await client.stop()
+
+
+async def test_call_service_returns_not_connected_when_disconnected() -> None:
+	client = RosBridgeClient(DEAD_URL, "physical")
+	result = await client.call_service("/rosapi/topics", "rosapi_msgs/Topics")
+	assert result.ok is False
+	assert result.error == "not_connected"
+
+
+async def test_call_service_concurrent_calls_resolve_independently(mock_bridge_url: str) -> None:
+	"""Two calls in flight at once must not clobber each other -- unlike publish_and_await_ack's
+	single-slot PendingAck, call_service correlates by id, so this must not be single-flight."""
+	client = RosBridgeClient(mock_bridge_url, "physical")
+	await client.start()
+	try:
+		for _ in range(50):
+			if client.connected:
+				break
+			await asyncio.sleep(0.05)
+		assert client.connected
+
+		results = await asyncio.gather(
+			client.call_service("/rosapi/topics", "rosapi_msgs/Topics"),
+			client.call_service("/rosapi/topics", "rosapi_msgs/Topics"),
+		)
+		assert all(r.ok for r in results)
+		assert all(
+			r.values == {"topics": ["/fix"], "types": ["sensor_msgs/NavSatFix"]} for r in results
+		)
+	finally:
+		await client.stop()
+
+
+def test_latest_raw_message_returns_none_before_any_publish() -> None:
+	client = RosBridgeClient(DEAD_URL, "physical")
+	assert client.latest_raw_message("/fix") is None
+
+
+def test_latest_raw_message_reflects_latest_dispatch() -> None:
+	client = RosBridgeClient(DEAD_URL, "physical")
+	client._dispatch(
+		json.dumps({"op": "publish", "topic": "/fix", "msg": {"latitude": 1.0, "longitude": 2.0}})
+	)
+	client._dispatch(
+		json.dumps({"op": "publish", "topic": "/fix", "msg": {"latitude": 3.0, "longitude": 4.0}})
+	)
+	latest = client.latest_raw_message("/fix")
+	assert latest is not None
+	assert latest.msg == {"latitude": 3.0, "longitude": 4.0}
+
+
+def test_latest_raw_message_only_covers_dispatched_topics() -> None:
+	client = RosBridgeClient(DEAD_URL, "physical")
+	client._dispatch(
+		json.dumps({"op": "publish", "topic": "/fix", "msg": {"latitude": 1.0, "longitude": 2.0}})
+	)
+	assert client.latest_raw_message("/heading") is None
 
 
 def test_latlon_to_cartesian_is_inverse_of_cartesian_to_latlon() -> None:

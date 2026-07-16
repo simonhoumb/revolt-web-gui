@@ -126,4 +126,31 @@ export interface MissionExecutionResult {
 	waypoint_count: number;
 }
 
+export interface RosCommandParamMeta {
+	name: string;
+	label: string;
+	kind: "topic_select" | "param_select" | "text";
+	required: boolean;
+	// Populated for kind="topic_select" (bridge/protocol.py's topic allow-list) and
+	// kind="param_select" (a live /rosapi/get_param_names call), both resolved server-side --
+	// the frontend never keeps its own copy of either list.
+	allowed_values: string[] | null;
+}
+
+export interface RosCommandMeta {
+	command_id: string;
+	label: string;
+	description: string;
+	params: RosCommandParamMeta[];
+}
+
+export interface RosCommandResult {
+	command_id: string;
+	ok: boolean;
+	// "not_connected" | "timed_out" | "service_call_failed" | "no_data_yet" | null
+	error: string | null;
+	result: Record<string, unknown> | null;
+	executed_at: string;
+}
+
 export * from "./bridge.js";
