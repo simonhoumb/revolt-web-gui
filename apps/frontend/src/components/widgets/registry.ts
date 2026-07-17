@@ -11,6 +11,7 @@ import { MissionControlWidget } from "./MissionControlWidget.js";
 import { RosCommandWidget } from "./RosCommandWidget.js";
 import { EnclosureHealthWidget } from "./EnclosureHealthWidget.js";
 import { RcRemoteWidget } from "./RcRemoteWidget.js";
+import { RadarWidget } from "./RadarWidget.js";
 import { ObiBatteryHorizontal75 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-75.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -23,6 +24,7 @@ import { ObiMonitoringRoute } from "@oicl/openbridge-webcomponents-react/icons/i
 import { ObiLogEditGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-log-edit-google.js";
 import { ObiHvac } from "@oicl/openbridge-webcomponents-react/icons/icon-hvac.js";
 import { ObiJoystick } from "@oicl/openbridge-webcomponents-react/icons/icon-joystick.js";
+import { ObiRadarStandbyIec } from "@oicl/openbridge-webcomponents-react/icons/icon-radar-standby-iec.js";
 
 export type WidgetId =
 	| "battery"
@@ -36,7 +38,8 @@ export type WidgetId =
 	| "mission_control"
 	| "ros_commands"
 	| "enclosure_health"
-	| "rc_remote";
+	| "rc_remote"
+	| "radar";
 
 export interface TilePosition {
 	x: number;
@@ -214,6 +217,19 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		// independently since they were built on parallel branches.
 		defaultPosition: { x: 3, y: 28, w: 3, h: 4 },
 	},
+	radar: {
+		id: "radar",
+		label: "Radar",
+		component: RadarWidget,
+		icon: ObiRadarStandbyIec,
+		defaultW: 3,
+		defaultH: 5,
+		minW: 3,
+		minH: 5,
+		// Same "first free spot" collision as rc_remote above -- moved off enclosure_health's
+		// x:0,y:28 slot to avoid overlapping it.
+		defaultPosition: { x: 6, y: 28, w: 3, h: 5 },
+	},
 };
 
 export const ALL_WIDGET_IDS: WidgetId[] = [
@@ -229,4 +245,5 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"ros_commands",
 	"enclosure_health",
 	"rc_remote",
+	"radar",
 ];

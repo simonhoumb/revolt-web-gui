@@ -238,6 +238,19 @@ export interface LidarScanMsg {
 	ranges: number[]; // metres per step; inf/NaN replaced with range_max
 }
 
+export interface RadarSpokeMsg {
+	v: "1";
+	type: "radar_spoke";
+	timestamp_ms: number;
+	azimuth: number; // radians, absolute (not relative to a prior spoke)
+	range_start: number; // metres, range of the first sample
+	range_increment: number; // metres between consecutive samples
+	num_samples: number;
+	min_intensity: number; // 0-255
+	max_intensity: number; // 0-255
+	intensity: number[]; // one 0-255 value per sample
+}
+
 export type BridgeMessage =
 	| BatteryMsg
 	| CurrentMsg
@@ -245,6 +258,7 @@ export type BridgeMessage =
 	| HumidityMsg
 	| AzimuthFeedbackMsg
 	| RcRemoteMsg
+	| RadarSpokeMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg

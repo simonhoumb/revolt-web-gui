@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/stepper-box/stepper-box.js";
 import { useLidarData } from "../../hooks/useLidarData.js";
 import styles from "./LidarWidget.module.css";
 
@@ -47,6 +48,26 @@ export function LidarWidget() {
 		observer.observe(el);
 		return () => {
 			observer.disconnect();
+		};
+	}, []);
+
+	// Mouse-wheel zoom while the cursor is over the instrument, same convention as MapWidget's
+	// scrollZoom -- only zooms this widget, not the dashboard page underneath it. Requires a
+	// native (non-passive) listener since React's JSX onWheel can't reliably preventDefault.
+	useEffect(() => {
+		const el = canvasAreaRef.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			if (e.deltaY < 0) {
+				setZoomIdx((i) => Math.max(0, i - 1));
+			} else if (e.deltaY > 0) {
+				setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
+			}
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => {
+			el.removeEventListener("wheel", onWheel);
 		};
 	}, []);
 
@@ -172,23 +193,10 @@ export function LidarWidget() {
 				/>
 			</div>
 			<div className={styles.controls}>
-				<button
-					className={styles.zoomBtn}
-					onClick={zoomIn}
-					disabled={zoomIdx === 0}
-					aria-label="Zoom in"
-				>
-					+
-				</button>
-				<span className={styles.rangeLabel}>{displayRange} m</span>
-				<button
-					className={styles.zoomBtn}
-					onClick={zoomOut}
-					disabled={zoomIdx === ZOOM_STEPS.length - 1}
-					aria-label="Zoom out"
-				>
-					−
-				</button>
+				<ObcStepperBox aria-label="Lidar range" onUp={zoomIn} onDown={zoomOut}>
+					<div>{displayRange}</div>
+					<div slot="unit">m</div>
+				</ObcStepperBox>
 			</div>
 		</div>
 	);

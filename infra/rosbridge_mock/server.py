@@ -86,6 +86,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/heading": 0.5,
     "/camera/camera/color/image_raw/compressed": 0.2,  # 5 fps
     "/scan": 0.1,  # 10 Hz
+    "/radar/spoke": 0.01,  # ~= 20s-rotation / 2048 fine steps, so each tick advances one step
 }
 
 # Emit intervals for simulation topics
@@ -129,6 +130,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/heading": "geometry_msgs/QuaternionStamped",
     "/camera/camera/color/image_raw/compressed": "sensor_msgs/CompressedImage",
     "/scan": "sensor_msgs/LaserScan",
+    "/radar/spoke": "custom_msgs/RadarSpoke",
 }
 TOPIC_TYPES_SIMULATION: dict[str, str] = {
     "/revolt/sim/stc/position/hull": "geometry_msgs/PoseStamped",
@@ -451,6 +453,48 @@ def _make_msg(topic: str) -> dict:
                     "stamp": {"secs": int(t), "nsecs": 0},
                     "frame_id": "velodyne",
                 },
+            }
+        case "/radar/spoke":
+            # Simulated Furuno DRS4D-NXT. The real unit emits 8,192 raw spokes/revolution
+            # (confirmed via Furuno's own NavNet API spec, bundled in Hardware/radar/RadarSDK/),
+            # but at that resolution and a typical 24-48 RPM rotation the real spoke rate is
+            # several thousand messages/second -- too fast to usefully exercise in a local mock
+            # loop. This simulates a coarser 2048 fine steps/revolution, still finer than the
+            # backend's own RADAR_NUM_BINS=512 aggregation bins (client.py) so several fine mock
+            # spokes land in each bin, exercising the same max-merge path real hardware would.
+            fine_steps_per_rev = 2048
+            rotation_period_s = 20.0
+            step = int(t / (rotation_period_s / fine_steps_per_rev)) % fine_steps_per_rev
+            azimuth = step * (2 * math.pi / fine_steps_per_rev)
+            # num_samples=480 and range_start=0.0 match radar_node.cpp's real behaviour and the
+            # NavNet API spec's own worked example. range_increment is chosen to place a realistic
+            # 8 nm range boundary at the end of the sweep (480 samples covering 8 nm) rather than
+            # reusing radar_node.cpp's `range_increment = 125.0f / scale` formula -- that formula
+            # doesn't reproduce the spec's own worked example (sweep_len=480, scale=240 -> 8 nm
+            # boundary at sample 240, i.e. ~61.7 m/sample, not the ~0.52 m/sample the formula
+            # gives), a ~118x discrepancy that looks like a real unit bug in the existing driver.
+            num_samples = 480
+            range_start = 0.0
+            range_increment = (8 * 1852.0) / num_samples
+            target_azimuth = 1.2
+            # ~740 m (~0.4 nm) out -- visible at the widget's default 1 nm zoom (dock-adjacent
+            # testing needs the tight end of the range ladder, not an offshore-transit range).
+            target_sample_idx = 24
+            angle_diff = abs(((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi)
+            intensity_bytes = bytearray(num_samples)
+            for i in range(num_samples):
+                level = 10 + random.gauss(0, 3)
+                if angle_diff < 0.1 and abs(i - target_sample_idx) < 4:
+                    level += 200
+                intensity_bytes[i] = max(0, min(255, int(level)))
+            return {
+                "azimuth": round(azimuth, 5),
+                "range_start": range_start,
+                "range_increment": round(range_increment, 4),
+                "num_samples": num_samples,
+                "min_intensity": 0,
+                "max_intensity": 255,
+                "intensity": base64.b64encode(bytes(intensity_bytes)).decode(),
             }
         case _:
             return {"data": 0}
