@@ -10,6 +10,7 @@ import { MissionWidget } from "./MissionWidget.js";
 import { MissionControlWidget } from "./MissionControlWidget.js";
 import { RosCommandWidget } from "./RosCommandWidget.js";
 import { EnclosureHealthWidget } from "./EnclosureHealthWidget.js";
+import { RcRemoteWidget } from "./RcRemoteWidget.js";
 import { ObiBatteryHorizontal75 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-75.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -21,6 +22,7 @@ import { ObiNavigationRoute } from "@oicl/openbridge-webcomponents-react/icons/i
 import { ObiMonitoringRoute } from "@oicl/openbridge-webcomponents-react/icons/icon-monitoring-route.js";
 import { ObiLogEditGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-log-edit-google.js";
 import { ObiHvac } from "@oicl/openbridge-webcomponents-react/icons/icon-hvac.js";
+import { ObiJoystick } from "@oicl/openbridge-webcomponents-react/icons/icon-joystick.js";
 
 export type WidgetId =
 	| "battery"
@@ -33,7 +35,8 @@ export type WidgetId =
 	| "mission"
 	| "mission_control"
 	| "ros_commands"
-	| "enclosure_health";
+	| "enclosure_health"
+	| "rc_remote";
 
 export interface TilePosition {
 	x: number;
@@ -197,6 +200,20 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		minH: 3,
 		defaultPosition: { x: 0, y: 28, w: 3, h: 5 },
 	},
+	rc_remote: {
+		id: "rc_remote",
+		label: "RC Remote",
+		component: RcRemoteWidget,
+		icon: ObiJoystick,
+		defaultW: 3,
+		defaultH: 4,
+		minW: 2,
+		minH: 3,
+		// Placed beside enclosure_health rather than reusing its own x:0,y:28 slot -- both
+		// widgets picked the same "first free spot after the curated layout" coordinates
+		// independently since they were built on parallel branches.
+		defaultPosition: { x: 3, y: 28, w: 3, h: 4 },
+	},
 };
 
 export const ALL_WIDGET_IDS: WidgetId[] = [
@@ -211,4 +228,5 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"mission_control",
 	"ros_commands",
 	"enclosure_health",
+	"rc_remote",
 ];

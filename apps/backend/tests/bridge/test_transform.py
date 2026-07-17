@@ -130,6 +130,42 @@ def test_azimuth_feedback_starboard(client: RosBridgeClient) -> None:
 	assert result["angle_deg"] == -8.0
 
 
+def test_rc_remote_manual(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/arduino/stern/rc_remote_input",
+		{
+			"throttle": 1500,
+			"aileron": 1200,
+			"elevation": 1500,
+			"rudder": 1800,
+			"gear": 0,
+			"aux": 1500,
+		},
+	)
+	assert result is not None
+	assert result["type"] == "rc_remote"
+	assert result["throttle"] == 1500
+	assert result["aileron"] == 1200
+	assert result["rudder"] == 1800
+	assert result["gear"] == "manual"
+
+
+def test_rc_remote_auto(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/arduino/stern/rc_remote_input",
+		{
+			"throttle": 1500,
+			"aileron": 1500,
+			"elevation": 1500,
+			"rudder": 1500,
+			"gear": 1,
+			"aux": 1500,
+		},
+	)
+	assert result is not None
+	assert result["gear"] == "auto"
+
+
 @pytest.mark.parametrize(
 	"raw,expected_mode",
 	[

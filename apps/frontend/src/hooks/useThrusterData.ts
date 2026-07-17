@@ -31,8 +31,14 @@ function toThrusterStatus(
 }
 
 export function useThrusterData(): ThrusterData {
-	const { current, thrusterFeedback, controlMode, linearActuator, bridgeStatus, azimuthFeedback } =
-		useBridgeData();
+	const {
+		current,
+		thrusterFeedback,
+		controlMode,
+		linearActuator,
+		bridgeStatus,
+		azimuthFeedback,
+	} = useBridgeData();
 
 	const isSimulation = bridgeStatus?.target === "simulation";
 

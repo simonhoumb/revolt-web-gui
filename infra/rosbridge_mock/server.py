@@ -79,6 +79,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/arduino/bow/linear_actuator_retract_state": 2.0,
     "/thruster/port/feedback_angle": 0.5,
     "/thruster/starboard/feedback_angle": 0.5,
+    "/arduino/stern/rc_remote_input": 0.2,
     "/control_mode": 1.0,
     "/fix": 1.0,
     "/vel": 1.0,
@@ -121,6 +122,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/arduino/bow/linear_actuator_retract_state": "std_msgs/UInt16",
     "/thruster/port/feedback_angle": "std_msgs/Float32",
     "/thruster/starboard/feedback_angle": "std_msgs/Float32",
+    "/arduino/stern/rc_remote_input": "custom_msgs/RCRemote",
     "/control_mode": "std_msgs/UInt8",
     "/fix": "sensor_msgs/NavSatFix",
     "/vel": "geometry_msgs/TwistStamped",
@@ -257,6 +259,16 @@ def _make_msg(topic: str) -> dict:
             return {"data": round(90.0 * math.sin(t / 10), 1)}
         case "/thruster/starboard/feedback_angle":
             return {"data": round(90.0 * math.sin(t / 10 + 0.3), 1)}
+        case "/arduino/stern/rc_remote_input":
+            # PWM range 1070-1930, center ~1500; gear toggles manual/auto every 15 s
+            return {
+                "throttle": int(1500 + 400 * math.sin(t / 3)),
+                "aileron": int(1500 + 300 * math.sin(t / 4)),
+                "elevation": 1500,
+                "rudder": int(1500 + 300 * math.cos(t / 5)),
+                "gear": int(t / 15) % 2,
+                "aux": 1500,
+            }
         case "/control_mode":
             # Cycles through all four modes every 40 s so UI state changes are visible
             return {"data": int(t / 10) % 4}

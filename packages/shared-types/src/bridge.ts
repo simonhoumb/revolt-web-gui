@@ -44,6 +44,16 @@ export interface AzimuthFeedbackMsg {
 	angle_deg: number;
 }
 
+export interface RcRemoteMsg {
+	v: "1";
+	type: "rc_remote";
+	timestamp_ms: number;
+	throttle: number; // raw PWM, 1070-1930
+	aileron: number; // raw PWM, 1070-1930
+	rudder: number; // raw PWM, 1070-1930
+	gear: "manual" | "auto"; // 0=manual, 1=auto
+}
+
 export interface ControlModeMsg {
 	v: "1";
 	type: "control_mode";
@@ -234,6 +244,7 @@ export type BridgeMessage =
 	| TemperatureMsg
 	| HumidityMsg
 	| AzimuthFeedbackMsg
+	| RcRemoteMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg
