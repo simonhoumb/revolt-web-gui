@@ -10,6 +10,7 @@ import type {
 	GnssFixMsg,
 	GnssHeadingMsg,
 	GnssVelocityMsg,
+	HumidityMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
 	MissionExecutionStatusMsg,
@@ -17,6 +18,7 @@ import type {
 	SimGnssVelocityMsg,
 	SimThrusterFeedbackMsg,
 	SimWaypointListMsg,
+	TemperatureMsg,
 } from "@revolt/shared-types";
 import { useBridgeConnection } from "../hooks/useBridgeConnection.js";
 
@@ -24,6 +26,16 @@ interface CurrentReadings {
 	stern_port: CurrentMsg | null;
 	stern_star: CurrentMsg | null;
 	bow: CurrentMsg | null;
+}
+
+interface TemperatureReadings {
+	stern: TemperatureMsg | null;
+	bow: TemperatureMsg | null;
+}
+
+interface HumidityReadings {
+	stern: HumidityMsg | null;
+	bow: HumidityMsg | null;
 }
 
 interface ThrusterFeedback {
@@ -35,6 +47,8 @@ interface ThrusterFeedback {
 export interface BridgeData {
 	battery: BatteryMsg | null;
 	current: CurrentReadings;
+	temperature: TemperatureReadings;
+	humidity: HumidityReadings;
 	gnssFix: GnssFixMsg | null;
 	gnssHeading: GnssHeadingMsg | null;
 	gnssVelocity: SimGnssVelocityMsg | null;
@@ -55,11 +69,15 @@ export interface BridgeData {
 }
 
 const initialCurrent: CurrentReadings = { stern_port: null, stern_star: null, bow: null };
+const initialTemperature: TemperatureReadings = { stern: null, bow: null };
+const initialHumidity: HumidityReadings = { stern: null, bow: null };
 const initialThrusterFeedback: ThrusterFeedback = { bow: null, port: null, starboard: null };
 
 export const initialData: BridgeData = {
 	battery: null,
 	current: initialCurrent,
+	temperature: initialTemperature,
+	humidity: initialHumidity,
 	gnssFix: null,
 	gnssHeading: null,
 	gnssVelocity: null,
@@ -87,6 +105,16 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 			return {
 				...state,
 				current: { ...state.current, [msg.location]: msg },
+			};
+		case "temperature":
+			return {
+				...state,
+				temperature: { ...state.temperature, [msg.location]: msg },
+			};
+		case "humidity":
+			return {
+				...state,
+				humidity: { ...state.humidity, [msg.location]: msg },
 			};
 		case "gnss_fix":
 			return { ...state, gnssFix: msg };
