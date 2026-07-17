@@ -22,6 +22,7 @@ const base: BridgeData = {
 	controlMode: null,
 	emergencyStop: null,
 	linearActuator: null,
+	azimuthFeedback: { port: null, starboard: null },
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,

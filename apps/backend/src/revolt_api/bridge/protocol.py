@@ -70,6 +70,16 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		description="Bow linear actuator retract state: 1=retracted",
 	),
 	TopicSpec(
+		"/thruster/port/feedback_angle",
+		"std_msgs/Float32",
+		description="Port azimuth thruster actual angle feedback, degrees",
+	),
+	TopicSpec(
+		"/thruster/starboard/feedback_angle",
+		"std_msgs/Float32",
+		description="Starboard azimuth thruster actual angle feedback, degrees",
+	),
+	TopicSpec(
 		"/control_mode",
 		"std_msgs/UInt8",
 		description="Control mode: 0=manual 1=manual_assisted 2=autonomous 3=miscommunication",

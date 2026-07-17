@@ -21,6 +21,7 @@ const base: BridgeData = {
 	controlMode: null,
 	emergencyStop: null,
 	linearActuator: null,
+	azimuthFeedback: { port: null, starboard: null },
 	bridgeStatus: {
 		v: "1",
 		type: "bridge_status",
@@ -162,5 +163,48 @@ describe("useThrusterData — simulation feedback", () => {
 		expect(result.current.stern_port.force).toBeNull();
 		expect(result.current.stern_port.angleDeg).toBeNull();
 		expect(result.current.isSimulation).toBe(false);
+	});
+});
+
+describe("useThrusterData — physical azimuth feedback", () => {
+	beforeEach(() => {
+		mockUseBridgeData.mockReturnValue(base);
+	});
+
+	it("populates angleDeg from real azimuth feedback in physical mode", () => {
+		mockUseBridgeData.mockReturnValue({
+			...base,
+			azimuthFeedback: {
+				port: {
+					v: "1",
+					type: "azimuth_feedback",
+					timestamp_ms: 0,
+					location: "port",
+					angle_deg: 12.5,
+				},
+				starboard: null,
+			},
+		});
+		const { result } = renderHook(() => useThrusterData());
+		expect(result.current.stern_port.angleDeg).toBe(12.5);
+		expect(result.current.stern_port.force).toBeNull();
+	});
+
+	it("bow never gets an angleDeg, even with azimuth feedback present", () => {
+		mockUseBridgeData.mockReturnValue({
+			...base,
+			azimuthFeedback: {
+				port: {
+					v: "1",
+					type: "azimuth_feedback",
+					timestamp_ms: 0,
+					location: "port",
+					angle_deg: 12.5,
+				},
+				starboard: null,
+			},
+		});
+		const { result } = renderHook(() => useThrusterData());
+		expect(result.current.bow.angleDeg).toBeNull();
 	});
 });

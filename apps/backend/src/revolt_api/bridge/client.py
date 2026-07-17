@@ -15,6 +15,7 @@ from websockets.asyncio.client import connect
 from revolt_api.bridge.contracts import (
 	_ADC_TO_AMPS,
 	_CONTROL_MODE_MAP,
+	AzimuthFeedbackMsg,
 	BatteryMsg,
 	BridgeMessage,
 	BridgeStatusMsg,
@@ -146,6 +147,8 @@ class RosBridgeClient:
 			"/arduino/bow/dht22/humidity": self._handle_humidity_bow,
 			"/arduino/stern/emergency_stop_status": self._handle_emergency_stop,
 			"/arduino/bow/linear_actuator_retract_state": self._handle_linear_actuator,
+			"/thruster/port/feedback_angle": self._handle_azimuth_feedback_port,
+			"/thruster/starboard/feedback_angle": self._handle_azimuth_feedback_starboard,
 			"/control_mode": self._handle_control_mode,
 			"/revolt/sim/stc/position/hull": self._handle_sim_hull_position,
 			"/revolt/sim/stc/position/velocity": self._handle_sim_hull_velocity,
@@ -593,6 +596,24 @@ class RosBridgeClient:
 	def _handle_linear_actuator(self, msg: dict, now: int) -> BridgeMessage | None:
 		return LinearActuatorMsg(
 			v="1", type="linear_actuator", timestamp_ms=now, retracted=int(msg["data"]) == 1
+		)
+
+	def _handle_azimuth_feedback_port(self, msg: dict, now: int) -> BridgeMessage | None:
+		return AzimuthFeedbackMsg(
+			v="1",
+			type="azimuth_feedback",
+			timestamp_ms=now,
+			location="port",
+			angle_deg=float(msg["data"]),
+		)
+
+	def _handle_azimuth_feedback_starboard(self, msg: dict, now: int) -> BridgeMessage | None:
+		return AzimuthFeedbackMsg(
+			v="1",
+			type="azimuth_feedback",
+			timestamp_ms=now,
+			location="starboard",
+			angle_deg=float(msg["data"]),
 		)
 
 	def _handle_control_mode(self, msg: dict, now: int) -> BridgeMessage | None:

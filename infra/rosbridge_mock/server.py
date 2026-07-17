@@ -77,6 +77,8 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/arduino/bow/dht22/humidity": 5.0,
     "/arduino/stern/emergency_stop_status": 1.0,
     "/arduino/bow/linear_actuator_retract_state": 2.0,
+    "/thruster/port/feedback_angle": 0.5,
+    "/thruster/starboard/feedback_angle": 0.5,
     "/control_mode": 1.0,
     "/fix": 1.0,
     "/vel": 1.0,
@@ -117,6 +119,8 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/arduino/bow/dht22/humidity": "std_msgs/Float32",
     "/arduino/stern/emergency_stop_status": "std_msgs/UInt16",
     "/arduino/bow/linear_actuator_retract_state": "std_msgs/UInt16",
+    "/thruster/port/feedback_angle": "std_msgs/Float32",
+    "/thruster/starboard/feedback_angle": "std_msgs/Float32",
     "/control_mode": "std_msgs/UInt8",
     "/fix": "sensor_msgs/NavSatFix",
     "/vel": "geometry_msgs/TwistStamped",
@@ -248,6 +252,11 @@ def _make_msg(topic: str) -> dict:
         case "/arduino/bow/linear_actuator_retract_state":
             # Alternates retracted/deployed every 20 s
             return {"data": int(t / 20) % 2}
+        case "/thruster/port/feedback_angle":
+            # Slow azimuth sweep, -90 to 90 degrees
+            return {"data": round(90.0 * math.sin(t / 10), 1)}
+        case "/thruster/starboard/feedback_angle":
+            return {"data": round(90.0 * math.sin(t / 10 + 0.3), 1)}
         case "/control_mode":
             # Cycles through all four modes every 40 s so UI state changes are visible
             return {"data": int(t / 10) % 4}

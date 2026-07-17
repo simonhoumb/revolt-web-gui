@@ -25,10 +25,12 @@ function ThrusterRow({ label, status, isSimulation, bowExtra }: ThrusterRowProps
 					{status.amperes !== null ? `${status.amperes.toFixed(1)} A` : "— A"}
 				</span>
 			</div>
-			{isSimulation && status.force !== null && status.angleDeg !== null && (
+			{(isSimulation || status.angleDeg !== null) && (
 				<div className={styles.simData}>
-					<span>Force: {status.force.toFixed(1)} N</span>
-					<span>Angle: {status.angleDeg.toFixed(1)}°</span>
+					{isSimulation && status.force !== null && (
+						<span>Force: {status.force.toFixed(1)} N</span>
+					)}
+					{status.angleDeg !== null && <span>Angle: {status.angleDeg.toFixed(1)}°</span>}
 				</div>
 			)}
 			{bowExtra !== undefined && (
