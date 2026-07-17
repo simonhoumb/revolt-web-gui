@@ -114,6 +114,22 @@ def test_linear_actuator_extended(client: RosBridgeClient) -> None:
 	assert result["retracted"] is False
 
 
+def test_azimuth_feedback_port(client: RosBridgeClient) -> None:
+	result = client._transform("/thruster/port/feedback_angle", {"data": 12.5})
+	assert result is not None
+	assert result["type"] == "azimuth_feedback"
+	assert result["location"] == "port"
+	assert result["angle_deg"] == 12.5
+
+
+def test_azimuth_feedback_starboard(client: RosBridgeClient) -> None:
+	result = client._transform("/thruster/starboard/feedback_angle", {"data": -8.0})
+	assert result is not None
+	assert result["type"] == "azimuth_feedback"
+	assert result["location"] == "starboard"
+	assert result["angle_deg"] == -8.0
+
+
 @pytest.mark.parametrize(
 	"raw,expected_mode",
 	[

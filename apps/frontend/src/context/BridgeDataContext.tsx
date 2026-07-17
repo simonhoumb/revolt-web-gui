@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 import type {
+	AzimuthFeedbackMsg,
 	BatteryMsg,
 	BridgeMessage,
 	BridgeStatusMsg,
@@ -44,6 +45,11 @@ interface ThrusterFeedback {
 	starboard: SimThrusterFeedbackMsg | null;
 }
 
+interface AzimuthFeedback {
+	port: AzimuthFeedbackMsg | null;
+	starboard: AzimuthFeedbackMsg | null;
+}
+
 export interface BridgeData {
 	battery: BatteryMsg | null;
 	current: CurrentReadings;
@@ -56,6 +62,7 @@ export interface BridgeData {
 	controlMode: ControlModeMsg | null;
 	emergencyStop: EmergencyStopMsg | null;
 	linearActuator: LinearActuatorMsg | null;
+	azimuthFeedback: AzimuthFeedback;
 	bridgeStatus: BridgeStatusMsg | null;
 	cameraStatus: CameraStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
@@ -72,6 +79,7 @@ const initialCurrent: CurrentReadings = { stern_port: null, stern_star: null, bo
 const initialTemperature: TemperatureReadings = { stern: null, bow: null };
 const initialHumidity: HumidityReadings = { stern: null, bow: null };
 const initialThrusterFeedback: ThrusterFeedback = { bow: null, port: null, starboard: null };
+const initialAzimuthFeedback: AzimuthFeedback = { port: null, starboard: null };
 
 export const initialData: BridgeData = {
 	battery: null,
@@ -85,6 +93,7 @@ export const initialData: BridgeData = {
 	controlMode: null,
 	emergencyStop: null,
 	linearActuator: null,
+	azimuthFeedback: initialAzimuthFeedback,
 	bridgeStatus: null,
 	cameraStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
@@ -130,6 +139,11 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 			return { ...state, emergencyStop: msg };
 		case "linear_actuator":
 			return { ...state, linearActuator: msg };
+		case "azimuth_feedback":
+			return {
+				...state,
+				azimuthFeedback: { ...state.azimuthFeedback, [msg.location]: msg },
+			};
 		case "bridge_status":
 			return { ...state, bridgeStatus: msg };
 		case "sim_thruster_feedback":

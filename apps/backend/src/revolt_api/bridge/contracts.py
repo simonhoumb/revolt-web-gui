@@ -38,6 +38,14 @@ class HumidityMsg(TypedDict):
 	value_pct: float
 
 
+class AzimuthFeedbackMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["azimuth_feedback"]
+	timestamp_ms: int
+	location: Literal["port", "starboard"]
+	angle_deg: float
+
+
 class ControlModeMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["control_mode"]
@@ -229,6 +237,7 @@ BridgeMessage = (
 	| CurrentMsg
 	| TemperatureMsg
 	| HumidityMsg
+	| AzimuthFeedbackMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg

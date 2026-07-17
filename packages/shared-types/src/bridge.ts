@@ -36,6 +36,14 @@ export interface HumidityMsg {
 	value_pct: number;
 }
 
+export interface AzimuthFeedbackMsg {
+	v: "1";
+	type: "azimuth_feedback";
+	timestamp_ms: number;
+	location: "port" | "starboard";
+	angle_deg: number;
+}
+
 export interface ControlModeMsg {
 	v: "1";
 	type: "control_mode";
@@ -225,6 +233,7 @@ export type BridgeMessage =
 	| CurrentMsg
 	| TemperatureMsg
 	| HumidityMsg
+	| AzimuthFeedbackMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg
