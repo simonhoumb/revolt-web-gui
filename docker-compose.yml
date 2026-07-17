@@ -43,6 +43,13 @@ services:
             target: dev
         restart: unless-stopped
         env_file: .env
+        # Lets VESSEL_HOST=host-gateway resolve to the Docker host's own gateway IP -- needed
+        # when rosbridge runs directly on the same machine as this compose stack (e.g. rosbag
+        # playback on a dev PC), not on a remote vessel/sim host. "host-gateway" is Docker's own
+        # magic value (Engine 20.10+); on Linux it isn't wired up by default the way
+        # host.docker.internal is on Docker Desktop, so it has to be declared explicitly here.
+        extra_hosts:
+            - "host-gateway:host-gateway"
         volumes:
             - ./apps/backend/src:/app/src:cached
             - ./apps/backend/migrations:/app/migrations:cached
