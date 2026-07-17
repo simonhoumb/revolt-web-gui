@@ -14,6 +14,8 @@ const mockUseBridgeData = useBridgeData as Mock;
 const base: BridgeData = {
 	battery: null,
 	current: { stern_port: null, stern_star: null, bow: null },
+	temperature: { stern: null, bow: null },
+	humidity: { stern: null, bow: null },
 	gnssFix: null,
 	gnssHeading: null,
 	gnssVelocity: null,
