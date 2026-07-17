@@ -33,6 +33,7 @@ from revolt_api.bridge.contracts import (
 	MissionExecutionStatusMsg,
 	MissionSendStatus,
 	MissionSendStatusMsg,
+	RadarSpokeMsg,
 	RcRemoteMsg,
 	SimGnssVelocityMsg,
 	SimHullPositionMsg,
@@ -55,6 +56,22 @@ from revolt_api.bridge.protocol import (
 from revolt_api.geo import latlon_to_local_cartesian, local_cartesian_to_latlon
 
 logger = structlog.get_logger(__name__)
+
+# The vessel's radar (Furuno DRS4D-NXT) emits 8,192 raw spokes per revolution (confirmed via
+# Furuno's NavNet API spec: "A frame of image consists of 8,192 lines of sweep", bundled in
+# Hardware/radar/RadarSDK/), which at a typical 24-48 RPM rotation speed is several thousand raw
+# spoke messages per second -- far too high to forward 1:1 over the browser WebSocket. Raw spokes
+# are instead aggregated per-connection-independent (this state is global to the bridge, not
+# per-subscriber) into this many coarser azimuth bins, merging intensity by taking the max across
+# every raw spoke that lands in the same bin, and only forwarded once the antenna moves on to the
+# next bin (see _handle_radar_spoke). This keeps full 360-degree coverage every rotation at a
+# bounded message rate, instead of either flooding the browser or dropping azimuth resolution
+# outright. Must match RADAR_NUM_BINS in the frontend's useRadarData.ts.
+RADAR_NUM_BINS = 512
+RADAR_BIN_WIDTH_RAD = (2 * math.pi) / RADAR_NUM_BINS
+# Safety flush if the antenna stalls on one bin for longer than a real rotation would ever take,
+# so a disconnected/stopped radar doesn't leave the last bin's data buffered forever unsent.
+RADAR_ACCUM_MAX_AGE_MS = 3000
 
 AckStatus = Literal["acknowledged", "timed_out", "not_connected", "mismatched"]
 
@@ -127,6 +144,12 @@ class RosBridgeClient:
 		self._latest_raw_by_topic: dict[str, LatestRawMessage] = {}
 		self._mission_tracker = MissionExecutionTracker()
 
+		# In-progress radar azimuth-bin accumulator (see RADAR_NUM_BINS above).
+		self._radar_current_bin: int | None = None
+		self._radar_accum_intensity: list[int] = []
+		self._radar_accum_meta: dict[str, float | int] | None = None
+		self._radar_accum_started_ms: int = 0
+
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
 		all_specs = [*PHYSICAL_SUBSCRIBE_TOPICS, *SIMULATION_SUBSCRIBE_TOPICS]
@@ -169,6 +192,7 @@ class RosBridgeClient:
 			"/waypoint_list": self._handle_waypoint_list,
 			"/camera/camera/color/image_raw/compressed": self._handle_camera_frame,
 			"/scan": self._handle_lidar_scan,
+			"/radar/spoke": self._handle_radar_spoke,
 		}
 
 	async def start(self) -> None:
@@ -823,6 +847,63 @@ class RosBridgeClient:
 			range_max=range_max,
 			ranges=ranges,
 		)
+
+	def _finalize_radar_bin(self, now: int) -> BridgeMessage | None:
+		meta = self._radar_accum_meta
+		if meta is None:
+			return None
+		return RadarSpokeMsg(
+			v="1",
+			type="radar_spoke",
+			timestamp_ms=now,
+			azimuth=meta["azimuth"],
+			range_start=meta["range_start"],
+			range_increment=meta["range_increment"],
+			num_samples=len(self._radar_accum_intensity),
+			min_intensity=int(meta["min_intensity"]),
+			max_intensity=int(meta["max_intensity"]),
+			intensity=self._radar_accum_intensity,
+		)
+
+	def _handle_radar_spoke(self, msg: dict, now: int) -> BridgeMessage | None:
+		# rosbridge_suite's JSON wire protocol encodes ROS uint8[] fields as base64 strings, not
+		# plain JSON arrays -- same treatment _handle_camera_frame already gives
+		# sensor_msgs/CompressedImage.data. Verify this assumption against real radar hardware
+		# once available; confirmed here only against the mock's matching encoding.
+		intensity = list(base64.b64decode(msg["intensity"]))
+		azimuth = float(msg["azimuth"])
+		num_samples = int(msg["num_samples"])
+		bin_index = int((azimuth % (2 * math.pi)) / RADAR_BIN_WIDTH_RAD) % RADAR_NUM_BINS
+
+		# A raw spoke's shape (num_samples) can change if the operator changes the radar's range
+		# setting mid-sweep; treat that the same as a bin change rather than trying to merge
+		# mismatched-length intensity arrays.
+		same_shape = len(self._radar_accum_intensity) == num_samples
+		bin_changed = self._radar_current_bin is not None and bin_index != self._radar_current_bin
+		stale = now - self._radar_accum_started_ms > RADAR_ACCUM_MAX_AGE_MS
+
+		result: BridgeMessage | None = None
+		if self._radar_current_bin is not None and (bin_changed or stale or not same_shape):
+			result = self._finalize_radar_bin(now)
+
+		if self._radar_current_bin is None or bin_changed or stale or not same_shape:
+			self._radar_current_bin = bin_index
+			self._radar_accum_intensity = intensity
+			self._radar_accum_started_ms = now
+		else:
+			self._radar_accum_intensity = [
+				max(a, b) for a, b in zip(self._radar_accum_intensity, intensity, strict=True)
+			]
+
+		self._radar_accum_meta = {
+			"azimuth": azimuth,
+			"range_start": float(msg["range_start"]),
+			"range_increment": float(msg["range_increment"]),
+			"min_intensity": int(msg["min_intensity"]),
+			"max_intensity": int(msg["max_intensity"]),
+		}
+
+		return result
 
 	def _cartesian_to_latlon(self, x_m: float, y_m: float) -> tuple[float, float]:
 		"""Convert local Cartesian metres (X=East, Y=North) to WGS84 degrees."""

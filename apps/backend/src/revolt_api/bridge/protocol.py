@@ -137,7 +137,17 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"PointCloud2 by velodyne_laserscan node. ~1800 points per 360° sweep at 10 Hz."
 		),
 	),
-	# Xsens IMU (/filter/quaternion, /filter/velocity), radar: not wired up yet.
+	TopicSpec(
+		"/radar/spoke",
+		"custom_msgs/RadarSpoke",
+		description=(
+			"One radar spoke per message: azimuth, range_start/increment, intensity[]. "
+			"Not time-throttled -- each message is a distinct positional slice of the sweep, "
+			"so dropping messages by time would leave permanent gaps rather than a lower "
+			"refresh rate. Rate control happens on the frontend render side instead."
+		),
+	),
+	# Xsens IMU (/filter/quaternion, /filter/velocity): not wired up yet.
 	# GNSS heading/velocity use the VS330 compass (/heading, /vel) as the
 	# authoritative source; Xsens is a candidate fallback, not implemented.
 ]

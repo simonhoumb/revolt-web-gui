@@ -242,6 +242,19 @@ class LidarScanMsg(TypedDict):
 	ranges: list[float]  # metres per step; inf/NaN replaced with range_max
 
 
+class RadarSpokeMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["radar_spoke"]
+	timestamp_ms: int
+	azimuth: float  # radians, absolute (not relative to a prior spoke)
+	range_start: float  # metres, range of the first sample
+	range_increment: float  # metres between consecutive samples
+	num_samples: int
+	min_intensity: int  # 0-255
+	max_intensity: int  # 0-255
+	intensity: list[int]  # one 0-255 value per sample
+
+
 BridgeMessage = (
 	BatteryMsg
 	| CurrentMsg
@@ -249,6 +262,7 @@ BridgeMessage = (
 	| HumidityMsg
 	| AzimuthFeedbackMsg
 	| RcRemoteMsg
+	| RadarSpokeMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg

@@ -5,6 +5,8 @@ physical vessel topic. Each test asserts the correct contract type is returned
 and that key fields are populated correctly.
 """
 
+import base64
+
 import pytest
 
 from revolt_api.bridge.client import RosBridgeClient
@@ -181,6 +183,49 @@ def test_control_mode(client: RosBridgeClient, raw: int, expected_mode: str) -> 
 	assert result is not None
 	assert result["type"] == "control_mode"
 	assert result["mode"] == expected_mode
+
+
+def _radar_spoke_msg(azimuth: float, intensity: list[int]) -> dict:
+	return {
+		"azimuth": azimuth,
+		"range_start": 0.0,
+		"range_increment": 0.5,
+		"num_samples": len(intensity),
+		"min_intensity": 0,
+		"max_intensity": 255,
+		"intensity": base64.b64encode(bytes(intensity)).decode(),
+	}
+
+
+def test_radar_spoke_buffers_without_emitting_on_first_call(client: RosBridgeClient) -> None:
+	result = client._transform("/radar/spoke", _radar_spoke_msg(0.0, [0, 10, 255, 128]))
+	assert result is None
+
+
+def test_radar_spoke_emits_finalized_bin_on_azimuth_change(client: RosBridgeClient) -> None:
+	assert client._transform("/radar/spoke", _radar_spoke_msg(0.0, [1, 2, 3, 4])) is None
+	# 1.0 rad is far enough from 0.0 to land in a different one of the 512 aggregation bins.
+	result = client._transform("/radar/spoke", _radar_spoke_msg(1.0, [5, 6, 7, 8]))
+	assert result is not None
+	assert result["type"] == "radar_spoke"
+	assert result["azimuth"] == pytest.approx(0.0)
+	assert result["intensity"] == [1, 2, 3, 4]
+
+
+def test_radar_spoke_merges_same_bin_by_max_intensity(client: RosBridgeClient) -> None:
+	assert client._transform("/radar/spoke", _radar_spoke_msg(0.0, [1, 20, 3, 4])) is None
+	assert client._transform("/radar/spoke", _radar_spoke_msg(0.0, [10, 2, 30, 1])) is None
+	result = client._transform("/radar/spoke", _radar_spoke_msg(1.0, [0, 0, 0, 0]))
+	assert result is not None
+	assert result["intensity"] == [10, 20, 30, 4]
+
+
+def test_radar_spoke_flushes_after_stale_timeout(client: RosBridgeClient) -> None:
+	assert client._transform("/radar/spoke", _radar_spoke_msg(0.0, [1, 2, 3, 4])) is None
+	client._radar_accum_started_ms -= 10_000  # simulate the antenna stalling on this bin
+	result = client._transform("/radar/spoke", _radar_spoke_msg(0.0, [5, 6, 7, 8]))
+	assert result is not None
+	assert result["intensity"] == [1, 2, 3, 4]
 
 
 def test_unknown_topic_returns_none(client: RosBridgeClient) -> None:

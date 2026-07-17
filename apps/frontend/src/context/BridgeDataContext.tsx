@@ -16,6 +16,7 @@ import type {
 	LinearActuatorMsg,
 	MissionExecutionStatusMsg,
 	MissionSendStatusMsg,
+	RadarSpokeMsg,
 	RcRemoteMsg,
 	SimGnssVelocityMsg,
 	SimThrusterFeedbackMsg,
@@ -69,6 +70,7 @@ export interface BridgeData {
 	cameraStatus: CameraStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
 	lidarScan: LidarScanMsg | null;
+	radarSpoke: RadarSpokeMsg | null;
 	activeWaypointList: SimWaypointListMsg | null;
 	missionSendStatus: MissionSendStatusMsg | null;
 	missionExecutionStatus: MissionExecutionStatusMsg | null;
@@ -101,6 +103,7 @@ export const initialData: BridgeData = {
 	cameraStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
 	lidarScan: null,
+	radarSpoke: null,
 	activeWaypointList: null,
 	missionSendStatus: null,
 	missionExecutionStatus: null,
@@ -158,6 +161,8 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 			};
 		case "lidar_scan":
 			return { ...state, lidarScan: msg };
+		case "radar_spoke":
+			return { ...state, radarSpoke: msg };
 		case "camera_status":
 			return { ...state, cameraStatus: msg };
 		case "sim_waypoint_list":
