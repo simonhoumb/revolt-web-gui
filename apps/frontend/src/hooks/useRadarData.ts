@@ -23,6 +23,7 @@ export function useRadarData(): RadarData {
 	const { radarSpoke } = useBridgeData();
 	const bufferRef = useRef<Map<number, RadarSpokeMsg>>(new Map());
 	const lastUpdateRef = useRef<number>(0);
+	const rafScheduledRef = useRef(false);
 	const [spokes, setSpokes] = useState<RadarSpokeMsg[]>([]);
 
 	useEffect(() => {
@@ -30,7 +31,20 @@ export function useRadarData(): RadarData {
 		const bin = Math.round(radarSpoke.azimuth / BIN_WIDTH_RAD);
 		bufferRef.current.set(bin, radarSpoke);
 		lastUpdateRef.current = Date.now();
-		setSpokes(Array.from(bufferRef.current.values()));
+
+		// Real hardware forwards spokes at roughly (RPM/60) * RADAR_NUM_BINS messages/second --
+		// confirmed against a real DRS4D-NXT recording at ~410 msg/s (48 RPM). Calling setSpokes
+		// on every message would trigger a React re-render at that same rate, which is enough to
+		// starve the main thread before the canvas ever gets a chance to paint. Coalesce into at
+		// most one state update per animation frame instead, same decoupling idea as the widget's
+		// own rAF-batched draw.
+		if (!rafScheduledRef.current) {
+			rafScheduledRef.current = true;
+			requestAnimationFrame(() => {
+				rafScheduledRef.current = false;
+				setSpokes(Array.from(bufferRef.current.values()));
+			});
+		}
 	}, [radarSpoke]);
 
 	useEffect(() => {
