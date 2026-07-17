@@ -69,6 +69,15 @@ function makeLidarData(overrides: Partial<LidarData> = {}): LidarData {
 	return { scan: null, points: [], ...overrides };
 }
 
+// ObcStepperBox's own up/down buttons live in its shadow DOM, not reachable via RTL's usual
+// role/label queries -- same technique MapWidget.test.tsx uses for its own stepper box: find the
+// host element by aria-label and dispatch the custom "up"/"down" events it fires directly.
+function findByLabel(container: HTMLElement, label: string): Element {
+	const el = container.querySelector(`[aria-label="${label}"]`);
+	if (!el) throw new Error(`element not found: ${label}`);
+	return el;
+}
+
 describe("LidarWidget", () => {
 	it("draws a 'No data' label when there is no scan yet", () => {
 		mockUseLidarData.mockReturnValue(makeLidarData());
@@ -107,42 +116,42 @@ describe("LidarWidget", () => {
 
 	it("starts at the default 50 m range and steps in/out through the fixed zoom levels", () => {
 		mockUseLidarData.mockReturnValue(makeLidarData());
-		render(<LidarWidget />);
-		expect(screen.getByText("50 m")).toBeInTheDocument();
+		const { container } = render(<LidarWidget />);
+		expect(screen.getByText("50")).toBeInTheDocument();
+		const stepper = findByLabel(container, "Lidar range");
 
 		act(() => {
-			screen.getByLabelText("Zoom in").click();
+			stepper.dispatchEvent(new CustomEvent("up"));
 		});
-		expect(screen.getByText("20 m")).toBeInTheDocument();
+		expect(screen.getByText("20")).toBeInTheDocument();
 
 		act(() => {
-			screen.getByLabelText("Zoom out").click();
-			screen.getByLabelText("Zoom out").click();
+			stepper.dispatchEvent(new CustomEvent("down"));
+			stepper.dispatchEvent(new CustomEvent("down"));
 		});
-		expect(screen.getByText("100 m")).toBeInTheDocument();
+		expect(screen.getByText("100")).toBeInTheDocument();
 	});
 
-	it("disables zoom in at the closest step and zoom out at the widest step", () => {
+	it("stays pinned at the closest and widest zoom steps rather than wrapping", () => {
 		mockUseLidarData.mockReturnValue(makeLidarData());
-		render(<LidarWidget />);
+		const { container } = render(<LidarWidget />);
+		const stepper = findByLabel(container, "Lidar range");
 
 		act(() => {
-			for (let i = 0; i < 10; i++) screen.getByLabelText("Zoom in").click();
+			for (let i = 0; i < 10; i++) stepper.dispatchEvent(new CustomEvent("up"));
 		});
-		expect(screen.getByText("5 m")).toBeInTheDocument();
-		expect(screen.getByLabelText("Zoom in")).toBeDisabled();
+		expect(screen.getByText("5")).toBeInTheDocument();
 
 		act(() => {
-			for (let i = 0; i < 10; i++) screen.getByLabelText("Zoom out").click();
+			for (let i = 0; i < 10; i++) stepper.dispatchEvent(new CustomEvent("down"));
 		});
-		expect(screen.getByText("130 m")).toBeInTheDocument();
-		expect(screen.getByLabelText("Zoom out")).toBeDisabled();
+		expect(screen.getByText("130")).toBeInTheDocument();
 	});
 
 	it("zooms via mouse wheel over the canvas area, in on scroll-up and out on scroll-down", () => {
 		mockUseLidarData.mockReturnValue(makeLidarData());
 		render(<LidarWidget />);
-		expect(screen.getByText("50 m")).toBeInTheDocument();
+		expect(screen.getByText("50")).toBeInTheDocument();
 
 		const canvasArea = screen.getByLabelText("2D lidar scan view").parentElement;
 		if (!canvasArea) throw new Error("canvas has no parent element");
@@ -150,11 +159,11 @@ describe("LidarWidget", () => {
 		act(() => {
 			fireEvent.wheel(canvasArea, { deltaY: -100 });
 		});
-		expect(screen.getByText("20 m")).toBeInTheDocument();
+		expect(screen.getByText("20")).toBeInTheDocument();
 
 		act(() => {
 			fireEvent.wheel(canvasArea, { deltaY: 100 });
 		});
-		expect(screen.getByText("50 m")).toBeInTheDocument();
+		expect(screen.getByText("50")).toBeInTheDocument();
 	});
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/stepper-box/stepper-box.js";
 import { useRadarData } from "../../hooks/useRadarData.js";
 import { METERS_PER_NM } from "../../lib/geo.js";
 import styles from "./RadarWidget.module.css";
@@ -8,31 +9,38 @@ function cssVar(name: string): string {
 }
 
 // Marine radar range rings below 1 NM are conventionally labeled as vulgar fractions (1/8, 1/4,
-// 1/2, 3/4 NM), not decimals -- this is how real Furuno/JRC/Raytheon displays show these exact
-// range-scale values, not a stylistic choice. Falls back to a decimal for anything that doesn't
-// land near a common eighth/sixteenth (e.g. the innermost ring at the very finest zoom step).
-const FRACTION_DENOMINATORS = [2, 4, 8, 16];
+// 1/2, 3/4, 1/16, 1/32 NM), not decimals -- this is how real Furuno/JRC/Raytheon displays show
+// these exact range-scale values, not a stylistic choice. Maritime fractions are always negative
+// powers of two (halving), never arbitrary denominators like fiftieths, so anything that doesn't
+// land near one of these falls back to a decimal instead of being forced into an unfamiliar
+// fraction -- this only happens for the innermost ring at the very finest zoom step, where real
+// equipment would show a decimal too.
+const FRACTION_DENOMINATORS = [2, 4, 8, 16, 32];
 
 function gcd(a: number, b: number): number {
 	return b === 0 ? a : gcd(b, a % b);
 }
 
-function fmtNm(nm: number): string {
+// Value only, no " NM" suffix -- used both for the canvas ring labels (which append their own
+// unit text) and the stepper box's value slot (which has a separate unit slot).
+function fmtNmValue(nm: number): string {
 	if (nm >= 1) {
-		return nm >= 10
-			? `${String(Math.round(nm))} NM`
-			: `${String(parseFloat(nm.toFixed(1)))} NM`;
+		return nm >= 10 ? String(Math.round(nm)) : String(parseFloat(nm.toFixed(1)));
 	}
 	for (const d of FRACTION_DENOMINATORS) {
 		const numerator = nm * d;
 		const rounded = Math.round(numerator);
 		if (Math.abs(numerator - rounded) < 0.02) {
-			if (rounded === 0) return "0 NM";
+			if (rounded === 0) return "0";
 			const g = gcd(rounded, d);
-			return `${String(rounded / g)}/${String(d / g)} NM`;
+			return `${String(rounded / g)}/${String(d / g)}`;
 		}
 	}
-	return `${String(parseFloat(nm.toFixed(2)))} NM`;
+	return String(parseFloat(nm.toFixed(2)));
+}
+
+function fmtNm(nm: number): string {
+	return `${fmtNmValue(nm)} NM`;
 }
 
 // Mounting yaw correction, same technique as LidarWidget.tsx's MOUNTING_YAW_DEG: measure by
@@ -240,23 +248,10 @@ export function RadarWidget() {
 				/>
 			</div>
 			<div className={styles.controls}>
-				<button
-					className={styles.zoomBtn}
-					onClick={zoomIn}
-					disabled={zoomIdx === 0}
-					aria-label="Zoom in"
-				>
-					+
-				</button>
-				<span className={styles.rangeLabel}>{fmtNm(displayRangeNm)}</span>
-				<button
-					className={styles.zoomBtn}
-					onClick={zoomOut}
-					disabled={zoomIdx === ZOOM_STEPS_NM.length - 1}
-					aria-label="Zoom out"
-				>
-					−
-				</button>
+				<ObcStepperBox aria-label="Radar range" onUp={zoomIn} onDown={zoomOut}>
+					<div>{fmtNmValue(displayRangeNm)}</div>
+					<div slot="unit">NM</div>
+				</ObcStepperBox>
 			</div>
 		</div>
 	);

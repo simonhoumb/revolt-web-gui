@@ -78,6 +78,15 @@ async function flushRaf(): Promise<void> {
 	});
 }
 
+// ObcStepperBox's own up/down buttons live in its shadow DOM, not reachable via RTL's usual
+// role/label queries -- same technique MapWidget.test.tsx uses for its own stepper box: find the
+// host element by aria-label and dispatch the custom "up"/"down" events it fires directly.
+function findByLabel(container: HTMLElement, label: string): Element {
+	const el = container.querySelector(`[aria-label="${label}"]`);
+	if (!el) throw new Error(`element not found: ${label}`);
+	return el;
+}
+
 describe("RadarWidget", () => {
 	it("draws a 'No data' label when the sweep buffer is empty", async () => {
 		mockUseRadarData.mockReturnValue(makeRadarData());
@@ -111,42 +120,42 @@ describe("RadarWidget", () => {
 
 	it("starts at the default 1 NM range and steps in/out through the fixed zoom levels", () => {
 		mockUseRadarData.mockReturnValue(makeRadarData());
-		render(<RadarWidget />);
-		expect(screen.getByText("1 NM")).toBeInTheDocument();
+		const { container } = render(<RadarWidget />);
+		expect(screen.getByText("1")).toBeInTheDocument();
+		const stepper = findByLabel(container, "Radar range");
 
 		act(() => {
-			screen.getByLabelText("Zoom in").click();
+			stepper.dispatchEvent(new CustomEvent("up"));
 		});
-		expect(screen.getByText("3/4 NM")).toBeInTheDocument();
+		expect(screen.getByText("3/4")).toBeInTheDocument();
 
 		act(() => {
-			screen.getByLabelText("Zoom out").click();
-			screen.getByLabelText("Zoom out").click();
+			stepper.dispatchEvent(new CustomEvent("down"));
+			stepper.dispatchEvent(new CustomEvent("down"));
 		});
-		expect(screen.getByText("1.5 NM")).toBeInTheDocument();
+		expect(screen.getByText("1.5")).toBeInTheDocument();
 	});
 
-	it("disables zoom in at the closest step and zoom out at the widest step", () => {
+	it("stays pinned at the closest and widest zoom steps rather than wrapping", () => {
 		mockUseRadarData.mockReturnValue(makeRadarData());
-		render(<RadarWidget />);
+		const { container } = render(<RadarWidget />);
+		const stepper = findByLabel(container, "Radar range");
 
 		act(() => {
-			for (let i = 0; i < 20; i++) screen.getByLabelText("Zoom in").click();
+			for (let i = 0; i < 20; i++) stepper.dispatchEvent(new CustomEvent("up"));
 		});
-		expect(screen.getByText("1/16 NM")).toBeInTheDocument();
-		expect(screen.getByLabelText("Zoom in")).toBeDisabled();
+		expect(screen.getByText("1/16")).toBeInTheDocument();
 
 		act(() => {
-			for (let i = 0; i < 20; i++) screen.getByLabelText("Zoom out").click();
+			for (let i = 0; i < 20; i++) stepper.dispatchEvent(new CustomEvent("down"));
 		});
-		expect(screen.getByText("48 NM")).toBeInTheDocument();
-		expect(screen.getByLabelText("Zoom out")).toBeDisabled();
+		expect(screen.getByText("48")).toBeInTheDocument();
 	});
 
 	it("zooms via mouse wheel over the canvas area, in on scroll-up and out on scroll-down", () => {
 		mockUseRadarData.mockReturnValue(makeRadarData());
 		render(<RadarWidget />);
-		expect(screen.getByText("1 NM")).toBeInTheDocument();
+		expect(screen.getByText("1")).toBeInTheDocument();
 
 		const canvasArea = screen.getByLabelText("Radar PPI view").parentElement;
 		if (!canvasArea) throw new Error("canvas has no parent element");
@@ -154,11 +163,11 @@ describe("RadarWidget", () => {
 		act(() => {
 			fireEvent.wheel(canvasArea, { deltaY: -100 });
 		});
-		expect(screen.getByText("3/4 NM")).toBeInTheDocument();
+		expect(screen.getByText("3/4")).toBeInTheDocument();
 
 		act(() => {
 			fireEvent.wheel(canvasArea, { deltaY: 100 });
 		});
-		expect(screen.getByText("1 NM")).toBeInTheDocument();
+		expect(screen.getByText("1")).toBeInTheDocument();
 	});
 });

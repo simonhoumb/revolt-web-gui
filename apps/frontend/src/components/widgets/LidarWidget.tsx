@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/stepper-box/stepper-box.js";
 import { useLidarData } from "../../hooks/useLidarData.js";
 import styles from "./LidarWidget.module.css";
 
@@ -192,23 +193,10 @@ export function LidarWidget() {
 				/>
 			</div>
 			<div className={styles.controls}>
-				<button
-					className={styles.zoomBtn}
-					onClick={zoomIn}
-					disabled={zoomIdx === 0}
-					aria-label="Zoom in"
-				>
-					+
-				</button>
-				<span className={styles.rangeLabel}>{displayRange} m</span>
-				<button
-					className={styles.zoomBtn}
-					onClick={zoomOut}
-					disabled={zoomIdx === ZOOM_STEPS.length - 1}
-					aria-label="Zoom out"
-				>
-					−
-				</button>
+				<ObcStepperBox aria-label="Lidar range" onUp={zoomIn} onDown={zoomOut}>
+					<div>{displayRange}</div>
+					<div slot="unit">m</div>
+				</ObcStepperBox>
 			</div>
 		</div>
 	);
