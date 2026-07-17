@@ -1,0 +1,56 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+}
+
+.stickRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.stickLabel {
+	width: 4.5em;
+	flex-shrink: 0;
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.barTrack {
+	position: relative;
+	flex: 1;
+	height: 8px;
+	border-radius: 4px;
+	background: var(--instrument-frame-tertiary-color, #3a3a3a);
+	overflow: hidden;
+}
+
+.barFill {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	background: var(--element-active-color, #eaa75e);
+}
+
+.stickValue {
+	width: 3.5em;
+	flex-shrink: 0;
+	text-align: right;
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.gearRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: auto;
+}
+
+.gearLabel {
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}

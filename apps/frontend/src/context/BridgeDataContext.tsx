@@ -16,6 +16,7 @@ import type {
 	LinearActuatorMsg,
 	MissionExecutionStatusMsg,
 	MissionSendStatusMsg,
+	RcRemoteMsg,
 	SimGnssVelocityMsg,
 	SimThrusterFeedbackMsg,
 	SimWaypointListMsg,
@@ -63,6 +64,7 @@ export interface BridgeData {
 	emergencyStop: EmergencyStopMsg | null;
 	linearActuator: LinearActuatorMsg | null;
 	azimuthFeedback: AzimuthFeedback;
+	rcRemote: RcRemoteMsg | null;
 	bridgeStatus: BridgeStatusMsg | null;
 	cameraStatus: CameraStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
@@ -94,6 +96,7 @@ export const initialData: BridgeData = {
 	emergencyStop: null,
 	linearActuator: null,
 	azimuthFeedback: initialAzimuthFeedback,
+	rcRemote: null,
 	bridgeStatus: null,
 	cameraStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
@@ -144,6 +147,8 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 				...state,
 				azimuthFeedback: { ...state.azimuthFeedback, [msg.location]: msg },
 			};
+		case "rc_remote":
+			return { ...state, rcRemote: msg };
 		case "bridge_status":
 			return { ...state, bridgeStatus: msg };
 		case "sim_thruster_feedback":

@@ -33,6 +33,7 @@ from revolt_api.bridge.contracts import (
 	MissionExecutionStatusMsg,
 	MissionSendStatus,
 	MissionSendStatusMsg,
+	RcRemoteMsg,
 	SimGnssVelocityMsg,
 	SimHullPositionMsg,
 	SimHullVelocityMsg,
@@ -149,6 +150,7 @@ class RosBridgeClient:
 			"/arduino/bow/linear_actuator_retract_state": self._handle_linear_actuator,
 			"/thruster/port/feedback_angle": self._handle_azimuth_feedback_port,
 			"/thruster/starboard/feedback_angle": self._handle_azimuth_feedback_starboard,
+			"/arduino/stern/rc_remote_input": self._handle_rc_remote,
 			"/control_mode": self._handle_control_mode,
 			"/revolt/sim/stc/position/hull": self._handle_sim_hull_position,
 			"/revolt/sim/stc/position/velocity": self._handle_sim_hull_velocity,
@@ -614,6 +616,17 @@ class RosBridgeClient:
 			timestamp_ms=now,
 			location="starboard",
 			angle_deg=float(msg["data"]),
+		)
+
+	def _handle_rc_remote(self, msg: dict, now: int) -> BridgeMessage | None:
+		return RcRemoteMsg(
+			v="1",
+			type="rc_remote",
+			timestamp_ms=now,
+			throttle=int(msg["throttle"]),
+			aileron=int(msg["aileron"]),
+			rudder=int(msg["rudder"]),
+			gear="auto" if int(msg["gear"]) == 1 else "manual",
 		)
 
 	def _handle_control_mode(self, msg: dict, now: int) -> BridgeMessage | None:

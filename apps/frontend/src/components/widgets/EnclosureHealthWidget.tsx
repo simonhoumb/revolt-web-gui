@@ -18,8 +18,12 @@ function EnvRow({ label, reading, unit }: EnvRowProps) {
 	return (
 		<div className={styles.envRow}>
 			<span className={styles.envLabel}>{label}</span>
-			<span className={styles.envValue}>{value !== undefined ? `${value.toFixed(1)}${unit}` : "—"}</span>
-			{reading.status === "alarm" && <ObcBadge type="alarm" showNumber={false} showIcon={true} />}
+			<span className={styles.envValue}>
+				{value !== undefined ? `${value.toFixed(1)}${unit}` : "—"}
+			</span>
+			{reading.status === "alarm" && (
+				<ObcBadge type="alarm" showNumber={false} showIcon={true} />
+			)}
 			{reading.status === "warning" && (
 				<ObcBadge type="warning" showNumber={false} showIcon={true} />
 			)}
@@ -47,7 +51,9 @@ export function EnclosureHealthWidget() {
 				<div className={styles.statusRow}>
 					<ObcStatusIndicator
 						status={
-							emergencyStopActive ? StatusIndicatorStatus.alarm : StatusIndicatorStatus.running
+							emergencyStopActive
+								? StatusIndicatorStatus.alarm
+								: StatusIndicatorStatus.running
 						}
 					/>
 					<span className={styles.statusLabel}>

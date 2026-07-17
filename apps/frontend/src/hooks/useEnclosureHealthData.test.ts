@@ -27,6 +27,8 @@ const base: BridgeData = {
 	controlMode: null,
 	emergencyStop: null,
 	linearActuator: null,
+	azimuthFeedback: { port: null, starboard: null },
+	rcRemote: null,
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
@@ -107,7 +109,13 @@ describe("useEnclosureHealthData", () => {
 		mockUseBridgeData.mockReturnValue({
 			...base,
 			temperature: {
-				stern: { v: "1", type: "temperature", timestamp_ms: 0, location: "stern", value_c: 45 },
+				stern: {
+					v: "1",
+					type: "temperature",
+					timestamp_ms: 0,
+					location: "stern",
+					value_c: 45,
+				},
 				bow: { v: "1", type: "temperature", timestamp_ms: 0, location: "bow", value_c: 65 },
 			},
 		});

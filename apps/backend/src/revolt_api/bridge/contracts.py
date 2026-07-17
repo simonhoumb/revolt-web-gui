@@ -46,6 +46,16 @@ class AzimuthFeedbackMsg(TypedDict):
 	angle_deg: float
 
 
+class RcRemoteMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["rc_remote"]
+	timestamp_ms: int
+	throttle: int  # raw PWM, 1070-1930
+	aileron: int  # raw PWM, 1070-1930
+	rudder: int  # raw PWM, 1070-1930
+	gear: Literal["manual", "auto"]  # 0=manual, 1=auto
+
+
 class ControlModeMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["control_mode"]
@@ -238,6 +248,7 @@ BridgeMessage = (
 	| TemperatureMsg
 	| HumidityMsg
 	| AzimuthFeedbackMsg
+	| RcRemoteMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg

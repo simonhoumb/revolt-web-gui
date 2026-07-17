@@ -80,6 +80,14 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		description="Starboard azimuth thruster actual angle feedback, degrees",
 	),
 	TopicSpec(
+		"/arduino/stern/rc_remote_input",
+		"custom_msgs/RCRemote",
+		description=(
+			"RC transmitter raw stick/switch values: throttle, aileron, elevation "
+			"(unused), rudder, gear (0=manual, 1=auto), aux (unused)"
+		),
+	),
+	TopicSpec(
 		"/control_mode",
 		"std_msgs/UInt8",
 		description="Control mode: 0=manual 1=manual_assisted 2=autonomous 3=miscommunication",
