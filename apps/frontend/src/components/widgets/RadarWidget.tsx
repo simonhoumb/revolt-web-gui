@@ -7,6 +7,34 @@ function cssVar(name: string): string {
 	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Marine radar range rings below 1 NM are conventionally labeled as vulgar fractions (1/8, 1/4,
+// 1/2, 3/4 NM), not decimals -- this is how real Furuno/JRC/Raytheon displays show these exact
+// range-scale values, not a stylistic choice. Falls back to a decimal for anything that doesn't
+// land near a common eighth/sixteenth (e.g. the innermost ring at the very finest zoom step).
+const FRACTION_DENOMINATORS = [2, 4, 8, 16];
+
+function gcd(a: number, b: number): number {
+	return b === 0 ? a : gcd(b, a % b);
+}
+
+function fmtNm(nm: number): string {
+	if (nm >= 1) {
+		return nm >= 10
+			? `${String(Math.round(nm))} NM`
+			: `${String(parseFloat(nm.toFixed(1)))} NM`;
+	}
+	for (const d of FRACTION_DENOMINATORS) {
+		const numerator = nm * d;
+		const rounded = Math.round(numerator);
+		if (Math.abs(numerator - rounded) < 0.02) {
+			if (rounded === 0) return "0 NM";
+			const g = gcd(rounded, d);
+			return `${String(rounded / g)}/${String(d / g)} NM`;
+		}
+	}
+	return `${String(parseFloat(nm.toFixed(2)))} NM`;
+}
+
 // Mounting yaw correction, same technique as LidarWidget.tsx's MOUNTING_YAW_DEG: measure by
 // placing an object dead ahead of the bow and noting how many degrees clockwise it appears from
 // the top of the widget. Left at 0 -- no radar hardware has been available to calibrate this
@@ -59,6 +87,26 @@ export function RadarWidget() {
 		};
 	}, []);
 
+	// Mouse-wheel zoom while the cursor is over the instrument, same convention as MapWidget's
+	// scrollZoom -- only zooms this widget, not the dashboard page underneath it. Requires a
+	// native (non-passive) listener since React's JSX onWheel can't reliably preventDefault.
+	useEffect(() => {
+		const el = canvasAreaRef.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			if (e.deltaY < 0) {
+				setZoomIdx((i) => Math.max(0, i - 1));
+			} else if (e.deltaY > 0) {
+				setZoomIdx((i) => Math.min(ZOOM_STEPS_NM.length - 1, i + 1));
+			}
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => {
+			el.removeEventListener("wheel", onWheel);
+		};
+	}, []);
+
 	// Spoke messages can arrive far faster than Lidar's ~10 Hz full-scan rate, so the draw itself
 	// is batched via requestAnimationFrame instead of running synchronously on every message --
 	// if several spokes land within one frame, only the last scheduled draw actually paints.
@@ -108,23 +156,19 @@ export function RadarWidget() {
 				ctx.stroke();
 			}
 
-			const fmtDistNm = (nm: number) =>
-				nm >= 10
-					? `${String(Math.round(nm))} NM`
-					: `${String(parseFloat(nm.toFixed(2)))} NM`;
 			ctx.fillStyle = cssVar("--instrument-tick-mark-label-secondary-color");
 			ctx.font = "8px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "middle";
 			for (let i = 1; i <= 3; i++) {
 				const r = (i / 4) * radius;
-				ctx.fillText(fmtDistNm(displayRangeNm * (i / 4)), center + 4, center - r);
+				ctx.fillText(fmtNm(displayRangeNm * (i / 4)), center + 4, center - r);
 			}
 
 			ctx.font = "9px monospace";
 			ctx.textAlign = "left";
 			ctx.textBaseline = "top";
-			ctx.fillText(fmtDistNm(displayRangeNm), center + 4, center - radius + 4);
+			ctx.fillText(fmtNm(displayRangeNm), center + 4, center - radius + 4);
 
 			ctx.save();
 			ctx.translate(center, center);
@@ -204,7 +248,7 @@ export function RadarWidget() {
 				>
 					+
 				</button>
-				<span className={styles.rangeLabel}>{displayRangeNm} NM</span>
+				<span className={styles.rangeLabel}>{fmtNm(displayRangeNm)}</span>
 				<button
 					className={styles.zoomBtn}
 					onClick={zoomOut}

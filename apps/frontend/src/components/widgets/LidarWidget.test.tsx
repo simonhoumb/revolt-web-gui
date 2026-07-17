@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { LidarScanMsg } from "@revolt/shared-types";
@@ -137,5 +137,24 @@ describe("LidarWidget", () => {
 		});
 		expect(screen.getByText("130 m")).toBeInTheDocument();
 		expect(screen.getByLabelText("Zoom out")).toBeDisabled();
+	});
+
+	it("zooms via mouse wheel over the canvas area, in on scroll-up and out on scroll-down", () => {
+		mockUseLidarData.mockReturnValue(makeLidarData());
+		render(<LidarWidget />);
+		expect(screen.getByText("50 m")).toBeInTheDocument();
+
+		const canvasArea = screen.getByLabelText("2D lidar scan view").parentElement;
+		if (!canvasArea) throw new Error("canvas has no parent element");
+
+		act(() => {
+			fireEvent.wheel(canvasArea, { deltaY: -100 });
+		});
+		expect(screen.getByText("20 m")).toBeInTheDocument();
+
+		act(() => {
+			fireEvent.wheel(canvasArea, { deltaY: 100 });
+		});
+		expect(screen.getByText("50 m")).toBeInTheDocument();
 	});
 });

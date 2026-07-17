@@ -50,6 +50,26 @@ export function LidarWidget() {
 		};
 	}, []);
 
+	// Mouse-wheel zoom while the cursor is over the instrument, same convention as MapWidget's
+	// scrollZoom -- only zooms this widget, not the dashboard page underneath it. Requires a
+	// native (non-passive) listener since React's JSX onWheel can't reliably preventDefault.
+	useEffect(() => {
+		const el = canvasAreaRef.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			if (e.deltaY < 0) {
+				setZoomIdx((i) => Math.max(0, i - 1));
+			} else if (e.deltaY > 0) {
+				setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
+			}
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => {
+			el.removeEventListener("wheel", onWheel);
+		};
+	}, []);
+
 	useEffect(() => {
 		drawRef.current = () => {
 			const canvas = canvasRef.current;
