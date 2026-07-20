@@ -30,6 +30,7 @@ const base: BridgeData = {
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
 	radarSpoke: null,
+	aisTargets: {},
 	activeWaypointList: null,
 	missionSendStatus: null,
 	missionExecutionStatus: null,

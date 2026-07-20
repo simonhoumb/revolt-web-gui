@@ -251,6 +251,17 @@ export interface RadarSpokeMsg {
 	intensity: number[]; // one 0-255 value per sample
 }
 
+export interface AisTargetMsg {
+	v: "1";
+	type: "ais_target";
+	timestamp_ms: number;
+	mmsi: number;
+	lat: number;
+	lon: number;
+	sog_kn: number | null; // null when the source report has no valid speed
+	heading_deg: number | null; // null when the source report has no valid heading
+}
+
 export type BridgeMessage =
 	| BatteryMsg
 	| CurrentMsg
@@ -259,6 +270,7 @@ export type BridgeMessage =
 	| AzimuthFeedbackMsg
 	| RcRemoteMsg
 	| RadarSpokeMsg
+	| AisTargetMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg
