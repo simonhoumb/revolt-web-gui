@@ -169,6 +169,29 @@ def test_rc_remote_auto(client: RosBridgeClient) -> None:
 
 
 @pytest.mark.parametrize(
+	"raw,red,yellow,green",
+	[
+		(0, False, False, False),
+		(1, True, False, False),
+		(2, False, True, False),
+		(4, False, False, True),
+		(5, True, False, True),  # red + green simultaneously (not a real firmware state, but the
+		# bitmask itself doesn't forbid it, so the unpacking should still be exact)
+		(7, True, True, True),
+	],
+)
+def test_light_beacon_unpacks_bitmask(
+	client: RosBridgeClient, raw: int, red: bool, yellow: bool, green: bool
+) -> None:
+	result = client._transform("/arduino/stern/light_beacon_status", {"data": raw})
+	assert result is not None
+	assert result["type"] == "light_beacon"
+	assert result["red"] is red
+	assert result["yellow"] is yellow
+	assert result["green"] is green
+
+
+@pytest.mark.parametrize(
 	"raw,expected_mode",
 	[
 		(0, "manual"),
@@ -301,6 +324,7 @@ def test_all_results_have_version(client: RosBridgeClient) -> None:
 				"linear_acceleration": {"x": 0.0, "y": 0.0, "z": 9.81},
 			},
 		),
+		("/arduino/stern/light_beacon_status", {"data": 4}),
 	]
 	for topic, msg in topics_and_msgs:
 		result = client._transform(topic, msg)

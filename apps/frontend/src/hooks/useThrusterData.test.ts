@@ -25,6 +25,7 @@ const base: BridgeData = {
 	linearActuator: null,
 	azimuthFeedback: { port: null, starboard: null },
 	rcRemote: null,
+	lightBeacon: null,
 	bridgeStatus: {
 		v: "1",
 		type: "bridge_status",

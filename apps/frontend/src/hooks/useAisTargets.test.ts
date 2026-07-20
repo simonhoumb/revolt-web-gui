@@ -27,6 +27,7 @@ function withAisTargets(aisTargets: BridgeData["aisTargets"]): BridgeData {
 		linearActuator: null,
 		azimuthFeedback: { port: null, starboard: null },
 		rcRemote: null,
+		lightBeacon: null,
 		bridgeStatus: null,
 		cameraStatus: null,
 		thrusterFeedback: { bow: null, port: null, starboard: null },

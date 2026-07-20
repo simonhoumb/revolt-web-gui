@@ -15,6 +15,7 @@ import type {
 	HumidityMsg,
 	ImuMsg,
 	LidarScanMsg,
+	LightBeaconMsg,
 	LinearActuatorMsg,
 	MissionExecutionStatusMsg,
 	MissionSendStatusMsg,
@@ -68,6 +69,7 @@ export interface BridgeData {
 	linearActuator: LinearActuatorMsg | null;
 	azimuthFeedback: AzimuthFeedback;
 	rcRemote: RcRemoteMsg | null;
+	lightBeacon: LightBeaconMsg | null;
 	bridgeStatus: BridgeStatusMsg | null;
 	cameraStatus: CameraStatusMsg | null;
 	thrusterFeedback: ThrusterFeedback;
@@ -103,6 +105,7 @@ export const initialData: BridgeData = {
 	linearActuator: null,
 	azimuthFeedback: initialAzimuthFeedback,
 	rcRemote: null,
+	lightBeacon: null,
 	bridgeStatus: null,
 	cameraStatus: null,
 	thrusterFeedback: initialThrusterFeedback,
@@ -158,6 +161,8 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 			};
 		case "rc_remote":
 			return { ...state, rcRemote: msg };
+		case "light_beacon":
+			return { ...state, lightBeacon: msg };
 		case "bridge_status":
 			return { ...state, bridgeStatus: msg };
 		case "sim_thruster_feedback":

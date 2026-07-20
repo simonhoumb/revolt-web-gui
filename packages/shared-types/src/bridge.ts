@@ -54,6 +54,15 @@ export interface RcRemoteMsg {
 	gear: "manual" | "auto"; // 0=manual, 1=auto
 }
 
+export interface LightBeaconMsg {
+	v: "1";
+	type: "light_beacon";
+	timestamp_ms: number;
+	red: boolean;
+	yellow: boolean;
+	green: boolean;
+}
+
 export interface ControlModeMsg {
 	v: "1";
 	type: "control_mode";
@@ -284,6 +293,7 @@ export type BridgeMessage =
 	| HumidityMsg
 	| AzimuthFeedbackMsg
 	| RcRemoteMsg
+	| LightBeaconMsg
 	| RadarSpokeMsg
 	| AisTargetMsg
 	| ControlModeMsg
