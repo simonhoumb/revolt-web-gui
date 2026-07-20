@@ -54,6 +54,16 @@ function spoke(azimuth: number): RadarSpokeMsg {
 	};
 }
 
+// setSpokes is now batched via requestAnimationFrame (see useRadarData.ts) so bursts of incoming
+// spokes coalesce into one React state update per frame instead of one per message. vi.useFakeTimers()
+// fakes requestAnimationFrame too, so advancing fake time is what actually flushes the scheduled
+// callback in tests.
+function flushRaf() {
+	act(() => {
+		vi.advanceTimersByTime(20);
+	});
+}
+
 describe("useRadarData", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
@@ -72,26 +82,31 @@ describe("useRadarData", () => {
 	it("accumulates spokes at distinct azimuths into the buffer", () => {
 		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(0.1) });
 		const { result, rerender } = renderHook(() => useRadarData());
+		flushRaf();
 		expect(result.current.spokes).toHaveLength(1);
 
 		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(1.0) });
 		rerender();
+		flushRaf();
 		expect(result.current.spokes).toHaveLength(2);
 	});
 
 	it("overwrites the same azimuth bin rather than growing unbounded", () => {
 		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(0.1) });
 		const { result, rerender } = renderHook(() => useRadarData());
+		flushRaf();
 		expect(result.current.spokes).toHaveLength(1);
 
 		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(0.1) });
 		rerender();
+		flushRaf();
 		expect(result.current.spokes).toHaveLength(1);
 	});
 
 	it("clears the buffer after the stale timeout with no new spoke", async () => {
 		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(0.1) });
 		const { result } = renderHook(() => useRadarData());
+		flushRaf();
 		expect(result.current.spokes).toHaveLength(1);
 
 		await act(async () => {
