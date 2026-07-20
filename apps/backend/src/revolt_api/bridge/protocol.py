@@ -156,9 +156,21 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"since it's a low-rate, per-target event stream rather than a repeated snapshot."
 		),
 	),
-	# Xsens IMU (/filter/quaternion, /filter/velocity): not wired up yet.
-	# GNSS heading/velocity use the VS330 compass (/heading, /vel) as the
-	# authoritative source; Xsens is a candidate fallback, not implemented.
+	TopicSpec(
+		"/imu/data",
+		"sensor_msgs/Imu",
+		throttle_rate_ms=100,
+		frontend_throttle_ms=100,
+		description=(
+			"Xsens MTi orientation quaternion, angular velocity, and linear acceleration. "
+			"Confirmed topic name and shape via Hardware/xsens/src/messagepublishers/imupublisher.h "
+			"and Hardware/xsens/README.md (imu/data row). pub_imu is enabled at "
+			"output_data_rate=100 in Hardware/xsens/param/xsens.yaml, hence the matching 100ms "
+			"throttle here rather than the driver's own documented ceiling of up to 400Hz. "
+			"GNSS heading/velocity still use the VS330 compass (/heading, /vel) as the authoritative "
+			"source for those quantities; this topic is attitude-only, not a heading fallback."
+		),
+	),
 ]
 
 PHYSICAL_PUBLISH_TOPICS: list[TopicSpec] = [

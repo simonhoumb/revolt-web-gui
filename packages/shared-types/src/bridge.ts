@@ -170,6 +170,21 @@ export interface SimImuMsg {
 	ang_vel_z: number;
 }
 
+export interface ImuMsg {
+	v: "1";
+	type: "imu_data";
+	timestamp_ms: number;
+	roll_deg: number; // -180..180
+	pitch_deg: number; // -90..90
+	yaw_deg: number; // 0..360
+	accel_x: number; // sensor_msgs/Imu.linear_acceleration, m/s²
+	accel_y: number;
+	accel_z: number;
+	ang_vel_x: number; // sensor_msgs/Imu.angular_velocity, rad/s
+	ang_vel_y: number;
+	ang_vel_z: number;
+}
+
 export interface SimThrusterFeedbackMsg {
 	v: "1";
 	type: "sim_thruster_feedback";
@@ -284,6 +299,7 @@ export type BridgeMessage =
 	| SimHullVelocityMsg
 	| SimGnssVelocityMsg
 	| SimImuMsg
+	| ImuMsg
 	| SimThrusterFeedbackMsg
 	| SimWaypointListMsg
 	| MissionSendStatusMsg

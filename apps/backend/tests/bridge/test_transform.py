@@ -293,6 +293,14 @@ def test_all_results_have_version(client: RosBridgeClient) -> None:
 			"/ais/decoded_message",
 			{"mmsi": 257123456, "lat": 59.3783, "lon": 10.6030, "sog": 8.2, "heading": 91},
 		),
+		(
+			"/imu/data",
+			{
+				"orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+				"angular_velocity": {"x": 0.0, "y": 0.0, "z": 0.0},
+				"linear_acceleration": {"x": 0.0, "y": 0.0, "z": 9.81},
+			},
+		),
 	]
 	for topic, msg in topics_and_msgs:
 		result = client._transform(topic, msg)
@@ -447,6 +455,52 @@ def test_sim_imu(client: RosBridgeClient) -> None:
 	assert result["type"] == "sim_imu"
 	assert result["accel_x"] == pytest.approx(1.1)
 	assert result["ang_vel_x"] == pytest.approx(4.4)
+
+
+def _imu_msg(qx: float, qy: float, qz: float, qw: float) -> dict:
+	return {
+		"orientation": {"x": qx, "y": qy, "z": qz, "w": qw},
+		"angular_velocity": {"x": 0.01, "y": 0.02, "z": 0.03},
+		"linear_acceleration": {"x": 0.1, "y": 0.2, "z": 9.81},
+	}
+
+
+def test_imu_identity_quaternion(client: RosBridgeClient) -> None:
+	result = client._transform("/imu/data", _imu_msg(0.0, 0.0, 0.0, 1.0))
+	assert result is not None
+	assert result["type"] == "imu_data"
+	assert result["roll_deg"] == pytest.approx(0.0)
+	assert result["pitch_deg"] == pytest.approx(0.0)
+	assert result["yaw_deg"] == pytest.approx(0.0)
+
+
+def test_imu_pure_roll(client: RosBridgeClient) -> None:
+	# 30 degree rotation about x: q = (sin(15deg), 0, 0, cos(15deg))
+	result = client._transform("/imu/data", _imu_msg(0.258819, 0.0, 0.0, 0.965926))
+	assert result is not None
+	assert result["roll_deg"] == pytest.approx(30.0, abs=1e-3)
+	assert result["pitch_deg"] == pytest.approx(0.0, abs=1e-3)
+	assert result["yaw_deg"] == pytest.approx(0.0, abs=1e-3)
+
+
+def test_imu_pure_yaw_wraps_to_positive(client: RosBridgeClient) -> None:
+	# -90 degree yaw should normalize to 270, same convention as gnss_heading
+	result = client._transform(
+		"/imu/data", _imu_msg(0.0, 0.0, -0.7071067811865476, 0.7071067811865476)
+	)
+	assert result is not None
+	assert result["yaw_deg"] == pytest.approx(270.0, abs=1e-3)
+
+
+def test_imu_accel_and_angular_velocity_passthrough(client: RosBridgeClient) -> None:
+	result = client._transform("/imu/data", _imu_msg(0.0, 0.0, 0.0, 1.0))
+	assert result is not None
+	assert result["accel_x"] == pytest.approx(0.1)
+	assert result["accel_y"] == pytest.approx(0.2)
+	assert result["accel_z"] == pytest.approx(9.81)
+	assert result["ang_vel_x"] == pytest.approx(0.01)
+	assert result["ang_vel_y"] == pytest.approx(0.02)
+	assert result["ang_vel_z"] == pytest.approx(0.03)
 
 
 @pytest.mark.parametrize(

@@ -33,6 +33,7 @@ function withAisTargets(aisTargets: BridgeData["aisTargets"]): BridgeData {
 		lidarScan: null,
 		radarSpoke: null,
 		aisTargets,
+		imu: null,
 		activeWaypointList: null,
 		missionSendStatus: null,
 		missionExecutionStatus: null,

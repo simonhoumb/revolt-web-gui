@@ -13,6 +13,7 @@ import type {
 	GnssHeadingMsg,
 	GnssVelocityMsg,
 	HumidityMsg,
+	ImuMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
 	MissionExecutionStatusMsg,
@@ -73,6 +74,7 @@ export interface BridgeData {
 	lidarScan: LidarScanMsg | null;
 	radarSpoke: RadarSpokeMsg | null;
 	aisTargets: Record<number, AisTargetMsg>;
+	imu: ImuMsg | null;
 	activeWaypointList: SimWaypointListMsg | null;
 	missionSendStatus: MissionSendStatusMsg | null;
 	missionExecutionStatus: MissionExecutionStatusMsg | null;
@@ -107,6 +109,7 @@ export const initialData: BridgeData = {
 	lidarScan: null,
 	radarSpoke: null,
 	aisTargets: {},
+	imu: null,
 	activeWaypointList: null,
 	missionSendStatus: null,
 	missionExecutionStatus: null,
@@ -171,6 +174,8 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 				...state,
 				aisTargets: { ...state.aisTargets, [msg.mmsi]: msg },
 			};
+		case "imu_data":
+			return { ...state, imu: msg };
 		case "camera_status":
 			return { ...state, cameraStatus: msg };
 		case "sim_waypoint_list":
