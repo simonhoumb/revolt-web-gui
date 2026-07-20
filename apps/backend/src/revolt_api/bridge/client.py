@@ -30,6 +30,7 @@ from revolt_api.bridge.contracts import (
 	HumidityMsg,
 	ImuMsg,
 	LidarScanMsg,
+	LightBeaconMsg,
 	LinearActuatorMsg,
 	MissionExecutionState,
 	MissionExecutionStatusMsg,
@@ -176,6 +177,7 @@ class RosBridgeClient:
 			"/thruster/port/feedback_angle": self._handle_azimuth_feedback_port,
 			"/thruster/starboard/feedback_angle": self._handle_azimuth_feedback_starboard,
 			"/arduino/stern/rc_remote_input": self._handle_rc_remote,
+			"/arduino/stern/light_beacon_status": self._handle_light_beacon,
 			"/control_mode": self._handle_control_mode,
 			"/revolt/sim/stc/position/hull": self._handle_sim_hull_position,
 			"/revolt/sim/stc/position/velocity": self._handle_sim_hull_velocity,
@@ -655,6 +657,17 @@ class RosBridgeClient:
 			aileron=int(msg["aileron"]),
 			rudder=int(msg["rudder"]),
 			gear="auto" if int(msg["gear"]) == 1 else "manual",
+		)
+
+	def _handle_light_beacon(self, msg: dict, now: int) -> BridgeMessage | None:
+		raw = int(msg["data"])
+		return LightBeaconMsg(
+			v="1",
+			type="light_beacon",
+			timestamp_ms=now,
+			red=bool(raw & 1),
+			yellow=bool(raw & 2),
+			green=bool(raw & 4),
 		)
 
 	def _handle_control_mode(self, msg: dict, now: int) -> BridgeMessage | None:

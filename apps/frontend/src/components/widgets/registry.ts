@@ -13,6 +13,7 @@ import { EnclosureHealthWidget } from "./EnclosureHealthWidget.js";
 import { RcRemoteWidget } from "./RcRemoteWidget.js";
 import { RadarWidget } from "./RadarWidget.js";
 import { ImuWidget } from "./ImuWidget.js";
+import { LightBeaconWidget } from "./LightBeaconWidget.js";
 import { ObiBatteryHorizontal75 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-75.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -27,6 +28,7 @@ import { ObiHvac } from "@oicl/openbridge-webcomponents-react/icons/icon-hvac.js
 import { ObiJoystick } from "@oicl/openbridge-webcomponents-react/icons/icon-joystick.js";
 import { ObiRadarStandbyIec } from "@oicl/openbridge-webcomponents-react/icons/icon-radar-standby-iec.js";
 import { ObiSensorGyro } from "@oicl/openbridge-webcomponents-react/icons/icon-sensor-gyro.js";
+import { ObiLightBulbOn } from "@oicl/openbridge-webcomponents-react/icons/icon-light-bulb-on.js";
 
 export type WidgetId =
 	| "battery"
@@ -42,7 +44,8 @@ export type WidgetId =
 	| "enclosure_health"
 	| "rc_remote"
 	| "radar"
-	| "imu";
+	| "imu"
+	| "light_beacon";
 
 export interface TilePosition {
 	x: number;
@@ -245,6 +248,20 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		// Next free spot in the row started by enclosure_health/rc_remote/radar above.
 		defaultPosition: { x: 9, y: 28, w: 3, h: 4 },
 	},
+	light_beacon: {
+		id: "light_beacon",
+		label: "Light Beacon",
+		component: LightBeaconWidget,
+		icon: ObiLightBulbOn,
+		defaultW: 3,
+		defaultH: 4,
+		minW: 2,
+		minH: 3,
+		// enclosure_health/rc_remote/radar/imu above fill the entire y:28 row (0-3, 3-6, 6-9,
+		// 9-12); this widget starts a new row below the tallest of them (enclosure_health/radar,
+		// h:5).
+		defaultPosition: { x: 0, y: 33, w: 3, h: 4 },
+	},
 };
 
 export const ALL_WIDGET_IDS: WidgetId[] = [
@@ -262,4 +279,5 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"rc_remote",
 	"radar",
 	"imu",
+	"light_beacon",
 ];

@@ -56,6 +56,15 @@ class RcRemoteMsg(TypedDict):
 	gear: Literal["manual", "auto"]  # 0=manual, 1=auto
 
 
+class LightBeaconMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["light_beacon"]
+	timestamp_ms: int
+	red: bool
+	yellow: bool
+	green: bool
+
+
 class ControlModeMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["control_mode"]
@@ -288,6 +297,7 @@ BridgeMessage = (
 	| HumidityMsg
 	| AzimuthFeedbackMsg
 	| RcRemoteMsg
+	| LightBeaconMsg
 	| RadarSpokeMsg
 	| AisTargetMsg
 	| ControlModeMsg

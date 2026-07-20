@@ -171,6 +171,19 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"source for those quantities; this topic is attitude-only, not a heading fallback."
 		),
 	),
+	TopicSpec(
+		"/arduino/stern/light_beacon_status",
+		"std_msgs/UInt16",
+		description=(
+			"Bitmask mirroring the stern status LEDs: bit0=red, bit1=yellow, bit2=green. "
+			"Not yet published by firmware -- Hardware/actuators/firmware/stern/src/main.cpp "
+			"computes red/yellow/green booleans every 500ms (including live blink state, since "
+			"the blinking states toggle their own flag each tick) but never publishes them; this "
+			"entry is here so the GUI ships against the intended shape ahead of that firmware "
+			"change landing. Same UInt16 type as the sibling emergency_stop_status/"
+			"linear_actuator_retract_state topics, which also carry a small status int."
+		),
+	),
 ]
 
 PHYSICAL_PUBLISH_TOPICS: list[TopicSpec] = [

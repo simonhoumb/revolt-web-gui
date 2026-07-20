@@ -80,6 +80,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/thruster/port/feedback_angle": 0.5,
     "/thruster/starboard/feedback_angle": 0.5,
     "/arduino/stern/rc_remote_input": 0.2,
+    "/arduino/stern/light_beacon_status": 0.5,  # matches the firmware's own EMERGENCY_LED_INTERVAL
     "/control_mode": 1.0,
     "/fix": 1.0,
     "/vel": 1.0,
@@ -126,6 +127,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/thruster/port/feedback_angle": "std_msgs/Float32",
     "/thruster/starboard/feedback_angle": "std_msgs/Float32",
     "/arduino/stern/rc_remote_input": "custom_msgs/RCRemote",
+    "/arduino/stern/light_beacon_status": "std_msgs/UInt16",
     "/control_mode": "std_msgs/UInt8",
     "/fix": "sensor_msgs/NavSatFix",
     "/vel": "geometry_msgs/TwistStamped",
@@ -275,6 +277,21 @@ def _make_msg(topic: str) -> dict:
                 "gear": int(t / 15) % 2,
                 "aux": 1500,
             }
+        case "/arduino/stern/light_beacon_status":
+            # Cycles every 10s through a few plausible real states: steady green (normal),
+            # blinking red (warning), blinking yellow paired with green (manual mode, still
+            # otherwise fine). Blink toggles once per tick, same cadence as the firmware's own
+            # EMERGENCY_LED_INTERVAL in Hardware/actuators/firmware/stern/src/main.cpp.
+            blink_on = int(t / 0.5) % 2 == 0
+            phase = int(t / 10) % 3
+            if phase == 0:
+                red, yellow, green = False, False, True
+            elif phase == 1:
+                red, yellow, green = blink_on, False, False
+            else:
+                red, yellow, green = False, blink_on, True
+            raw = (1 if red else 0) | (2 if yellow else 0) | (4 if green else 0)
+            return {"data": raw}
         case "/control_mode":
             # Cycles through all four modes every 40 s so UI state changes are visible
             return {"data": int(t / 10) % 4}
