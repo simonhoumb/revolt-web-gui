@@ -1,0 +1,41 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.statusRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.statusLabel {
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.dataList {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 0;
+}
+
+.dataRow {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+}
+
+.dataRow dt {
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.dataRow dd {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+	margin: 0;
+}

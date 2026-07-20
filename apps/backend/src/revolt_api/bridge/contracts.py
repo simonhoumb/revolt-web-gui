@@ -175,6 +175,21 @@ class SimImuMsg(TypedDict):
 	ang_vel_z: float
 
 
+class ImuMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["imu_data"]
+	timestamp_ms: int
+	roll_deg: float  # -180..180
+	pitch_deg: float  # -90..90
+	yaw_deg: float  # 0..360
+	accel_x: float  # sensor_msgs/Imu.linear_acceleration, m/s²
+	accel_y: float
+	accel_z: float
+	ang_vel_x: float  # sensor_msgs/Imu.angular_velocity, rad/s
+	ang_vel_y: float
+	ang_vel_z: float
+
+
 class SimThrusterFeedbackMsg(TypedDict):
 	v: Literal["1"]
 	type: Literal["sim_thruster_feedback"]
@@ -288,6 +303,7 @@ BridgeMessage = (
 	| SimHullVelocityMsg
 	| SimGnssVelocityMsg
 	| SimImuMsg
+	| ImuMsg
 	| SimThrusterFeedbackMsg
 	| SimWaypointListMsg
 	| MissionSendStatusMsg

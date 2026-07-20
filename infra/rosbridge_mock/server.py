@@ -88,6 +88,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/scan": 0.1,  # 10 Hz
     "/radar/spoke": 0.01,  # ~= 20s-rotation / 2048 fine steps, so each tick advances one step
     "/ais/decoded_message": 3.0,  # one target report per tick, round-robin (see _make_msg)
+    "/imu/data": 0.1,  # sent at the already-throttled 10Hz rate, same as /scan below
 }
 
 # Emit intervals for simulation topics
@@ -133,6 +134,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/scan": "sensor_msgs/LaserScan",
     "/radar/spoke": "custom_msgs/RadarSpoke",
     "/ais/decoded_message": "custom_msgs/SimpleAISdata",
+    "/imu/data": "sensor_msgs/Imu",
 }
 TOPIC_TYPES_SIMULATION: dict[str, str] = {
     "/revolt/sim/stc/position/hull": "geometry_msgs/PoseStamped",
@@ -527,6 +529,33 @@ def _make_msg(topic: str) -> dict:
                 },
             ]
             return targets[int(t / 3) % len(targets)]
+        case "/imu/data":
+            # Gentle synthetic roll/pitch oscillation plus the same simulated heading used for
+            # /heading, so yaw stays consistent with the rest of the mock's vessel motion.
+            roll_rad = 0.15 * math.sin(t / 4)
+            pitch_rad = 0.08 * math.sin(t / 6 + 1.0)
+            yaw_rad = _mock_heading_rad(t)
+            cr, sr = math.cos(roll_rad / 2), math.sin(roll_rad / 2)
+            cp, sp = math.cos(pitch_rad / 2), math.sin(pitch_rad / 2)
+            cy, sy = math.cos(yaw_rad / 2), math.sin(yaw_rad / 2)
+            return {
+                "orientation": {
+                    "w": cr * cp * cy + sr * sp * sy,
+                    "x": sr * cp * cy - cr * sp * sy,
+                    "y": cr * sp * cy + sr * cp * sy,
+                    "z": cr * cp * sy - sr * sp * cy,
+                },
+                "angular_velocity": {
+                    "x": round(random.gauss(0, 0.01), 4),
+                    "y": round(random.gauss(0, 0.01), 4),
+                    "z": round(random.gauss(0, 0.01), 4),
+                },
+                "linear_acceleration": {
+                    "x": round(random.gauss(0, 0.05), 3),
+                    "y": round(random.gauss(0, 0.05), 3),
+                    "z": round(9.81 + random.gauss(0, 0.05), 3),
+                },
+            }
         case _:
             return {"data": 0}
 

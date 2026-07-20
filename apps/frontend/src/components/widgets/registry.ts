@@ -12,6 +12,7 @@ import { RosCommandWidget } from "./RosCommandWidget.js";
 import { EnclosureHealthWidget } from "./EnclosureHealthWidget.js";
 import { RcRemoteWidget } from "./RcRemoteWidget.js";
 import { RadarWidget } from "./RadarWidget.js";
+import { ImuWidget } from "./ImuWidget.js";
 import { ObiBatteryHorizontal75 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-75.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
@@ -25,6 +26,7 @@ import { ObiLogEditGoogle } from "@oicl/openbridge-webcomponents-react/icons/ico
 import { ObiHvac } from "@oicl/openbridge-webcomponents-react/icons/icon-hvac.js";
 import { ObiJoystick } from "@oicl/openbridge-webcomponents-react/icons/icon-joystick.js";
 import { ObiRadarStandbyIec } from "@oicl/openbridge-webcomponents-react/icons/icon-radar-standby-iec.js";
+import { ObiSensorGyro } from "@oicl/openbridge-webcomponents-react/icons/icon-sensor-gyro.js";
 
 export type WidgetId =
 	| "battery"
@@ -39,7 +41,8 @@ export type WidgetId =
 	| "ros_commands"
 	| "enclosure_health"
 	| "rc_remote"
-	| "radar";
+	| "radar"
+	| "imu";
 
 export interface TilePosition {
 	x: number;
@@ -230,6 +233,18 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		// x:0,y:28 slot to avoid overlapping it.
 		defaultPosition: { x: 6, y: 28, w: 3, h: 5 },
 	},
+	imu: {
+		id: "imu",
+		label: "IMU",
+		component: ImuWidget,
+		icon: ObiSensorGyro,
+		defaultW: 3,
+		defaultH: 4,
+		minW: 2,
+		minH: 3,
+		// Next free spot in the row started by enclosure_health/rc_remote/radar above.
+		defaultPosition: { x: 9, y: 28, w: 3, h: 4 },
+	},
 };
 
 export const ALL_WIDGET_IDS: WidgetId[] = [
@@ -246,4 +261,5 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"enclosure_health",
 	"rc_remote",
 	"radar",
+	"imu",
 ];

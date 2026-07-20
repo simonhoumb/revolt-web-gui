@@ -28,6 +28,7 @@ from revolt_api.bridge.contracts import (
 	GnssHeadingMsg,
 	GnssVelocityMsg,
 	HumidityMsg,
+	ImuMsg,
 	LidarScanMsg,
 	LinearActuatorMsg,
 	MissionExecutionState,
@@ -195,6 +196,7 @@ class RosBridgeClient:
 			"/scan": self._handle_lidar_scan,
 			"/radar/spoke": self._handle_radar_spoke,
 			"/ais/decoded_message": self._handle_ais_target,
+			"/imu/data": self._handle_imu,
 		}
 
 	async def start(self) -> None:
@@ -780,6 +782,31 @@ class RosBridgeClient:
 			ang_vel_x=float(ang["x"]),
 			ang_vel_y=float(ang["y"]),
 			ang_vel_z=float(ang["z"]),
+		)
+
+	def _handle_imu(self, msg: dict, now: int) -> BridgeMessage | None:
+		q = msg["orientation"]
+		w, x, y, z = float(q["w"]), float(q["x"]), float(q["y"]), float(q["z"])
+		# Standard quaternion-to-Euler (ZYX order) extraction. The yaw term is the same formula
+		# already validated in _handle_gnss_heading; roll/pitch extend it to the other two axes.
+		roll_rad = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+		pitch_rad = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
+		yaw_rad = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+		accel = msg["linear_acceleration"]
+		ang_vel = msg["angular_velocity"]
+		return ImuMsg(
+			v="1",
+			type="imu_data",
+			timestamp_ms=now,
+			roll_deg=math.degrees(roll_rad),
+			pitch_deg=math.degrees(pitch_rad),
+			yaw_deg=math.degrees(yaw_rad) % 360,
+			accel_x=float(accel["x"]),
+			accel_y=float(accel["y"]),
+			accel_z=float(accel["z"]),
+			ang_vel_x=float(ang_vel["x"]),
+			ang_vel_y=float(ang_vel["y"]),
+			ang_vel_z=float(ang_vel["z"]),
 		)
 
 	def _handle_sim_thruster(self, msg: dict, now: int, thruster: str) -> BridgeMessage | None:
