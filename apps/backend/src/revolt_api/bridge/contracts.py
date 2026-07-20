@@ -255,6 +255,17 @@ class RadarSpokeMsg(TypedDict):
 	intensity: list[int]  # one 0-255 value per sample
 
 
+class AisTargetMsg(TypedDict):
+	v: Literal["1"]
+	type: Literal["ais_target"]
+	timestamp_ms: int
+	mmsi: int
+	lat: float
+	lon: float
+	sog_kn: float | None  # None when the source report has no valid speed
+	heading_deg: int | None  # None when the source report has no valid heading
+
+
 BridgeMessage = (
 	BatteryMsg
 	| CurrentMsg
@@ -263,6 +274,7 @@ BridgeMessage = (
 	| AzimuthFeedbackMsg
 	| RcRemoteMsg
 	| RadarSpokeMsg
+	| AisTargetMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
 	| LinearActuatorMsg

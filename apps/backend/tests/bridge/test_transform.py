@@ -228,6 +228,50 @@ def test_radar_spoke_flushes_after_stale_timeout(client: RosBridgeClient) -> Non
 	assert result["intensity"] == [1, 2, 3, 4]
 
 
+def test_ais_target_full_report(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 257123456, "lat": 59.3783, "lon": 10.6030, "sog": 8.2, "heading": 91},
+	)
+	assert result is not None
+	assert result["type"] == "ais_target"
+	assert result["mmsi"] == 257123456
+	assert result["lat"] == pytest.approx(59.3783)
+	assert result["lon"] == pytest.approx(10.6030)
+	assert result["sog_kn"] == pytest.approx(8.2)
+	assert result["heading_deg"] == 91
+
+
+def test_ais_target_heading_not_available_sentinel(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 511},
+	)
+	assert result is not None
+	assert result["heading_deg"] is None
+
+
+def test_ais_target_sog_protocol_not_available_sentinel(client: RosBridgeClient) -> None:
+	# custom_msgs/SimpleAISdata.msg documents 102.3 as the AIS protocol's own sentinel.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 102.3, "heading": 45},
+	)
+	assert result is not None
+	assert result["sog_kn"] is None
+
+
+def test_ais_target_sog_decoder_default_sentinel(client: RosBridgeClient) -> None:
+	# Hardware/ais/ais/ais_decoder.py falls back to 0.00001 when a message type has no speed
+	# field at all (e.g. a base station report), distinct from the protocol's own 102.3 sentinel.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.00001, "heading": 45},
+	)
+	assert result is not None
+	assert result["sog_kn"] is None
+
+
 def test_unknown_topic_returns_none(client: RosBridgeClient) -> None:
 	assert client._transform("/some/unknown/topic", {"data": 42}) is None
 
@@ -245,6 +289,10 @@ def test_all_results_have_version(client: RosBridgeClient) -> None:
 		("/arduino/stern/emergency_stop_status", {"data": 0}),
 		("/arduino/bow/linear_actuator_retract_state", {"data": 1}),
 		("/control_mode", {"data": 0}),
+		(
+			"/ais/decoded_message",
+			{"mmsi": 257123456, "lat": 59.3783, "lon": 10.6030, "sog": 8.2, "heading": 91},
+		),
 	]
 	for topic, msg in topics_and_msgs:
 		result = client._transform(topic, msg)

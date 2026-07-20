@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 import type {
+	AisTargetMsg,
 	AzimuthFeedbackMsg,
 	BatteryMsg,
 	BridgeMessage,
@@ -71,6 +72,7 @@ export interface BridgeData {
 	thrusterFeedback: ThrusterFeedback;
 	lidarScan: LidarScanMsg | null;
 	radarSpoke: RadarSpokeMsg | null;
+	aisTargets: Record<number, AisTargetMsg>;
 	activeWaypointList: SimWaypointListMsg | null;
 	missionSendStatus: MissionSendStatusMsg | null;
 	missionExecutionStatus: MissionExecutionStatusMsg | null;
@@ -104,6 +106,7 @@ export const initialData: BridgeData = {
 	thrusterFeedback: initialThrusterFeedback,
 	lidarScan: null,
 	radarSpoke: null,
+	aisTargets: {},
 	activeWaypointList: null,
 	missionSendStatus: null,
 	missionExecutionStatus: null,
@@ -163,6 +166,11 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 			return { ...state, lidarScan: msg };
 		case "radar_spoke":
 			return { ...state, radarSpoke: msg };
+		case "ais_target":
+			return {
+				...state,
+				aisTargets: { ...state.aisTargets, [msg.mmsi]: msg },
+			};
 		case "camera_status":
 			return { ...state, cameraStatus: msg };
 		case "sim_waypoint_list":

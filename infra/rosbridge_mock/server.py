@@ -87,6 +87,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/camera/camera/color/image_raw/compressed": 0.2,  # 5 fps
     "/scan": 0.1,  # 10 Hz
     "/radar/spoke": 0.01,  # ~= 20s-rotation / 2048 fine steps, so each tick advances one step
+    "/ais/decoded_message": 3.0,  # one target report per tick, round-robin (see _make_msg)
 }
 
 # Emit intervals for simulation topics
@@ -131,6 +132,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/camera/camera/color/image_raw/compressed": "sensor_msgs/CompressedImage",
     "/scan": "sensor_msgs/LaserScan",
     "/radar/spoke": "custom_msgs/RadarSpoke",
+    "/ais/decoded_message": "custom_msgs/SimpleAISdata",
 }
 TOPIC_TYPES_SIMULATION: dict[str, str] = {
     "/revolt/sim/stc/position/hull": "geometry_msgs/PoseStamped",
@@ -496,6 +498,35 @@ def _make_msg(topic: str) -> dict:
                 "max_intensity": 255,
                 "intensity": base64.b64encode(bytes(intensity_bytes)).decode(),
             }
+        case "/ais/decoded_message":
+            # Real AIS is a shared broadcast channel: targets take turns reporting, not one
+            # message carrying every target at once. Round-robin through a few synthetic targets
+            # so the map ends up with several live markers after a few ticks, same as it would
+            # from a real receiver.
+            targets = [
+                {  # underway, full nav data
+                    "mmsi": 257123456,
+                    "lat": round(59.3783 + 0.006 * math.sin(t / 40), 6),
+                    "lon": round(10.6030 + 0.004 * math.cos(t / 40), 6),
+                    "sog": round(8.0 + random.gauss(0, 0.2), 1),
+                    "heading": int((t * 3) % 360),
+                },
+                {  # slower vessel, opposite side of own-ship
+                    "mmsi": 257654321,
+                    "lat": round(59.3733 - 0.003 * math.cos(t / 60), 6),
+                    "lon": round(10.5850 - 0.003 * math.sin(t / 60), 6),
+                    "sog": round(4.0 + random.gauss(0, 0.1), 1),
+                    "heading": int((200 + t * 1.5) % 360),
+                },
+                {  # base station: no sog/heading, matches SimpleAISdata.msg's sentinels
+                    "mmsi": 2571234,
+                    "lat": 59.3820,
+                    "lon": 10.6010,
+                    "sog": 102.3,
+                    "heading": 511,
+                },
+            ]
+            return targets[int(t / 3) % len(targets)]
         case _:
             return {"data": 0}
 

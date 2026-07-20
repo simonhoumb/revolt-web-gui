@@ -15,6 +15,7 @@ from websockets.asyncio.client import connect
 from revolt_api.bridge.contracts import (
 	_ADC_TO_AMPS,
 	_CONTROL_MODE_MAP,
+	AisTargetMsg,
 	AzimuthFeedbackMsg,
 	BatteryMsg,
 	BridgeMessage,
@@ -193,6 +194,7 @@ class RosBridgeClient:
 			"/camera/camera/color/image_raw/compressed": self._handle_camera_frame,
 			"/scan": self._handle_lidar_scan,
 			"/radar/spoke": self._handle_radar_spoke,
+			"/ais/decoded_message": self._handle_ais_target,
 		}
 
 	async def start(self) -> None:
@@ -904,6 +906,27 @@ class RosBridgeClient:
 		}
 
 		return result
+
+	def _handle_ais_target(self, msg: dict, now: int) -> BridgeMessage | None:
+		# custom_msgs/SimpleAISdata.msg documents 102.3 as the AIS protocol's own "speed not
+		# available" sentinel. Hardware/ais/ais/ais_decoder.py additionally falls back to a
+		# 0.00001 placeholder when a decoded message type carries no speed field at all (e.g. a
+		# base station report). Both mean "no sog"; tolerances guard against float roundtrip noise
+		# on the wire rather than requiring an exact match.
+		sog = float(msg["sog"])
+		heading = int(msg["heading"])
+		sog_kn = None if sog >= 102.25 or sog < 0.001 else sog
+		heading_deg = None if heading == 511 else heading
+		return AisTargetMsg(
+			v="1",
+			type="ais_target",
+			timestamp_ms=now,
+			mmsi=int(msg["mmsi"]),
+			lat=float(msg["lat"]),
+			lon=float(msg["lon"]),
+			sog_kn=sog_kn,
+			heading_deg=heading_deg,
+		)
 
 	def _cartesian_to_latlon(self, x_m: float, y_m: float) -> tuple[float, float]:
 		"""Convert local Cartesian metres (X=East, Y=North) to WGS84 degrees."""

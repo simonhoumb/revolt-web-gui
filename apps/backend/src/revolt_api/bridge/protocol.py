@@ -147,6 +147,15 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"refresh rate. Rate control happens on the frontend render side instead."
 		),
 	),
+	TopicSpec(
+		"/ais/decoded_message",
+		"custom_msgs/SimpleAISdata",
+		description=(
+			"One decoded AIS target report per message: mmsi, lat/lon, sog, heading. "
+			"Published by the ais_decoder node reading the vessel's AIS receiver. Not throttled, "
+			"since it's a low-rate, per-target event stream rather than a repeated snapshot."
+		),
+	),
 	# Xsens IMU (/filter/quaternion, /filter/velocity): not wired up yet.
 	# GNSS heading/velocity use the VS330 compass (/heading, /vel) as the
 	# authoritative source; Xsens is a candidate fallback, not implemented.

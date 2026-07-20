@@ -10,15 +10,19 @@ import { ObiCenterIec } from "@oicl/openbridge-webcomponents-react/icons/icon-ce
 import { ObiCenterOffIec } from "@oicl/openbridge-webcomponents-react/icons/icon-center-off-iec.js";
 import { ObiWaypointEditIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-edit-iec.js";
 import { ObiWaypointAddIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-add-iec.js";
+import { ObiVisibilityOnGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-visibility-on-google.js";
+import { ObiVisibilityOffGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-visibility-off-google.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
+import { useAisTargets } from "../../hooks/useAisTargets.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useLegHazards } from "../../context/LegHazardsContext.js";
 import { useMapLibreInstance, scaleNmForZoom } from "../../hooks/useMapLibreInstance.js";
 import { useOwnShipMarker } from "../../hooks/useOwnShipMarker.js";
 import { useVesselTrackLayer } from "../../hooks/useVesselTrackLayer.js";
 import { useWaypointMarkers } from "../../hooks/useWaypointMarkers.js";
+import { useAisMarkers } from "../../hooks/useAisMarkers.js";
 import styles from "./MapWidget.module.css";
 
 type RotationMode = "H" | "N" | "C"; // HEADING-UP || NORTH-UP || COURSE-UP
@@ -29,16 +33,19 @@ export function MapWidget() {
 	const [rotationMode, setRotationMode] = useState<RotationMode>("N");
 	const [cameraLocked, setCameraLocked] = useState(true);
 	const [editMode, setEditMode] = useState<EditMode>("edit");
+	const [aisVisible, setAisVisible] = useState(true);
 
 	const { latitude, longitude, headingDeg, courseDeg } = useGnssData();
 	const track = useVesselTrack();
 	const { waypoints } = useWaypointDraft();
 	const { addWaypoint, updateWaypointPosition } = useMission();
 	const { legValidation, setLegValidation } = useLegHazards();
+	const aisTargets = useAisTargets();
 
-	// Call order matters: useOwnShipMarker/useVesselTrackLayer/useWaypointMarkers all read
-	// mapRef.current inside a mount effect of their own, relying on useMapLibreInstance's mount
-	// effect (which actually creates the map) having already run earlier in this same commit.
+	// Call order matters: useOwnShipMarker/useVesselTrackLayer/useWaypointMarkers/useAisMarkers
+	// all read mapRef.current inside a mount effect of their own, relying on
+	// useMapLibreInstance's mount effect (which actually creates the map) having already run
+	// earlier in this same commit.
 	const { mapRef, zoom } = useMapLibreInstance(containerRef);
 	useOwnShipMarker(mapRef, { latitude, longitude, headingDeg });
 	useVesselTrackLayer(mapRef, track);
@@ -50,6 +57,7 @@ export function MapWidget() {
 		updateWaypointPosition,
 		setLegValidation,
 	});
+	useAisMarkers(mapRef, aisVisible ? aisTargets : []);
 
 	useEffect(() => {
 		const map = mapRef.current;
@@ -140,6 +148,13 @@ export function MapWidget() {
 		[],
 	);
 
+	const handleAisVisibleValue = useCallback(
+		(e: CustomEvent<{ value: string; previousValue: string }>) => {
+			setAisVisible(e.detail.value === "visible");
+		},
+		[],
+	);
+
 	const handleZoomIn = useCallback(() => {
 		mapRef.current?.zoomIn();
 	}, [mapRef]);
@@ -196,6 +211,19 @@ export function MapWidget() {
 					</ObcToggleButtonOption>
 					<ObcToggleButtonOption value="add" aria-label="Add waypoint">
 						<ObiWaypointAddIec slot="icon" />
+					</ObcToggleButtonOption>
+				</ObcToggleButtonGroup>
+				<ObcToggleButtonGroup
+					aria-label="AIS targets"
+					value={aisVisible ? "visible" : "hidden"}
+					type={ObcToggleButtonOptionType.icon}
+					onValue={handleAisVisibleValue}
+				>
+					<ObcToggleButtonOption value="visible" aria-label="Show AIS targets">
+						<ObiVisibilityOnGoogle slot="icon" />
+					</ObcToggleButtonOption>
+					<ObcToggleButtonOption value="hidden" aria-label="Hide AIS targets">
+						<ObiVisibilityOffGoogle slot="icon" />
 					</ObcToggleButtonOption>
 				</ObcToggleButtonGroup>
 			</div>

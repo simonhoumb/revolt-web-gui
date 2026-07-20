@@ -1,11 +1,12 @@
 import { cleanup, render } from "@testing-library/react";
 import { act } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, Waypoint } from "@revolt/shared-types";
 import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
+import { useAisTargets } from "../../hooks/useAisTargets.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useLegHazards } from "../../context/LegHazardsContext.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
@@ -17,6 +18,9 @@ vi.mock("../../hooks/useGnssData.js", () => ({
 vi.mock("../../hooks/useVesselTrack.js", () => ({
 	useVesselTrack: vi.fn(),
 }));
+vi.mock("../../hooks/useAisTargets.js", () => ({
+	useAisTargets: vi.fn(),
+}));
 vi.mock("../../context/MissionContext.js", () => ({
 	useMission: vi.fn(),
 }));
@@ -26,6 +30,7 @@ vi.mock("../../context/LegHazardsContext.js", () => ({
 
 const mockUseGnssData = useGnssData as Mock;
 const mockUseVesselTrack = useVesselTrack as Mock;
+const mockUseAisTargets = useAisTargets as Mock;
 const mockUseMission = useMission as Mock;
 const mockUseLegHazards = useLegHazards as Mock;
 
@@ -294,6 +299,12 @@ vi.mock("maplibre-gl", () => {
 	}
 
 	return { default: { Map: MockMap, NavigationControl: vi.fn(), Marker: MockMarker } };
+});
+
+beforeEach(() => {
+	// AIS targets aren't under test here (see useAisMarkers, which mocked maplibre-gl can't
+	// meaningfully exercise) -- default to none so every test doesn't need its own setup call.
+	mockUseAisTargets.mockReturnValue([]);
 });
 
 afterEach(() => {
