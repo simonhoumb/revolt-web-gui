@@ -9,6 +9,8 @@ import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useAisTargets } from "../../hooks/useAisTargets.js";
 import { useMission } from "../../context/MissionContext.js";
 import { useLegHazards } from "../../context/LegHazardsContext.js";
+import { useApps } from "../../context/AppContext.js";
+import { APPS } from "./apps.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
 
@@ -27,12 +29,25 @@ vi.mock("../../context/MissionContext.js", () => ({
 vi.mock("../../context/LegHazardsContext.js", () => ({
 	useLegHazards: vi.fn(),
 }));
+vi.mock("../../context/AppContext.js", () => ({
+	useApps: vi.fn(),
+}));
 
 const mockUseGnssData = useGnssData as Mock;
 const mockUseVesselTrack = useVesselTrack as Mock;
 const mockUseAisTargets = useAisTargets as Mock;
 const mockUseMission = useMission as Mock;
 const mockUseLegHazards = useLegHazards as Mock;
+const mockUseApps = useApps as Mock;
+
+function setApp(activeAppId: keyof typeof APPS = "custom") {
+	mockUseApps.mockReturnValue({
+		activeAppId,
+		appDef: APPS[activeAppId],
+		isLocked: activeAppId !== "custom",
+		setActiveApp: vi.fn(),
+	});
+}
 
 const baseGnss: GnssData = {
 	latitude: null,
@@ -305,6 +320,7 @@ beforeEach(() => {
 	// AIS targets aren't under test here (see useAisMarkers, which mocked maplibre-gl can't
 	// meaningfully exercise) -- default to none so every test doesn't need its own setup call.
 	mockUseAisTargets.mockReturnValue([]);
+	setApp();
 });
 
 afterEach(() => {
@@ -457,6 +473,63 @@ describe("MapWidget", () => {
 			stepper.dispatchEvent(new CustomEvent("down"));
 		});
 		expect(mapInstances[0]?.zoomOut).toHaveBeenCalled();
+	});
+
+	it("defaults to mini-map in the Conning app, and full map elsewhere", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container: customContainer } = render(<MapWidget />);
+		expect(customContainer.querySelector('[aria-label="Chart range"]')).not.toBeNull();
+		cleanup();
+
+		setApp("conning");
+		const { container: conningContainer } = render(<MapWidget />);
+		expect(conningContainer.querySelector('[aria-label="Chart range"]')).toBeNull();
+		expect(findByLabel(conningContainer, "Mini-map")).toBeInTheDocument();
+	});
+
+	it("hides the rest of the toolbar in mini-map mode, and restores it when switched back", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container } = render(<MapWidget />);
+		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
+		expect(container.querySelector('[aria-label="AIS targets"]')).not.toBeNull();
+
+		dispatchToggleValue(findByLabel(container, "Map detail"), "mini", "full");
+		expect(container.querySelector('[aria-label="Chart orientation"]')).toBeNull();
+		expect(container.querySelector('[aria-label="AIS targets"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Route edit mode"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Camera lock"]')).toBeNull();
+
+		dispatchToggleValue(findByLabel(container, "Map detail"), "full", "mini");
+		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
+	});
+
+	it("forces edit mode back to pan-only when switching into mini-map while adding a waypoint", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container } = render(<MapWidget />);
+		dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+
+		act(() => {
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.5, lng: 10.5 } });
+		});
+		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
+
+		dispatchToggleValue(findByLabel(container, "Map detail"), "mini", "full");
+		dispatchToggleValue(findByLabel(container, "Map detail"), "full", "mini");
+		act(() => {
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.6, lng: 10.6 } });
+		});
+		// Still 1: mini-map reset edit mode back to "edit" (pan-only), so re-entering full map
+		// doesn't leave "add" active and this second click doesn't place a waypoint.
+		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
 	});
 
 	it("eases chart bearing to true heading in heading-up mode", () => {
