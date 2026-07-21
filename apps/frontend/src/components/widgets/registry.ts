@@ -2,7 +2,6 @@ import type { ComponentType } from "react";
 import { BatteryWidget } from "./BatteryWidget.js";
 import { GnssWidget } from "./GnssWidget.js";
 import { ThrusterWidget } from "./ThrusterWidget.js";
-import { ConnectionWidget } from "./ConnectionWidget.js";
 import { LidarWidget } from "./LidarWidget.js";
 import { CameraWidget } from "./CameraWidget.js";
 import { MapWidget } from "./MapWidget.js";
@@ -17,7 +16,6 @@ import { LightBeaconWidget } from "./LightBeaconWidget.js";
 import { ObiBatteryHorizontal75 } from "@oicl/openbridge-webcomponents-react/icons/icon-battery-horizontal-75.js";
 import { ObiLocation } from "@oicl/openbridge-webcomponents-react/icons/icon-location.js";
 import { ObiPropulsionAzimuthThruster } from "@oicl/openbridge-webcomponents-react/icons/icon-propulsion-azimuth-thruster.js";
-import { ObiCellFull } from "@oicl/openbridge-webcomponents-react/icons/icon-cell-full.js";
 import { ObiRadarIec } from "@oicl/openbridge-webcomponents-react/icons/icon-radar-iec.js";
 import { ObiCamera } from "@oicl/openbridge-webcomponents-react/icons/icon-camera.js";
 import { ObiChart } from "@oicl/openbridge-webcomponents-react/icons/icon-chart.js";
@@ -34,7 +32,6 @@ export type WidgetId =
 	| "battery"
 	| "gnss"
 	| "thruster"
-	| "connection"
 	| "lidar"
 	| "camera"
 	| "map"
@@ -111,18 +108,6 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		minH: 4,
 		defaultPosition: { x: 6, y: 4, w: 3, h: 7 },
 		instrumentsOnlyPosition: { x: 0, y: 5, w: 4, h: 7 },
-	},
-	connection: {
-		id: "connection",
-		label: "Connection",
-		component: ConnectionWidget,
-		icon: ObiCellFull,
-		defaultW: 3,
-		defaultH: 4,
-		minW: 2,
-		minH: 3,
-		defaultPosition: { x: 6, y: 0, w: 3, h: 4 },
-		instrumentsOnlyPosition: { x: 8, y: 0, w: 4, h: 4 },
 	},
 	lidar: {
 		id: "lidar",
@@ -268,7 +253,6 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"battery",
 	"gnss",
 	"thruster",
-	"connection",
 	"lidar",
 	"camera",
 	"map",
