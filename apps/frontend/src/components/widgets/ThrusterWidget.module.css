@@ -2,6 +2,31 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	height: 100%;
+	min-height: 0;
+}
+
+.toolbar {
+	display: flex;
+	justify-content: flex-end;
+}
+
+.instrumentList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex: 1;
+	min-height: 0;
+}
+
+/* obc-azimuth-thruster/obc-thruster have no default :host size (they render their inner SVG at
+   100% of the host box, which is itself unsized without this). Share the available space evenly
+   between the three instruments instead of each rendering at its unconstrained intrinsic size,
+   which overflowed the tile. */
+.instrument {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
 }
 
 .badgeRow {

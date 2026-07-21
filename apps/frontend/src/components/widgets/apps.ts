@@ -54,7 +54,16 @@ export const APPS: Record<AppId, AppDefinition> = {
 		kind: "locked",
 		// Reuses the same registry-derived tiles the old "Instruments only" template used, so this
 		// app and LayoutContext's Default template can never hand-list the same widget set twice.
-		tiles: deriveInstrumentsOnlyTiles(),
+		// A getter, not an eagerly-computed value: registry.ts imports every widget component
+		// (including ThrusterWidget/ImuWidget/GnssWidget, which import useApps from
+		// AppContext.tsx, which imports this file, which imports registry.ts), a genuine
+		// circular import. Calling deriveInstrumentsOnlyTiles() at this module's top level would
+		// run mid-cycle, while registry.ts is still mid-evaluation and hasn't defined it yet.
+		// Deferring the call to first access (which only ever happens later, e.g. during render)
+		// lets the whole module graph finish loading first.
+		get tiles() {
+			return deriveInstrumentsOnlyTiles();
+		},
 	},
 	mission: {
 		id: "mission",

@@ -29,6 +29,22 @@ global.IntersectionObserver = class IntersectionObserver {
 // so the usual feature-detection guard is unnecessary here -- just stub it unconditionally.
 Element.prototype.checkVisibility = () => true;
 
+// jsdom does not implement the Web Animations API either. obc-compass/obc-speed-gauge (used by
+// GnssWidget's instrument view) build on obc-watch, whose internal RateOfTurnController calls
+// element.animate() in a ReactiveController's hostConnected(), outside any render cycle a test
+// awaits, so a missing method here surfaces as an unhandled rejection rather than a thrown render
+// error. None of this app's tests assert on the rotation animation itself, so a minimal stub
+// (enough for pause/cancel/currentTime/effect.getComputedTiming to not throw) is sufficient.
+Element.prototype.animate = () =>
+	({
+		cancel: () => undefined,
+		pause: () => undefined,
+		play: () => undefined,
+		finish: () => undefined,
+		currentTime: 0,
+		effect: { getComputedTiming: () => ({ duration: 1000, direction: "normal" }) },
+	}) as unknown as Animation;
+
 // jsdom's fetch (undici) requires an absolute URL, so a component that fetches a relative
 // endpoint on mount (e.g. MissionContext's loadMissions()) throws an unhandled rejection in any
 // test that mounts the full App tree without its own mock. Stub a benign empty-array response by
