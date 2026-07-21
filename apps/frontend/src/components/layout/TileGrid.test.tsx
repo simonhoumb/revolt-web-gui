@@ -1,11 +1,18 @@
+import { useEffect } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { TileGrid, nextNeededRowsBasis } from "./TileGrid.js";
 import { useLayout } from "../../context/LayoutContext.js";
+import { useApps } from "../../context/AppContext.js";
+import { APPS } from "../widgets/apps.js";
 
 vi.mock("../../context/LayoutContext.js", () => ({
 	useLayout: vi.fn(),
+}));
+
+vi.mock("../../context/AppContext.js", () => ({
+	useApps: vi.fn(),
 }));
 
 // TileGrid renders the real widget components registered for each configured tile id (e.g. the
@@ -55,15 +62,36 @@ interface CapturedGridLayoutProps {
 }
 
 let lastGridLayoutProps: CapturedGridLayoutProps | null = null;
+let gridLayoutMountCount = 0;
 
 vi.mock("react-grid-layout", () => ({
 	GridLayout: (props: CapturedGridLayoutProps) => {
 		lastGridLayoutProps = props;
+		// Runs once per mount (not per re-render), so this counts how many times TileGrid's
+		// key={`${activeAppId}-${gridKey}`} actually forced a fresh GridLayout instance, the
+		// mechanism per-app widget view-mode state relies on to reset when switching apps.
+		useEffect(() => {
+			gridLayoutMountCount += 1;
+		}, []);
 		return props.children;
 	},
 }));
 
 const mockUseLayout = useLayout as Mock;
+const mockUseApps = useApps as Mock;
+
+// A fabricated locked app, deliberately built only from widgets ("battery"/"gnss") the mocked
+// BridgeDataContext above already supports, rather than the real APPS.conning (which includes
+// thruster/imu/map, each needing more context than this file sets up, e.g. MissionProvider for
+// MapWidget). These tests are about TileGrid's own tile-source branching, not real widget
+// rendering, so a minimal fixture keeps that distinction clear.
+const testLockedApp: (typeof APPS)["conning"] = {
+	id: "conning",
+	label: "Test Locked App",
+	icon: () => null,
+	kind: "locked",
+	tiles: [{ i: "battery", x: 0, y: 0, w: 3, h: 5 }],
+};
 
 function setLayout(overrides: Partial<ReturnType<typeof useLayout>> = {}) {
 	mockUseLayout.mockReturnValue({
@@ -82,10 +110,25 @@ function setLayout(overrides: Partial<ReturnType<typeof useLayout>> = {}) {
 	});
 }
 
+function setApp(overrides: Partial<ReturnType<typeof useApps>> = {}) {
+	mockUseApps.mockReturnValue({
+		activeAppId: "custom",
+		appDef: APPS.custom,
+		isLocked: false,
+		setActiveApp: vi.fn(),
+		...overrides,
+	});
+}
+
+beforeEach(() => {
+	setApp();
+});
+
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
 	lastGridLayoutProps = null;
+	gridLayoutMountCount = 0;
 });
 
 describe("TileGrid", () => {
@@ -134,6 +177,45 @@ describe("TileGrid", () => {
 		setLayout({ editMode: false });
 		render(<TileGrid />);
 		expect(lastGridLayoutProps?.dragConfig.enabled).toBe(false);
+	});
+
+	it("renders a locked app's own static tiles instead of config.tiles", () => {
+		setLayout();
+		setApp({ activeAppId: "conning", appDef: testLockedApp, isLocked: true });
+		render(<TileGrid />);
+		expect(lastGridLayoutProps?.layout.map((t) => t.i)).toEqual(["battery"]);
+		// gnss from the mocked customizable-dashboard config.tiles must not leak in
+		expect(screen.queryByText("Lat")).not.toBeInTheDocument();
+	});
+
+	it("disables dragging/resizing for a locked app even if editMode is true", () => {
+		setLayout({ editMode: true });
+		setApp({ activeAppId: "conning", appDef: testLockedApp, isLocked: true });
+		render(<TileGrid />);
+		expect(lastGridLayoutProps?.dragConfig.enabled).toBe(false);
+	});
+
+	it("does not call updateLayout on layout change for a locked app", () => {
+		const updateLayout = vi.fn();
+		setLayout({ updateLayout, editMode: true });
+		setApp({ activeAppId: "conning", appDef: testLockedApp, isLocked: true });
+		render(<TileGrid />);
+
+		act(() => {
+			lastGridLayoutProps?.onLayoutChange([{ i: "battery", x: 1, y: 0, w: 3, h: 5 }]);
+		});
+		expect(updateLayout).not.toHaveBeenCalled();
+	});
+
+	it("remounts the grid when the active app changes", () => {
+		setLayout();
+		setApp({ activeAppId: "custom", appDef: APPS.custom, isLocked: false });
+		const { rerender } = render(<TileGrid />);
+		expect(gridLayoutMountCount).toBe(1);
+
+		setApp({ activeAppId: "conning", appDef: testLockedApp, isLocked: true });
+		rerender(<TileGrid />);
+		expect(gridLayoutMountCount).toBe(2);
 	});
 });
 

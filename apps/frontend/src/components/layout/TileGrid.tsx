@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GridLayout } from "react-grid-layout";
 import type { Layout } from "react-grid-layout";
 import { useLayout } from "../../context/LayoutContext.js";
+import { useApps } from "../../context/AppContext.js";
 import { WIDGET_REGISTRY } from "../widgets/registry.js";
 import { TileCard } from "../widgets/TileCard.js";
 import styles from "./TileGrid.module.css";
@@ -70,6 +71,12 @@ function useContainerSize(initialWidth: number) {
 export function TileGrid() {
 	const { containerRef, width, height, mounted } = useContainerSize(1280);
 	const { config, updateLayout, editMode, removeWidget, layoutGeneration } = useLayout();
+	const { activeAppId, appDef, isLocked } = useApps();
+	// A locked app's tiles are static data, never LayoutContext.config -- routing them through
+	// config/updateLayout would persist over the customizable dashboard's own saved layout the
+	// moment a locked app was opened. See apps.ts for why.
+	const tiles = appDef.kind === "locked" ? appDef.tiles : config.tiles;
+	const effectiveEditMode = editMode && !isLocked;
 	// Incremented when drag/resize produces an out-of-bounds layout; forces GridLayout
 	// to remount and re-initialize from the valid propsLayout, snapping tiles back.
 	const [gridKey, setGridKey] = useState(0);
@@ -99,7 +106,7 @@ export function TileGrid() {
 	// derived from containerWidth / cols -- so the whole layout always fits vertically,
 	// on any window size, instead of a fixed pixel rowHeight running past the bottom.
 	// See nextNeededRowsBasis's own comment for why this isn't just a live Math.max(...).
-	const rawNeededRows = Math.max(1, ...config.tiles.map((tile) => tile.y + tile.h));
+	const rawNeededRows = Math.max(1, ...tiles.map((tile) => tile.y + tile.h));
 	const neededRowsBasisRef = useRef<NeededRowsBasis>({ generation: -1, rows: 1 });
 	neededRowsBasisRef.current = nextNeededRowsBasis(
 		neededRowsBasisRef.current,
@@ -115,7 +122,7 @@ export function TileGrid() {
 			? Math.max(MIN_ROW_HEIGHT, (height - (neededRows + 1) * marginY) / neededRows)
 			: MIN_ROW_HEIGHT;
 
-	const layout: Layout = config.tiles.map((tile) => {
+	const layout: Layout = tiles.map((tile) => {
 		const def = WIDGET_REGISTRY[tile.i];
 		return {
 			i: tile.i,
@@ -132,12 +139,12 @@ export function TileGrid() {
 		<div ref={containerRef} className={styles.grid}>
 			{mounted && (
 				<GridLayout
-					key={gridKey}
+					key={`${activeAppId}-${gridKey.toString()}`}
 					width={width}
 					layout={layout}
 					gridConfig={{ ...GRID_CONFIG, rowHeight, maxRows }}
-					dragConfig={{ enabled: editMode, handle: "[data-drag-handle]" }}
-					resizeConfig={{ enabled: editMode }}
+					dragConfig={{ enabled: effectiveEditMode, handle: "[data-drag-handle]" }}
+					resizeConfig={{ enabled: effectiveEditMode }}
 					onDrag={(currentLayout) => {
 						setPlaceholderInvalid(
 							maxRows !== undefined &&
@@ -169,6 +176,7 @@ export function TileGrid() {
 						}
 					}}
 					onLayoutChange={(updated) => {
+						if (isLocked) return;
 						if (
 							maxRows !== undefined &&
 							updated.some((item) => item.y + item.h > maxRows)
@@ -186,18 +194,18 @@ export function TileGrid() {
 						);
 					}}
 				>
-					{config.tiles.map((tile) => {
+					{tiles.map((tile) => {
 						const def = WIDGET_REGISTRY[tile.i];
 						const W = def.component;
 						return (
 							<div key={tile.i} className={styles.tileWrapper}>
-								{editMode && (
+								{effectiveEditMode && (
 									<div className={styles.dragHandle} data-drag-handle="" />
 								)}
 								<TileCard
 									title={def.label}
 									widgetId={tile.i}
-									editMode={editMode}
+									editMode={effectiveEditMode}
 									onRemove={removeWidget}
 								>
 									<W />
