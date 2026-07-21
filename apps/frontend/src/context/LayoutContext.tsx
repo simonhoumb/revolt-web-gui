@@ -7,15 +7,12 @@ import {
 	useMemo,
 	type ReactNode,
 } from "react";
-import { type WidgetId, ALL_WIDGET_IDS, WIDGET_REGISTRY } from "../components/widgets/registry.js";
-
-export interface TileLayout {
-	i: WidgetId;
-	x: number;
-	y: number;
-	w: number;
-	h: number;
-}
+import {
+	type WidgetId,
+	type TileLayout,
+	ALL_WIDGET_IDS,
+	WIDGET_REGISTRY,
+} from "../components/widgets/registry.js";
 
 export interface LayoutConfig {
 	tiles: TileLayout[];
@@ -41,6 +38,7 @@ interface LayoutContextValue {
 	deleteTemplate: (name: string) => void;
 	editMode: boolean;
 	toggleEditMode: () => void;
+	setEditMode: (value: boolean) => void;
 	// Bumped only by structural changes to the tile set (add/remove/reset/load template), never by
 	// updateLayout's ordinary drag/resize commits -- TileGrid uses this to know when it's safe to
 	// re-fit the grid's row height to a *smaller* total row count. See TileGrid.tsx's neededRows
@@ -66,30 +64,14 @@ const DEFAULT_CONFIG: LayoutConfig = {
 	hiddenWidgets: DEFAULT_HIDDEN,
 };
 
-// Every widget with an instrumentsOnlyPosition gets a tile there; every other widget is derived
-// as hidden -- structurally, not by hand-listing both a tiles array and a hiddenWidgets array
-// that must together cover every widget id (a real bug this app shipped with: mission_control
-// was missing from both lists here, so loading this template left it neither shown nor tracked
-// as hidden -- not reachable from WidgetPicker's toggle state either way until this fix).
-const INSTRUMENTS_ONLY_TILES: TileLayout[] = ALL_WIDGET_IDS.flatMap((id) => {
-	const position = WIDGET_REGISTRY[id].instrumentsOnlyPosition;
-	return position ? [{ i: id, ...position }] : [];
-});
-const INSTRUMENTS_ONLY_HIDDEN: WidgetId[] = ALL_WIDGET_IDS.filter(
-	(id) => !WIDGET_REGISTRY[id].instrumentsOnlyPosition,
-);
-
+// "Instruments only" used to live here as a second built-in template; it's now the locked
+// Instruments app instead (see components/widgets/apps.ts), reached from the navigation menu
+// rather than this template list, so there's exactly one place to find it.
 const BUILTIN_TEMPLATES: LayoutTemplate[] = [
 	{
 		name: "Default",
 		tiles: DEFAULT_TILES,
 		hiddenWidgets: DEFAULT_HIDDEN,
-		savedAt: 0,
-	},
-	{
-		name: "Instruments only",
-		tiles: INSTRUMENTS_ONLY_TILES,
-		hiddenWidgets: INSTRUMENTS_ONLY_HIDDEN,
 		savedAt: 0,
 	},
 ];
@@ -274,6 +256,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 				deleteTemplate,
 				editMode,
 				toggleEditMode,
+				setEditMode,
 				layoutGeneration,
 			}}
 		>

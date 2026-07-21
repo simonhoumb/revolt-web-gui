@@ -265,3 +265,28 @@ export const ALL_WIDGET_IDS: WidgetId[] = [
 	"imu",
 	"light_beacon",
 ];
+
+// A widget's placement within some concrete layout (the customizable dashboard, a saved
+// template, or a locked app) -- TilePosition plus which widget it belongs to. Lives here (not
+// LayoutContext.tsx, where it originated) so apps.ts can share it without importing from
+// LayoutContext.tsx, which itself imports from this file.
+export interface TileLayout extends TilePosition {
+	i: WidgetId;
+}
+
+// Every widget with an instrumentsOnlyPosition gets a tile there; every other widget is derived
+// as hidden -- structurally, not by hand-listing both a tiles array and a hiddenWidgets array
+// that must together cover every widget id (this app shipped with exactly that bug once:
+// mission_control was missing from both hand-maintained lists, so loading the "Instruments only"
+// template left it neither shown nor tracked as hidden). Shared by LayoutContext.tsx's remaining
+// templates and apps.ts's Instruments app, so the two can't drift apart from each other.
+export function deriveInstrumentsOnlyTiles(): TileLayout[] {
+	return ALL_WIDGET_IDS.flatMap((id) => {
+		const position = WIDGET_REGISTRY[id].instrumentsOnlyPosition;
+		return position ? [{ i: id, ...position }] : [];
+	});
+}
+
+export function deriveInstrumentsOnlyHidden(): WidgetId[] {
+	return ALL_WIDGET_IDS.filter((id) => !WIDGET_REGISTRY[id].instrumentsOnlyPosition);
+}

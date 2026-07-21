@@ -136,11 +136,10 @@ describe("LayoutProvider", () => {
 		expect(result.current.config.hiddenWidgets).toEqual([]);
 	});
 
-	it("always includes the built-in templates, even with no saved user templates", () => {
+	it("always includes the built-in Default template, even with no saved user templates", () => {
 		const { result } = renderLayout();
 		const names = result.current.templates.map((t) => t.name);
 		expect(names).toContain("Default");
-		expect(names).toContain("Instruments only");
 	});
 
 	it("saveTemplate adds a new user template, and replaces one with the same name", () => {
@@ -169,31 +168,12 @@ describe("LayoutProvider", () => {
 	it("loadTemplate applies a built-in template's tiles and hidden widgets", () => {
 		const { result } = renderLayout();
 		act(() => {
-			result.current.loadTemplate("Instruments only");
+			result.current.updateLayout([{ i: "battery", x: 5, y: 5, w: 3, h: 5 }]);
 		});
-		expect(result.current.config.hiddenWidgets).toContain("map");
-		expect(result.current.config.tiles.map((t) => t.i)).toContain("thruster");
-	});
-
-	it("every widget id is accounted for in the Instruments only template's tiles or hiddenWidgets, never neither", () => {
-		// Regression test: mission_control used to be missing from both the hand-listed tiles
-		// array and the hand-listed hiddenWidgets array for this template, so loading it left
-		// mission_control neither shown nor tracked as hidden. Deriving both lists from the
-		// registry (see registry.ts's instrumentsOnlyPosition) makes that structurally
-		// impossible now -- this asserts the invariant holds for every widget, not just the one
-		// that happened to be missing before.
-		const { result } = renderLayout();
 		act(() => {
-			result.current.loadTemplate("Instruments only");
+			result.current.loadTemplate("Default");
 		});
-		const accounted = new Set([
-			...result.current.config.tiles.map((t) => t.i),
-			...result.current.config.hiddenWidgets,
-		]);
-		for (const id of ALL_WIDGET_IDS) {
-			expect(accounted.has(id)).toBe(true);
-		}
-		expect(result.current.config.hiddenWidgets).toContain("mission_control");
+		expect(result.current.config.tiles.map((t) => t.i)).toContain("thruster");
 	});
 
 	it("the default layout's tile positions/sizes are unchanged by deriving them from the registry", () => {
@@ -298,7 +278,7 @@ describe("LayoutProvider", () => {
 		expect(result.current.layoutGeneration).toBe(initial + 3);
 
 		act(() => {
-			result.current.loadTemplate("Instruments only");
+			result.current.loadTemplate("Default");
 		});
 		expect(result.current.layoutGeneration).toBe(initial + 4);
 	});
@@ -321,6 +301,22 @@ describe("LayoutProvider", () => {
 		expect(result.current.editMode).toBe(true);
 		act(() => {
 			result.current.toggleEditMode();
+		});
+		expect(result.current.editMode).toBe(false);
+	});
+
+	it("setEditMode sets editMode to the given value directly", () => {
+		const { result } = renderLayout();
+		act(() => {
+			result.current.setEditMode(true);
+		});
+		expect(result.current.editMode).toBe(true);
+		act(() => {
+			result.current.setEditMode(true);
+		});
+		expect(result.current.editMode).toBe(true);
+		act(() => {
+			result.current.setEditMode(false);
 		});
 		expect(result.current.editMode).toBe(false);
 	});
