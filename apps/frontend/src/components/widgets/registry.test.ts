@@ -85,7 +85,7 @@ describe("deriveInstrumentsOnlyTiles / deriveInstrumentsOnlyHidden", () => {
 		// Regression test: mission_control used to be missing from both a hand-listed tiles array
 		// and a hand-listed hiddenWidgets array for the old "Instruments only" template, so loading
 		// it left mission_control neither shown nor tracked as hidden. Deriving both lists from the
-		// same registry data (instrumentsOnlyPosition) makes that structurally impossible -- this
+		// same registry data (instrumentsOnlyPosition) makes that structurally impossible. This
 		// asserts the invariant holds for every widget, not just the one that happened to be missing
 		// before.
 		const tileIds = new Set(deriveInstrumentsOnlyTiles().map((t) => t.i));

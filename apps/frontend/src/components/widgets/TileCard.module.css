@@ -31,7 +31,7 @@
 
 /* obc-card's default (content) slot is `align-items: center; justify-content: center`, which
    would otherwise shrink a slotted block to its content size and center it rather than filling
-   the tile -- explicit width/height override that. */
+   the tile, explicit width/height override that. */
 .body {
 	width: 100%;
 	height: 100%;

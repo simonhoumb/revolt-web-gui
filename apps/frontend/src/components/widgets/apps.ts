@@ -24,7 +24,7 @@ export interface CustomAppDefinition {
 
 export type AppDefinition = LockedAppDefinition | CustomAppDefinition;
 
-// Focused instrument cluster, not a full sensor dashboard -- connection/system status is already
+// Focused instrument cluster, not a full sensor dashboard. Connection/system status is already
 // always visible in the top bar regardless of which app is active, so Conning doesn't repeat it.
 const CONNING_TILES: TileLayout[] = [
 	{ i: "gnss", x: 0, y: 0, w: 4, h: 6 },

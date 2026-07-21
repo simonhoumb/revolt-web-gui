@@ -27,7 +27,7 @@ function saveActiveAppId(id: AppId): void {
 	try {
 		localStorage.setItem(ACTIVE_APP_KEY, id);
 	} catch {
-		// localStorage unavailable — silently ignore
+		// localStorage unavailable, silently ignore
 	}
 }
 
