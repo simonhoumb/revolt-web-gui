@@ -1,0 +1,49 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+**/node_modules/
+dist/
+build/
+.pnpm-store/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+**/.tsc-out/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+**/.venv/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Editor
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Test reporter output
+test-results/
+coverage/
+
+# ENC tile pipeline (base map feature) -- locally-sourced chart data and
+# generated tiles, not for git (see infra/enc-pipeline/README.md)
+infra/enc-pipeline/.data/
+
+# Claude context file
+CLAUDE.md
+docs/reference/

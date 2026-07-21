@@ -1,0 +1,178 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+	min-height: 0;
+	padding: 4px;
+}
+
+.missionRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.missionRow > :first-child {
+	flex: 1;
+}
+
+.newMissionRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.newMissionRow > :first-child {
+	flex: 1;
+}
+
+.emptyState {
+	font-size: 0.8rem;
+	color: var(--element-inactive-color, #9c6a34);
+	margin: 0;
+}
+
+.summaryRow {
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.waypointList {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	/* .content used to put overflow-y:auto on itself, but as a plain block child of TileCard's
+	   overflow:hidden body it had no bounded height to overflow against -- it just grew to fit all
+	   content and TileCard silently clipped the excess with no scrollbar. Making only the waypoint
+	   list the scrollable region (while the mission picker/summary above stay pinned) also means
+	   picking or renaming a mission doesn't scroll out of view once the list is long. */
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.waypointRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.waypointMeta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+}
+
+.sequenceBadge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	/* min-width (not width) with horizontal padding and a pill radius (not 50%) so the badge stays
+	   a compact circle for single-digit sequence numbers but grows into a rounded pill instead of
+	   clipping once waypoints reach double digits. */
+	min-width: 18px;
+	height: 18px;
+	padding: 0 4px;
+	box-sizing: border-box;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--container-section-color, #271b10);
+	color: var(--element-active-color, #eaa75e);
+	font-size: 0.7rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.coords {
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ObcNumberInputField has no built-in compact size and defaults to roughly 261px, refusing to
+   shrink as a flex item -- at the widget's actual default tile width that alone (plus the action
+   buttons) consumes the entire row, squeezing .waypointMeta down to 0px and hiding the sequence
+   badge and coordinates completely, not just clipping them. A fixed, narrower width is enough for
+   a speed value plus its "kt" unit and leaves room for the identifying info beside it. */
+.waypointRow > obc-number-input-field {
+	flex: 0 0 90px;
+	width: 90px;
+}
+
+.waypointActions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.sendRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.sendStatus {
+	font-size: 0.75rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.blockedError {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid var(--alarm-color, #d32f2f);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--alarm-color, #d32f2f) 12%, transparent);
+}
+
+.blockedErrorMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--alarm-color, #d32f2f);
+}
+
+/* Same warning color as the leg severity coloring in MapWidget.tsx ("warning" -> #fab219), so a
+   route flagged shallow reads the same way here as it does on the chart. */
+.sendWarning {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid #fab219;
+	border-radius: 4px;
+	background: color-mix(in srgb, #fab219 12%, transparent);
+}
+
+.sendWarningMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #fab219;
+}
+
+/* Same neutral grey as the "no_data" leg coloring in MapWidget.tsx -- deliberately off the
+   red/amber/green safety gradient, since "unknown" isn't a point on a scale from safe to
+   dangerous. */
+.sendNoData {
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 1px solid #8a8a8a;
+	border-radius: 4px;
+	background: color-mix(in srgb, #8a8a8a 12%, transparent);
+}
+
+.sendNoDataMessage {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #8a8a8a;
+}

@@ -1,0 +1,142 @@
+.panel {
+	position: fixed;
+	top: var(--app-components-topbar-touch-target-size);
+	left: 0;
+	right: 0;
+	z-index: 100;
+}
+
+.menuFooter {
+	grid-column: 1 / -1;
+	width: calc(100% + 2 * var(--app-components-app-menu-padding-horizontal));
+	margin-left: calc(-1 * var(--app-components-app-menu-padding-horizontal));
+	margin-right: calc(-1 * var(--app-components-app-menu-padding-horizontal));
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+}
+
+.divider {
+	height: 1px;
+	background-color: var(--border-divider-color, #271b10);
+	margin: 0;
+}
+
+.templates {
+	padding: 8px var(--app-components-app-menu-padding-horizontal);
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.sectionTitle {
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--element-inactive-color, #9c6a34);
+	margin-bottom: 2px;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.templateName {
+	flex: 1;
+	text-align: left;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 0.85rem;
+	color: var(--element-active-color, #eaa75e);
+	padding: 2px 0;
+}
+
+.templateName:hover {
+	text-decoration: underline;
+}
+
+.saveRow {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	margin-top: 4px;
+}
+
+.nameInput {
+	flex: 1;
+	background-color: var(--normal-enabled-background-color, #1a1a1a);
+	border: 1px solid var(--border-divider-color, #271b10);
+	border-radius: 3px;
+	color: var(--element-active-color, #eaa75e);
+	font-size: 0.8rem;
+	padding: 4px 8px;
+	outline: none;
+	font-family: var(--font-default, "Noto Sans", sans-serif);
+}
+
+.nameInput::placeholder {
+	color: var(--element-inactive-color, #9c6a34);
+	opacity: 0.7;
+}
+
+.saveButton {
+	background: none;
+	border: 1px solid var(--border-divider-color, #271b10);
+	border-radius: 3px;
+	color: var(--element-active-color, #eaa75e);
+	font-size: 0.75rem;
+	padding: 4px 10px;
+	cursor: pointer;
+	font-family: var(--font-default, "Noto Sans", sans-serif);
+	white-space: nowrap;
+}
+
+.saveButton:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.saveButton:not(:disabled):hover {
+	background-color: var(--normal-hover-background-color, rgba(255, 255, 255, 0.05));
+}
+
+.editModeButton {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	background: none;
+	border: none;
+	color: var(--element-inactive-color, #9c6a34);
+	font-size: 0.85rem;
+	padding: 8px var(--app-components-app-menu-padding-horizontal);
+	cursor: pointer;
+	font-family: var(--font-default, "Noto Sans", sans-serif);
+	text-align: left;
+}
+
+.editModeButton:hover,
+.editModeButton[data-active="true"] {
+	color: var(--element-active-color, #eaa75e);
+}
+
+.resetButton {
+	width: 100%;
+	background: none;
+	border: none;
+	color: var(--element-inactive-color, #9c6a34);
+	font-size: 0.78rem;
+	padding: 6px var(--app-components-app-menu-padding-horizontal);
+	cursor: pointer;
+	font-family: var(--font-default, "Noto Sans", sans-serif);
+	text-align: left;
+}
+
+.resetButton:hover {
+	color: var(--element-active-color, #eaa75e);
+}

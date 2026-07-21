@@ -1,0 +1,337 @@
+{
+	"version": 8,
+	"name": "Oslo Fjord (dark)",
+	"glyphs": "/tiles/font/{fontstack}/{range}",
+	"sources": {
+		"oslo-fjord": {
+			"type": "vector",
+			"url": "/tiles/oslo-fjord"
+		},
+		"carto-basemap": {
+			"type": "raster",
+			"tiles": [
+				"https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+				"https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+				"https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+				"https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+			],
+			"tileSize": 256,
+			"attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>"
+		}
+	},
+	"layers": [
+		{
+			"id": "background",
+			"type": "background",
+			"paint": {
+				"background-color": "#0d1b24"
+			}
+		},
+		{
+			"id": "carto-basemap",
+			"type": "raster",
+			"source": "carto-basemap"
+		},
+		{
+			"id": "lndare",
+			"type": "fill",
+			"source": "oslo-fjord",
+			"source-layer": "lndare",
+			"paint": {
+				"fill-color": "#2a2a1c"
+			}
+		},
+		{
+			"id": "depare",
+			"type": "fill",
+			"source": "oslo-fjord",
+			"source-layer": "depare",
+			"paint": {
+				"fill-color": [
+					"interpolate",
+					["linear"],
+					["coalesce", ["get", "DRVAL1"], 0],
+					0,
+					"#16394a",
+					5,
+					"#123244",
+					10,
+					"#0e2b3e",
+					20,
+					"#0a2436",
+					50,
+					"#061b2a"
+				]
+			}
+		},
+		{
+			"id": "coalne",
+			"type": "line",
+			"source": "oslo-fjord",
+			"source-layer": "coalne",
+			"paint": {
+				"line-color": "#a89a7a",
+				"line-width": 1.2
+			}
+		},
+		{
+			"id": "slcons",
+			"type": "line",
+			"source": "oslo-fjord",
+			"source-layer": "slcons",
+			"minzoom": 10,
+			"paint": {
+				"line-color": "#8a8a8a",
+				"line-width": 1
+			}
+		},
+		{
+			"id": "depcnt-line",
+			"type": "line",
+			"source": "oslo-fjord",
+			"source-layer": "depcnt",
+			"minzoom": 9,
+			"paint": {
+				"line-color": "#3a6f8f",
+				"line-width": 0.6
+			}
+		},
+		{
+			"id": "depcnt-label",
+			"type": "symbol",
+			"source": "oslo-fjord",
+			"source-layer": "depcnt",
+			"minzoom": 11,
+			"layout": {
+				"text-field": ["to-string", ["get", "VALDCO"]],
+				"text-font": ["Noto Sans Regular"],
+				"text-size": 10
+			},
+			"paint": {
+				"text-color": "#8ec6e8",
+				"text-halo-color": "#0d1b24",
+				"text-halo-width": 1
+			}
+		},
+		{
+			"id": "resare",
+			"type": "fill",
+			"source": "oslo-fjord",
+			"source-layer": "resare",
+			"paint": {
+				"fill-color": "#c85050",
+				"fill-opacity": 0.15,
+				"fill-outline-color": "#c85050"
+			}
+		},
+		{
+			"id": "tsslpt",
+			"type": "fill",
+			"source": "oslo-fjord",
+			"source-layer": "tsslpt",
+			"paint": {
+				"fill-color": "#8050c0",
+				"fill-opacity": 0.1
+			}
+		},
+		{
+			"id": "tselne",
+			"type": "line",
+			"source": "oslo-fjord",
+			"source-layer": "tselne",
+			"minzoom": 9,
+			"paint": {
+				"line-color": "#8050c0",
+				"line-width": 1,
+				"line-dasharray": [2, 2]
+			}
+		},
+		{
+			"id": "soundg-label",
+			"type": "symbol",
+			"source": "oslo-fjord",
+			"source-layer": "soundg",
+			"minzoom": 13,
+			"layout": {
+				"text-field": ["to-string", ["get", "DEPTH"]],
+				"text-font": ["Noto Sans Regular"],
+				"text-size": 9
+			},
+			"paint": {
+				"text-color": "#8ec6e8"
+			}
+		},
+		{
+			"id": "uwtroc",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "uwtroc",
+			"minzoom": 10,
+			"paint": {
+				"circle-radius": 3,
+				"circle-color": "#a03030"
+			}
+		},
+		{
+			"id": "obstrn",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "obstrn",
+			"minzoom": 10,
+			"paint": {
+				"circle-radius": 3,
+				"circle-color": "#c07020"
+			}
+		},
+		{
+			"id": "wrecks",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "wrecks",
+			"minzoom": 9,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": "#c02020"
+			}
+		},
+		{
+			"id": "boylat",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "boylat",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
+			}
+		},
+		{
+			"id": "boysaw",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "boysaw",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": "#404040"
+			}
+		},
+		{
+			"id": "boyspp",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "boyspp",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
+			}
+		},
+		{
+			"id": "boycar",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "boycar",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": "#2020a0"
+			}
+		},
+		{
+			"id": "bcnlat",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "bcnlat",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
+			}
+		},
+		{
+			"id": "bcnspp",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "bcnspp",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": [
+					"match",
+					["get", "COLOUR"],
+					3,
+					"#e02020",
+					4,
+					"#20a020",
+					6,
+					"#e0c020",
+					"#808080"
+				]
+			}
+		},
+		{
+			"id": "bcnisd",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "bcnisd",
+			"minzoom": 11,
+			"paint": {
+				"circle-radius": 4,
+				"circle-color": "#404040"
+			}
+		},
+		{
+			"id": "lights",
+			"type": "circle",
+			"source": "oslo-fjord",
+			"source-layer": "lights",
+			"minzoom": 9,
+			"paint": {
+				"circle-radius": 3,
+				"circle-color": ["match", ["get", "COLOUR"], 3, "#e02020", 4, "#20a020", "#e0c020"],
+				"circle-stroke-color": "#806000",
+				"circle-stroke-width": 1
+			}
+		},
+		{
+			"id": "m_covr",
+			"type": "fill",
+			"source": "oslo-fjord",
+			"source-layer": "m_covr",
+			"paint": {
+				"fill-opacity": 0
+			}
+		}
+	]
+}

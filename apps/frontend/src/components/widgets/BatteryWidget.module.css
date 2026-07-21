@@ -1,0 +1,66 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+}
+
+.batteryRow {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+/* Stretches to full batteryRow height so the icon inside can fill it */
+.iconWrapper {
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+/* OBC battery icon: host is display:flex, internal SVG is 100%×100% */
+.batteryIcon {
+	height: 100%;
+	width: auto;
+}
+
+.voltageBlock {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.voltage {
+	font-size: 1.1rem;
+	font-weight: 600;
+	white-space: nowrap;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.currentList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.currentRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.currentLabel {
+	flex: 1;
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.currentValue {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+}

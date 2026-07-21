@@ -1,0 +1,54 @@
+from typing import Literal
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+	model_config = SettingsConfigDict(
+		env_file=".env",
+		env_file_encoding="utf-8",
+		case_sensitive=False,
+	)
+
+	# Database
+	database_url: str = "postgresql+asyncpg://revolt:changeme@db:5432/revolt_dev"
+	secret_key: str = "dev-insecure-change-in-prod"
+	environment: str = "development"
+
+	# Logging
+	log_level: str = "INFO"
+
+	# CORS — comma-separated browser origins allowed to call the API.
+	# Add the Tailscale frontend URL (e.g. http://revolt-gui-dev:5173) when accessing via tailnet.
+	allowed_origins: list[str] = ["http://localhost:5173"]
+
+	# Vessel connection — resolved via Tailscale sidecar in Docker
+	vessel_host: str = "revolt-onboard"
+	ros2_bridge_port: int = 9090
+
+	# "physical" = hardware topics from the real vessel; "simulation" = pygemini/STC topics
+	bridge_target: Literal["physical", "simulation"] = "physical"
+
+	# Reference origin for converting sim local Cartesian (m) to WGS84 for map display.
+	# X=East, Y=North convention. Set to the scenario's real-world anchor point.
+	sim_gnss_origin_lat: float = 59.9083  # degrees, default: Bekkelaget, Oslo Fjord
+	sim_gnss_origin_lon: float = 10.7512  # degrees
+
+	# Phase 2 (server-side authoritative) ENC validation. Matches the Phase 1 client-side check's
+	# own fixed values exactly (encValidation.ts's CORRIDOR_HALF_WIDTH_M and MapWidget's
+	# SAFETY_CONTOUR_M) rather than a separately configurable vessel_beam_m + margin split, since
+	# neither phase has a real documented vessel beam to build that split on -- a single margin,
+	# treated the same way in both phases, is honest about what's actually known.
+	safety_margin_m: float = 15.0  # half-width of the buffered route corridor checked for hazards
+	safety_contour_m: float = 3.0  # depths shallower than this trigger a warning, not a block
+
+	@property
+	def is_dev(self) -> bool:
+		return self.environment == "development"
+
+	@property
+	def ros2_bridge_url(self) -> str:
+		return f"ws://{self.vessel_host}:{self.ros2_bridge_port}"
+
+
+settings = Settings()

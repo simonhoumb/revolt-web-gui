@@ -1,0 +1,40 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.statusList {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.statusRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.statusLabel {
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.latencyRow {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	padding: 0 2px;
+}
+
+.latencyLabel {
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.latencyValue {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+}

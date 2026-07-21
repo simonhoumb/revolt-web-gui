@@ -1,0 +1,55 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+}
+
+.locationSection {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.locationLabel {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--element-inactive-color, #9c6a34);
+	text-transform: uppercase;
+}
+
+.envRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.envLabel {
+	flex: 1;
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.envValue {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.statusList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: auto;
+}
+
+.statusRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.statusLabel {
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}

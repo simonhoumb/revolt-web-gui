@@ -1,0 +1,6 @@
+.hazardList {
+	margin: 4px 0 0;
+	padding-left: 16px;
+	font-size: 0.7rem;
+	color: var(--element-active-color, #eaa75e);
+}

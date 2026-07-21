@@ -1,0 +1,170 @@
+name: revolt-gui
+
+services:
+    db:
+        image: postgis/postgis:16-3.4-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+            - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+        ports:
+            - "5432:5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 10s
+
+    tailscale:
+        image: tailscale/tailscale:latest
+        restart: unless-stopped
+        hostname: ${TS_HOSTNAME:-revolt-gui-dev}
+        environment:
+            TS_AUTHKEY: ${TAILSCALE_AUTHKEY:-}
+            TS_STATE_DIR: /var/lib/tailscale
+            TS_ACCEPT_DNS: "false"
+            TS_EXTRA_ARGS: "--accept-routes"
+        volumes:
+            - tailscale_data:/var/lib/tailscale
+            - /dev/net/tun:/dev/net/tun
+        cap_add:
+            - net_admin
+            - sys_module
+
+    backend:
+        build:
+            context: .
+            dockerfile: apps/backend/Dockerfile
+            target: dev
+        restart: unless-stopped
+        env_file: .env
+        # Lets VESSEL_HOST=host-gateway resolve to the Docker host's own gateway IP -- needed
+        # when rosbridge runs directly on the same machine as this compose stack (e.g. rosbag
+        # playback on a dev PC), not on a remote vessel/sim host. "host-gateway" is Docker's own
+        # magic value (Engine 20.10+); on Linux it isn't wired up by default the way
+        # host.docker.internal is on Docker Desktop, so it has to be declared explicitly here.
+        extra_hosts:
+            - "host-gateway:host-gateway"
+        volumes:
+            - ./apps/backend/src:/app/src:cached
+            - ./apps/backend/migrations:/app/migrations:cached
+            - ./apps/backend/alembic.ini:/app/alembic.ini:cached
+        ports:
+            - "8000:8000"
+        depends_on:
+            db:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+
+    frontend:
+        build:
+            context: .
+            dockerfile: apps/frontend/Dockerfile
+            target: dev
+        restart: unless-stopped
+        environment:
+            VITE_API_BASE_URL: http://backend:8000
+            VITE_MARTIN_URL: http://martin:3000
+        volumes:
+            - ./apps/frontend/src:/app/apps/frontend/src:cached
+            - ./apps/frontend/index.html:/app/apps/frontend/index.html:cached
+            - ./apps/frontend/public:/app/apps/frontend/public:cached
+            - ./packages:/app/packages:cached
+            - frontend_nm:/app/node_modules
+            - frontend_app_nm:/app/apps/frontend/node_modules
+        ports:
+            - "5173:5173"
+        depends_on:
+            backend:
+                condition: service_healthy
+
+    # Vector tile server for the Oslo Fjord ENC base map (base map feature).
+    # Serves oslo-fjord.mbtiles produced by infra/enc-pipeline/ (run manually,
+    # not part of this stack -- see infra/enc-pipeline/README.md).
+    martin:
+        image: ghcr.io/maplibre/martin:1.11.0
+        restart: unless-stopped
+        command: ["--font", "/fonts", "--route-prefix", "/tiles", "/mbtiles"]
+        volumes:
+            - ./infra/enc-pipeline/.data/output:/mbtiles:ro
+            - ./infra/martin/fonts:/fonts:ro
+        ports:
+            - "3000:3000"
+        healthcheck:
+            test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3000/tiles/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+
+    # Local dev rosbridge mock — emits fake vessel telemetry so the bridge client
+    # can be developed and tested without a physical vessel or active Tailscale connection.
+    # Usage: docker compose --profile mock up
+    # Set VESSEL_HOST=rosbridge-mock and BRIDGE_TARGET=physical in .env.
+    rosbridge-mock:
+        build:
+            context: ./infra/rosbridge_mock
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        ports:
+            - "9090:9090"
+        profiles:
+            - mock
+
+    # One-shot job: loads the Phase 2 ENC hazard layers (server-side authoritative validation,
+    # /api/missions/{id}/validate) into PostGIS from the GeoJSON build.sh already extracted. Run
+    # manually after build.sh, not part of this stack -- see infra/enc-pipeline/README.md.
+    # Usage: docker compose --profile enc-ingest run --rm enc-postgis-ingest
+    enc-postgis-ingest:
+        build:
+            context: ./infra/enc-pipeline
+            dockerfile: Dockerfile
+        entrypoint: ["./ingest_postgis.sh"]
+        environment:
+            PGHOST: db
+            PGPORT: "5432"
+            PGUSER: ${POSTGRES_USER}
+            PGPASSWORD: ${POSTGRES_PASSWORD}
+            PGDATABASE: ${POSTGRES_DB}
+        volumes:
+            - ./infra/enc-pipeline/.data/geojson:/data/geojson:ro
+        depends_on:
+            db:
+                condition: service_healthy
+        profiles:
+            - enc-ingest
+
+    # Socat proxy for physical vessel connectivity via Tailscale.
+    # Shares the tailscale container's network namespace so it can reach revolt-onboard
+    # on the tailnet, then exposes port 9090 to the compose network as vessel-proxy:9090.
+    # Usage: docker compose --profile vessel up
+    # Set VESSEL_HOST=vessel-proxy, BRIDGE_TARGET=physical, and TAILSCALE_AUTHKEY in .env.
+    vessel-proxy:
+        image: alpine/socat:latest
+        network_mode: "service:tailscale"
+        command: "TCP-LISTEN:9090,fork,reuseaddr TCP:revolt-onboard:9090"
+        restart: unless-stopped
+        profiles:
+            - vessel
+        depends_on:
+            - tailscale
+
+volumes:
+    pgdata:
+        name: revolt-pgdata
+    tailscale_data:
+        name: revolt-tailscale-data
+    frontend_nm:
+        name: revolt-frontend-nm
+    frontend_app_nm:
+        name: revolt-frontend-app-nm

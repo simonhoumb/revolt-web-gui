@@ -1,0 +1,57 @@
+jobs:
+    - job: frontend
+      displayName: "Frontend — typecheck, lint, test, build"
+      pool:
+          vmImage: ubuntu-latest
+
+      steps:
+          - task: NodeTool@0
+            displayName: "Use Node 20"
+            inputs:
+                versionSpec: "20.x"
+
+          - bash: |
+                corepack enable
+                corepack prepare pnpm@9.15.9 --activate
+            displayName: "Enable pnpm via corepack"
+
+          - task: Cache@2
+            displayName: "Cache pnpm store"
+            inputs:
+                key: 'pnpm | "$(Agent.OS)" | $(Build.SourcesDirectory)/pnpm-lock.yaml'
+                path: $(Pipeline.Workspace)/.pnpm-store
+                restoreKeys: 'pnpm | "$(Agent.OS)"'
+
+          - bash: |
+                pnpm config set store-dir $(Pipeline.Workspace)/.pnpm-store
+                pnpm install --frozen-lockfile
+            displayName: "Install dependencies"
+            workingDirectory: $(Build.SourcesDirectory)
+
+          - bash: pnpm typecheck
+            displayName: "Typecheck"
+            workingDirectory: $(Build.SourcesDirectory)
+
+          - bash: pnpm lint
+            displayName: "Lint (ESLint)"
+            workingDirectory: $(Build.SourcesDirectory)
+
+          - bash: pnpm format:check
+            displayName: "Format check (Prettier)"
+            workingDirectory: $(Build.SourcesDirectory)
+
+          - bash: pnpm test:ci
+            displayName: "Test (Vitest)"
+            workingDirectory: $(Build.SourcesDirectory)
+
+          - task: PublishTestResults@2
+            displayName: "Publish test results"
+            condition: always()
+            inputs:
+                testResultsFormat: JUnit
+                testResultsFiles: "$(Build.SourcesDirectory)/test-results/vitest.xml"
+                testRunTitle: "Frontend — Vitest"
+
+          - bash: pnpm build
+            displayName: "Build production bundle"
+            workingDirectory: $(Build.SourcesDirectory)

@@ -1,0 +1,128 @@
+trigger:
+    branches:
+        include:
+            - main
+            - dev
+    paths:
+        exclude:
+            - "**/*.md"
+            - .azuredevops/pull_request_template.md
+
+pr:
+    branches:
+        include:
+            - main
+            - dev
+    paths:
+        exclude:
+            - "**/*.md"
+            - .azuredevops/pull_request_template.md
+
+variables:
+    - name: AZURE_READY
+      value: "false"
+    - name: IMAGE_TAG
+      value: $(Build.SourceBranchName)-$(Build.BuildId)
+
+stages:
+    - stage: ci
+      displayName: "CI — lint, typecheck, test, build"
+      jobs:
+          - template: .azuredevops/templates/jobs-frontend.yml
+          - template: .azuredevops/templates/jobs-backend.yml
+
+    - stage: push_images
+      displayName: "Push images to ACR"
+      dependsOn: ci
+      condition: >
+          and(
+              succeeded(),
+              eq(variables['AZURE_READY'], 'true'),
+              or(
+                  eq(variables['Build.SourceBranch'], 'refs/heads/dev'),
+                  eq(variables['Build.SourceBranch'], 'refs/heads/main')
+              )
+          )
+      jobs:
+          - job: acr_push
+            displayName: "Build and push Docker images"
+            pool:
+                vmImage: ubuntu-latest
+            steps:
+                - task: Docker@2
+                  displayName: "Login to ACR"
+                  inputs:
+                      command: login
+                      containerRegistry: revolt-acr-service-connection
+
+                - task: Docker@2
+                  displayName: "Build and push frontend image"
+                  inputs:
+                      command: buildAndPush
+                      repository: revolt-frontend
+                      dockerfile: $(Build.SourcesDirectory)/apps/frontend/Dockerfile
+                      buildContext: $(Build.SourcesDirectory)
+                      target: prod
+                      containerRegistry: revolt-acr-service-connection
+                      tags: |
+                          $(IMAGE_TAG)
+                          latest
+
+                - task: Docker@2
+                  displayName: "Build and push backend image"
+                  inputs:
+                      command: buildAndPush
+                      repository: revolt-api
+                      dockerfile: $(Build.SourcesDirectory)/apps/backend/Dockerfile
+                      buildContext: $(Build.SourcesDirectory)
+                      target: prod
+                      containerRegistry: revolt-acr-service-connection
+                      tags: |
+                          $(IMAGE_TAG)
+                          latest
+
+    - stage: deploy_staging
+      displayName: "Deploy — staging"
+      dependsOn: push_images
+      condition: >
+          and(
+              succeeded(),
+              eq(variables['Build.SourceBranch'], 'refs/heads/dev')
+          )
+      jobs:
+          - job: deploy
+            displayName: "Deploy to staging"
+            pool:
+                vmImage: ubuntu-latest
+            steps:
+                - bash: |
+                      echo "Staging deployment target not yet decided."
+                      echo "Options:"
+                      echo "  Azure Container Apps: az containerapp update --name revolt-api-staging --resource-group revolt-rg --image $(ACR_LOGIN_SERVER)/revolt-api:$(IMAGE_TAG)"
+                      echo "  AKS: kubectl set image deployment/revolt-api revolt-api=$(ACR_LOGIN_SERVER)/revolt-api:$(IMAGE_TAG)"
+                      echo "  VM: ssh user@host 'docker compose pull && docker compose up -d'"
+                      echo "Fill in this step once the deployment target is chosen."
+                  displayName: "TODO: Deploy to staging"
+
+    - stage: deploy_prod
+      displayName: "Deploy — production"
+      dependsOn: push_images
+      condition: >
+          and(
+              succeeded(),
+              eq(variables['Build.SourceBranch'], 'refs/heads/main')
+          )
+      jobs:
+          - deployment: deploy
+            displayName: "Deploy to production"
+            environment: production
+            pool:
+                vmImage: ubuntu-latest
+            strategy:
+                runOnce:
+                    deploy:
+                        steps:
+                            - bash: |
+                                  echo "Production deployment target not yet decided."
+                                  echo "Fill in this step once the deployment target is chosen."
+                              displayName: "TODO: Deploy to production"

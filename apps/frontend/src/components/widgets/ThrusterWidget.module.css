@@ -1,0 +1,80 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.badgeRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.modeRow {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+}
+
+.modeLabel {
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.modeValue {
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.thrusterList {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.thrusterRow {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 4px 0;
+	border-top: 1px solid var(--border-divider-color, #271b10);
+}
+
+.thrusterHeader {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.thrusterLabel {
+	flex: 1;
+	font-size: 0.8rem;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.thrusterCurrent {
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--element-active-color, #eaa75e);
+}
+
+.simData {
+	display: flex;
+	gap: 12px;
+	padding-left: 24px;
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+	font-variant-numeric: tabular-nums;
+}
+
+.actuatorRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-left: 24px;
+}
+
+.actuatorLabel {
+	font-size: 0.75rem;
+	color: var(--element-inactive-color, #9c6a34);
+}

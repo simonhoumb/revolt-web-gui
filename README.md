@@ -1,20 +1,170 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Revolt GUI
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Web-based GUI for monitoring and controlling the Revolt autonomous surface vessel. Provides real-time sensor feeds, map visualization, trajectory planning, and mission control over a ROS2 bridge.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Stack
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+| Layer            | Technology                                            |
+| ---------------- | ----------------------------------------------------- |
+| Frontend         | React 18 + TypeScript, Vite, OpenBridge Design System |
+| Backend          | FastAPI (Python 3.12), SQLAlchemy 2, Alembic          |
+| Database         | PostgreSQL 16 + PostGIS 3.4                           |
+| Real-time        | WebSocket gateway (rosbridge or custom rclpy node)    |
+| Map              | MapLibre GL JS + TileServer GL / martin               |
+| Containers       | Docker Compose                                        |
+| Package managers | pnpm 9 (Node), uv (Python)                            |
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Monorepo structure
+
+```
+WebApp/
+├── apps/
+│   ├── frontend/        React + Vite app (@revolt/frontend)
+│   └── backend/         FastAPI service (revolt-api)
+├── packages/
+│   └── shared-types/    Shared TypeScript types (@revolt/shared-types)
+├── infra/
+│   └── db/init/         SQL init scripts (PostGIS extension)
+├── docker-compose.yml
+└── .env.example
+```
+
+## Getting started
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [Node.js 20](https://nodejs.org/) + pnpm (`npm install -g pnpm@9`)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
+
+### First-time setup
+
+```bash
+# 1. Copy environment file and fill in any values you want to change
+cp .env.example .env
+
+# 2. Install Node dependencies and generate lockfile
+pnpm install
+
+# 3. Install Python dependencies
+cd apps/backend && uv sync && cd ../..
+```
+
+### Running locally
+
+```bash
+# Start everything (DB + backend + frontend)
+docker compose up
+
+# Or start only the database (useful while developing the backend directly)
+docker compose up db
+```
+
+| Service             | URL                            |
+| ------------------- | ------------------------------ |
+| Frontend            | http://localhost:5173          |
+| Backend API         | http://localhost:8000          |
+| API docs (dev only) | http://localhost:8000/api/docs |
+| PostgreSQL          | localhost:5432                 |
+
+### Running without Docker
+
+```bash
+# Terminal 1 — backend
+cd apps/backend
+uv run uvicorn revolt_api.main:app --reload --port 8000
+
+# Terminal 2 — frontend
+pnpm dev
+```
+
+## Development
+
+### Useful commands
+
+```bash
+pnpm typecheck       # TypeScript check across the whole workspace
+pnpm lint            # ESLint
+pnpm lint:fix        # ESLint with auto-fix
+pnpm format          # Prettier
+pnpm format:check    # Prettier check (no writes)
+
+cd apps/backend
+uv run ruff check .  # Python lint
+uv run ruff format . # Python format
+```
+
+### Networking (Tailscale)
+
+The backend reaches the vessel over Tailscale. A Tailscale sidecar container runs alongside the backend and joins the existing tailnet — no Tailscale installation on the host is needed.
+
+**To connect to the vessel:**
+
+1. Generate an ephemeral auth key at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) (use _ephemeral_ so the node is removed when the container stops)
+2. Add it to your `.env`:
+    ```
+    TAILSCALE_AUTHKEY=tskey-auth-...
+    VESSEL_HOST=revolt-onboard
+    ROS2_BRIDGE_PORT=9090
+    ```
+3. Run `docker compose up` — the sidecar joins the tailnet automatically and the backend resolves `revolt-onboard` whether you are on local WiFi or remote 5G. No code changes needed either way.
+
+Leave `TAILSCALE_AUTHKEY` empty to run without joining the tailnet (local development without the vessel).
+
+### Environment variables
+
+See [.env.example](.env.example) for all required variables. Never commit `.env`.
+
+## CI/CD pipeline
+
+The pipeline is defined in `azure-pipelines.yml` and uses templates under `.azuredevops/templates/`.
+
+### What runs and when
+
+| Event                    | Stages                                                          |
+| ------------------------ | --------------------------------------------------------------- |
+| PR into `dev` or `main`  | `ci` only (used as branch policy gate)                          |
+| Push to `dev`            | `ci` → `push_images` → `deploy_staging` (stub)                  |
+| Push to `main`           | `ci` → `push_images` → `deploy_prod` (manual approval required) |
+| Push to feature branches | nothing (pipeline fires only when a PR is opened)               |
+
+The `push_images` and deploy stages are currently gated by `AZURE_READY: "false"` in `azure-pipelines.yml` and will be skipped until an Azure subscription and ACR are in place. Change the value to `"true"` to enable them.
+
+### CI stage
+
+Two jobs run in parallel on `ubuntu-latest`:
+
+**Frontend** — installs pnpm deps, then runs typecheck (tsc), ESLint, Prettier check, Vitest, and a production Vite build.
+
+**Backend** — installs Python deps via uv, then runs Ruff lint, Ruff format check, pytest, and a Docker build of the production image.
+
+Test results from both jobs are published to the Azure DevOps Tests tab (JUnit XML).
+
+### Azure DevOps setup required
+
+These steps are one-time portal configuration and are not in code:
+
+1. **Service connection** — create a Docker Registry connection pointing at your ACR. Name it exactly `revolt-acr-service-connection` (Project Settings → Service connections).
+
+2. **Variable groups** — create the following groups in Pipelines → Library and link them to the pipeline:
+
+    | Group                 | Variables                                                                         |
+    | --------------------- | --------------------------------------------------------------------------------- |
+    | `revolt-acr`          | `ACR_LOGIN_SERVER`                                                                |
+    | `revolt-staging-env`  | `DATABASE_URL`, `SECRET_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+    | `revolt-prod-env`     | same shape as staging, with production values                                     |
+    | `revolt-azure-deploy` | `AZURE_SUBSCRIPTION`, `AZURE_RESOURCE_GROUP`, ARM service connection name         |
+
+3. **Register the pipeline** — point Azure DevOps at `azure-pipelines.yml` in the repo root.
+
+4. **Branch policies** — on both `dev` and `main`, add a Build Validation policy that runs this pipeline. Mark it as required and set expiry to 12 hours.
+
+5. **Production environment** — create an Environment named `production` (Pipelines → Environments) and add an Approvals check with the relevant approvers. This is what gates the `deploy_prod` stage.
+
+### Staging deployment
+
+The `deploy_staging` stage is currently a stub. Once the deployment target is decided, fill in the deploy step in `azure-pipelines.yml`:
+
+- **Azure Container Apps:** `az containerapp update --name <app> --resource-group <rg> --image <acr>/revolt-api:<tag>`
+- **AKS:** `kubectl set image deployment/revolt-api revolt-api=<acr>/revolt-api:<tag>`
+- **VM:** `ssh user@host 'docker compose pull && docker compose up -d'`

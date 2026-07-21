@@ -1,0 +1,36 @@
+.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.card {
+	/* position: relative gives the danger-mode obc-alert-frame sibling (position: absolute;
+	   inset: 0 by its own design) something to resolve against other than the fixed, full-
+	   viewport .overlay. width: fit-content (rather than a fixed value) means this box always
+	   matches obc-modal-window's actual rendered width (its own internal size classes are fixed
+	   pixel widths, not responsive to an ancestor), so the alert-frame's border hugs the modal's
+	   real edges instead of leaving a gap or expanding past it. */
+	position: relative;
+	width: fit-content;
+}
+
+/* obc-modal-window's own .content-area has no padding at all -- OBC's own storybook demo for
+   this component applies this exact padding on the slotted content div itself, so this matches
+   the reference usage rather than inventing a different value. */
+.content {
+	padding: 24px;
+}
+
+/* obc-alert-frame is purely decorative here (a border sibling, not wrapping any interactive
+   content of its own) -- but its :host still covers the full modal area since it's absolutely
+   positioned to inset: 0. Without this, that invisible (except for its outline) box sits on top
+   in paint order and silently swallows every click over the modal, including its own Cancel/Done
+   buttons underneath. */
+.alertFrame {
+	pointer-events: none;
+}
