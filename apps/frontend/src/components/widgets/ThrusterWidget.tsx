@@ -1,15 +1,22 @@
-import { useState } from "react";
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { ObcBadge } from "@oicl/openbridge-webcomponents-react/components/badge/badge.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
-import { ObcAzimuthThruster } from "@oicl/openbridge-webcomponents-react/navigation-instruments/azimuth-thruster/azimuth-thruster.js";
-import { ObcThruster } from "@oicl/openbridge-webcomponents-react/navigation-instruments/thruster/thruster.js";
-import { InstrumentState } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/types.js";
+import { ObcAzimuthThrusterLabeled } from "@oicl/openbridge-webcomponents-react/navigation-instruments/azimuth-thruster-labeled/azimuth-thruster-labeled.js";
+import { AzimuthThrusterLabeledSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/azimuth-thruster-labeled/azimuth-thruster-labeled.js";
+import { CommandStatus } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/badge-command/badge-command.js";
 import { useThrusterData, type ThrusterStatus } from "../../hooks/useThrusterData.js";
-import { useApps } from "../../context/AppContext.js";
 import { THRUSTER_MAX_AMPERES } from "../../lib/thresholds.js";
-import { ViewModeToggle, type WidgetViewMode } from "./ViewModeToggle.js";
+import type { WidgetViewMode } from "./ViewModeToggle.js";
 import styles from "./ThrusterWidget.module.css";
+import { PropellerType } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/thruster/propeller.js";
+
+// obc-azimuth-thruster-labeled has no "off" visual state of its own (its internal state is always
+// InstrumentState.active; only the enhanced/regular priority varies with commandStatus). Mapping
+// isOn to CommandStatus.InCommand/NoCommand at least dims an off thruster (regular priority)
+// instead of it always reading as fully active regardless of whether it's actually running.
+function thrusterCommandStatus(isOn: boolean): CommandStatus {
+	return isOn ? CommandStatus.InCommand : CommandStatus.NoCommand;
+}
 
 interface ThrusterRowProps {
 	label: string;
@@ -31,21 +38,23 @@ function thrustPercent(status: ThrusterStatus): number {
 	return clamp((status.amperes / THRUSTER_MAX_AMPERES) * 100, 0, 100);
 }
 
-function BowActuatorRow({ retracted }: { retracted: boolean | null }) {
+function actuatorStatus(retracted: boolean | null): {
+	status: StatusIndicatorStatus;
+	label: string;
+} {
+	if (retracted === null)
+		return { status: StatusIndicatorStatus.inactive, label: "Actuator unknown" };
+	return retracted
+		? { status: StatusIndicatorStatus.inactive, label: "Retracted" }
+		: { status: StatusIndicatorStatus.running, label: "Deployed" };
+}
+
+function BowActuatorRow({ retracted, compact }: { retracted: boolean | null; compact?: boolean }) {
+	const { status, label } = actuatorStatus(retracted);
 	return (
-		<div className={styles.actuatorRow}>
-			<ObcStatusIndicator
-				status={
-					retracted === null
-						? StatusIndicatorStatus.inactive
-						: retracted
-							? StatusIndicatorStatus.inactive
-							: StatusIndicatorStatus.running
-				}
-			/>
-			<span className={styles.actuatorLabel}>
-				{retracted === null ? "Actuator unknown" : retracted ? "Retracted" : "Deployed"}
-			</span>
+		<div className={compact ? styles.readoutActuatorRow : styles.actuatorRow}>
+			<ObcStatusIndicator status={status} />
+			<span className={styles.actuatorLabel}>{label}</span>
 		</div>
 	);
 }
@@ -84,29 +93,17 @@ const MODE_LABELS: Record<string, string> = {
 	miscommunication: "Miscommunication",
 };
 
-export function ThrusterWidget() {
+export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewMode }) {
 	const { stern_port, stern_star, bow, bowRetracted, controlMode, isSimulation } =
 		useThrusterData();
-	const { activeAppId } = useApps();
-	const [viewMode, setViewMode] = useState<WidgetViewMode>(
-		activeAppId === "conning" ? "instrument" : "detailed",
-	);
 
 	const isMiscomm = controlMode === "miscommunication";
 
 	return (
 		<div className={styles.content}>
-			<div className={styles.toolbar}>
-				<ViewModeToggle value={viewMode} onChange={setViewMode} />
-			</div>
-			{isMiscomm && (
-				<div className={styles.badgeRow}>
-					<ObcBadge type="caution" showNumber={false} showIcon={true} />
-					<span className={styles.modeLabel}>Miscommunication</span>
-				</div>
-			)}
 			<div className={styles.modeRow}>
 				<span className={styles.modeLabel}>Mode:</span>
+				{isMiscomm && <ObcBadge type="caution" showNumber={false} showIcon={true} />}
 				<span className={styles.modeValue}>
 					{controlMode !== null ? (MODE_LABELS[controlMode] ?? controlMode) : "—"}
 				</span>
@@ -127,27 +124,53 @@ export function ThrusterWidget() {
 					/>
 				</div>
 			) : (
-				<div className={styles.instrumentList}>
-					<ObcAzimuthThruster
-						className={styles.instrument}
-						angle={stern_port.angleDeg ?? 0}
-						thrust={thrustPercent(stern_port)}
-						state={stern_port.isOn ? InstrumentState.active : InstrumentState.off}
-						starboardPortIndicator
-					/>
-					<ObcAzimuthThruster
-						className={styles.instrument}
-						angle={stern_star.angleDeg ?? 0}
-						thrust={thrustPercent(stern_star)}
-						state={stern_star.isOn ? InstrumentState.active : InstrumentState.off}
-						starboardPortIndicator
-					/>
-					<ObcThruster
-						className={styles.instrument}
-						thrust={thrustPercent(bow)}
-						state={bow.isOn ? InstrumentState.active : InstrumentState.off}
-					/>
-					<BowActuatorRow retracted={bowRetracted} />
+				<div className={styles.propulsionLayout}>
+					{/* obc-azimuth-thruster-labeled bundles a label, Angle/Power(%) fields, and the
+					    gauge itself into one component (matching the OpenBridge demo's own azimuth
+					    readout), used uniformly for all three thrusters -- including the bow, which
+					    isn't really an azimuth thruster (fixed, angle always 0) and has no
+					    "labeled" wrapper of its own, but this keeps all three visually consistent
+					    rather than mixing in a differently-shaped plain obc-thruster. This does
+					    trade away the CUR (amperes) and sim-only Force readouts the old per-thruster
+					    ObcInstrumentField pairing showed, and the starboardPortIndicator marker
+					    obc-azimuth-thruster had, since the labeled component doesn't expose either --
+					    Power (%) is the same thrustPercent() value CUR used to be derived from, just
+					    relabeled to match the component's fixed Angle/Power fields. The bow's own
+					    actuator retracted/deployed status has no equivalent field either, so it's
+					    kept as a compact addendum below the gauge. */}
+					<div className={styles.bowRow}>
+						<ObcAzimuthThrusterLabeled
+							className={styles.sternLabeled}
+							label="Bow"
+							angle={0}
+							thrust={thrustPercent(bow)}
+							commandStatus={thrusterCommandStatus(bow.isOn && !bowRetracted)}
+							size={AzimuthThrusterLabeledSize.large}
+						/>
+						<BowActuatorRow retracted={bowRetracted} compact />
+					</div>
+					<div className={styles.sternRow}>
+						<ObcAzimuthThrusterLabeled
+							className={styles.sternLabeled}
+							label="Port"
+							angle={stern_port.angleDeg ?? 0}
+							thrust={thrustPercent(stern_port)}
+							commandStatus={thrusterCommandStatus(stern_port.isOn)}
+							size={AzimuthThrusterLabeledSize.large}
+							topPropeller={PropellerType.cap}
+							bottomPropeller={PropellerType.single}
+						/>
+						<ObcAzimuthThrusterLabeled
+							className={styles.sternLabeled}
+							label="Starboard"
+							angle={stern_star.angleDeg ?? 0}
+							thrust={thrustPercent(stern_star)}
+							commandStatus={thrusterCommandStatus(stern_star.isOn)}
+							size={AzimuthThrusterLabeledSize.large}
+							topPropeller={PropellerType.cap}
+							bottomPropeller={PropellerType.single}
+						/>
+					</div>
 				</div>
 			)}
 		</div>
