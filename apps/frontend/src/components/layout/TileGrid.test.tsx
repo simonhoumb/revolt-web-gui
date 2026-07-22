@@ -137,9 +137,11 @@ describe("TileGrid", () => {
 		render(<TileGrid />);
 		// TileCard's own title text renders inside obc-title-container's shadow root (not
 		// queryable via screen.getByText -- see TileCard.test.tsx); assert on each widget's own
-		// distinctive rendered content instead.
+		// distinctive rendered content instead. Both widgets default to instrument view (no
+		// viewMode override wired up in this test), so "Lat" (a detailed-view-only label) isn't
+		// present -- obc-compass is GnssWidget's instrument-view content instead.
 		expect(screen.getByText("Port")).toBeInTheDocument();
-		expect(screen.getByText("Lat")).toBeInTheDocument();
+		expect(document.querySelector("obc-compass")).not.toBeNull();
 	});
 
 	it("maps each configured tile's position/size into the GridLayout layout prop", () => {

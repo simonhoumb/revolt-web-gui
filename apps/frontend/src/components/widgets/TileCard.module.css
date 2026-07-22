@@ -29,6 +29,18 @@
 	z-index: 2;
 }
 
+/* Mirror of .removeButton on the opposite corner -- same band, same offset, just left instead of
+   right. */
+.viewModeButton {
+	position: absolute;
+	top: 0;
+	left: -8px;
+	height: var(--ui-components-card-heading-container-height, 32px);
+	display: flex;
+	align-items: center;
+	z-index: 2;
+}
+
 /* obc-card's default (content) slot is `align-items: center; justify-content: center`, which
    would otherwise shrink a slotted block to its content size and center it rather than filling
    the tile, explicit width/height override that. */

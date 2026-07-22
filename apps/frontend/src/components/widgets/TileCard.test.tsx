@@ -60,4 +60,64 @@ describe("TileCard", () => {
 		);
 		expect(document.querySelector("[data-edit-mode]")).not.toBeNull();
 	});
+
+	it("hides the view-mode button when viewMode/onViewModeChange aren't both provided", () => {
+		render(
+			<TileCard title="GNSS" widgetId="gnss" editMode={false} onRemove={vi.fn()}>
+				<div>content</div>
+			</TileCard>,
+		);
+		expect(screen.queryByLabelText("Switch to detailed view")).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("Switch to instrument view")).not.toBeInTheDocument();
+	});
+
+	it("shows the view-mode button regardless of edit mode when both props are provided", () => {
+		render(
+			<TileCard
+				title="GNSS"
+				widgetId="gnss"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="instrument"
+				onViewModeChange={vi.fn()}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		expect(screen.getByLabelText("Switch to detailed view")).toBeInTheDocument();
+	});
+
+	it("calls onViewModeChange with the opposite mode when the view-mode button is clicked", () => {
+		const onViewModeChange = vi.fn();
+		const { rerender } = render(
+			<TileCard
+				title="GNSS"
+				widgetId="gnss"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="instrument"
+				onViewModeChange={onViewModeChange}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		screen.getByLabelText("Switch to detailed view").click();
+		expect(onViewModeChange).toHaveBeenCalledExactlyOnceWith("detailed");
+		onViewModeChange.mockClear();
+
+		rerender(
+			<TileCard
+				title="GNSS"
+				widgetId="gnss"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="detailed"
+				onViewModeChange={onViewModeChange}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		screen.getByLabelText("Switch to instrument view").click();
+		expect(onViewModeChange).toHaveBeenCalledExactlyOnceWith("instrument");
+	});
 });
