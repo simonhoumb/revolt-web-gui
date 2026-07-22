@@ -38,9 +38,9 @@ const CONNING_TILES: TileLayout[] = [
 ];
 
 const MISSION_TILES: TileLayout[] = [
-	{ i: "mission", x: 0, y: 0, w: 3, h: 12 },
-	{ i: "mission_control", x: 3, y: 0, w: 3, h: 6 },
-	{ i: "map", x: 3, y: 6, w: 3, h: 6 },
+	{ i: "mission", x: 0, y: 0, w: 2, h: 17 },
+	{ i: "mission_control", x: 0, y: 17, w: 2, h: 5 },
+	{ i: "map", x: 2, y: 0, w: 4, h: 22 },
 ];
 
 export const APPS: Record<AppId, AppDefinition> = {
