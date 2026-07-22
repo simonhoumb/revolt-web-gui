@@ -27,16 +27,20 @@ export type AppDefinition = LockedAppDefinition | CustomAppDefinition;
 // Focused instrument cluster, not a full sensor dashboard. Connection/system status is already
 // always visible in the top bar regardless of which app is active, so Conning doesn't repeat it.
 const CONNING_TILES: TileLayout[] = [
-	{ i: "gnss", x: 0, y: 0, w: 4, h: 6 },
-	{ i: "thruster", x: 4, y: 0, w: 4, h: 6 },
-	{ i: "imu", x: 8, y: 0, w: 4, h: 6 },
-	{ i: "map", x: 0, y: 6, w: 12, h: 8 },
+	{ i: "gnss", x: 0, y: 0, w: 2, h: 9 },
+	{ i: "lidar", x: 0, y: 9, w: 1, h: 7 },
+	{ i: "radar", x: 1, y: 9, w: 1, h: 7 },
+	{ i: "imu", x: 0, y: 16, w: 1, h: 6 },
+	{ i: "enclosure_health", x: 1, y: 16, w: 1, h: 6 },
+	{ i: "camera", x: 2, y: 0, w: 2, h: 11 },
+	{ i: "map", x: 2, y: 11, w: 2, h: 11 },
+	{ i: "thruster", x: 4, y: 0, w: 2, h: 22 },
 ];
 
 const MISSION_TILES: TileLayout[] = [
-	{ i: "mission", x: 0, y: 0, w: 5, h: 12 },
-	{ i: "mission_control", x: 5, y: 0, w: 7, h: 6 },
-	{ i: "map", x: 5, y: 6, w: 7, h: 6 },
+	{ i: "mission", x: 0, y: 0, w: 3, h: 12 },
+	{ i: "mission_control", x: 3, y: 0, w: 3, h: 6 },
+	{ i: "map", x: 3, y: 6, w: 3, h: 6 },
 ];
 
 export const APPS: Record<AppId, AppDefinition> = {

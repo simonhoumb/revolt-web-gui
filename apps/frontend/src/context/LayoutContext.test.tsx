@@ -178,18 +178,18 @@ describe("LayoutProvider", () => {
 
 	it("the default layout's tile positions/sizes are unchanged by deriving them from the registry", () => {
 		// Locks in that switching DEFAULT_TILES from a hand-listed array to a registry-derived
-		// one didn't silently change the curated dashboard's appearance -- particularly for
-		// camera/mission/mission_control, whose default-layout size deliberately differs from
-		// their own defaultW/defaultH (see registry.ts's comments on those entries).
+		// one didn't silently change the curated dashboard's appearance, particularly for camera,
+		// whose default-layout height deliberately differs from its own defaultH (see registry.ts's
+		// comment on that entry).
 		const { result } = renderLayout();
 		const byId = new Map(result.current.config.tiles.map((t) => [t.i, t]));
-		expect(byId.get("camera")).toEqual({ i: "camera", x: 0, y: 5, w: 3, h: 7 });
-		expect(byId.get("mission")).toEqual({ i: "mission", x: 6, y: 12, w: 4, h: 8 });
+		expect(byId.get("camera")).toEqual({ i: "camera", x: 2, y: 5, w: 2, h: 7 });
+		expect(byId.get("mission")).toEqual({ i: "mission", x: 3, y: 12, w: 2, h: 8 });
 		expect(byId.get("mission_control")).toEqual({
 			i: "mission_control",
-			x: 6,
+			x: 3,
 			y: 20,
-			w: 4,
+			w: 2,
 			h: 6,
 		});
 	});

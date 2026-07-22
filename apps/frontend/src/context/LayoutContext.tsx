@@ -12,6 +12,7 @@ import {
 	type TileLayout,
 	ALL_WIDGET_IDS,
 	WIDGET_REGISTRY,
+	GRID_COLS,
 } from "../components/widgets/registry.js";
 
 export interface LayoutConfig {
@@ -98,7 +99,7 @@ function loadConfig(): LayoutConfig {
 			const def = WIDGET_REGISTRY[id];
 			return {
 				i: id,
-				x: (idx * def.defaultW) % 12,
+				x: (idx * def.defaultW) % GRID_COLS,
 				y: 999,
 				w: def.defaultW,
 				h: def.defaultH,
