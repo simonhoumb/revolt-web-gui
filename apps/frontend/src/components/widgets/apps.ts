@@ -71,7 +71,7 @@ export const APPS: Record<AppId, AppDefinition> = {
 	},
 	mission: {
 		id: "mission",
-		label: "Mission",
+		label: "Mission Control",
 		icon: ObiNavigationRoute,
 		kind: "locked",
 		tiles: MISSION_TILES,

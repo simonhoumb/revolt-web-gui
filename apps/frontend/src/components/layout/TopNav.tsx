@@ -59,7 +59,7 @@ export function TopNav() {
 	} = useVesselHealth();
 	const { voltagePercent, voltageStatus } = useBatteryData();
 	const { editMode } = useLayout();
-	const { activeAppId } = useApps();
+	const { activeAppId, appDef } = useApps();
 	const time = useMinuteUpdate();
 
 	// The system button manages its own internal open/closed state (there's no prop to control
@@ -172,7 +172,7 @@ export function TopNav() {
 		<div ref={wrapperRef}>
 			<ObcTopBar
 				appTitle="ReVolt GUI"
-				pageName="Dashboard"
+				pageName={appDef.label}
 				showClock
 				showDimmingButton
 				dimmingButtonActivated={dusk}
