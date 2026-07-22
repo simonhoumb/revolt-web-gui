@@ -3,6 +3,8 @@ import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/s
 import { ObcToggleButtonGroup } from "@oicl/openbridge-webcomponents-react/components/toggle-button-group/toggle-button-group.js";
 import { ObcToggleButtonOption } from "@oicl/openbridge-webcomponents-react/components/toggle-button-option/toggle-button-option.js";
 import { ObcToggleButtonOptionType } from "@oicl/openbridge-webcomponents/dist/components/toggle-button-option/toggle-button-option.js";
+import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
+import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
 import { ObiHeadingHUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-h-up-proposal.js";
 import { ObiHeadingNUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-n-up-proposal.js";
 import { ObiHeadingCUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-c-up-proposal.js";
@@ -12,8 +14,8 @@ import { ObiWaypointEditIec } from "@oicl/openbridge-webcomponents-react/icons/i
 import { ObiWaypointAddIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-add-iec.js";
 import { ObiVisibilityOnGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-visibility-on-google.js";
 import { ObiVisibilityOffGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-visibility-off-google.js";
-import { ObiExpand } from "@oicl/openbridge-webcomponents-react/icons/icon-expand.js";
-import { ObiContentCollapseGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-content-collapse-google.js";
+import { ObiArrowTopRight } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-top-right.js";
+import { ObiArrowBottomLeft } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-bottom-left.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
@@ -38,7 +40,11 @@ export function MapWidget() {
 	const [cameraLocked, setCameraLocked] = useState(true);
 	const [editMode, setEditMode] = useState<EditMode>("edit");
 	const [aisVisible, setAisVisible] = useState(true);
-	const [miniMap, setMiniMap] = useState(activeAppId === "conning");
+	// Whether the map's control bar (range stepper, orientation/camera-lock/edit-mode/AIS toggle
+	// groups) is shown at all, not just a "mini-map" zoomed-out view -- the map itself is always
+	// full size, this only hides its overlaid controls to get an unobstructed view (e.g. the
+	// Conning app's default, where the map is a supporting chart rather than the primary focus).
+	const [showControls, setShowControls] = useState(activeAppId !== "conning");
 
 	const { latitude, longitude, headingDeg, courseDeg } = useGnssData();
 	const track = useVesselTrack();
@@ -70,13 +76,13 @@ export function MapWidget() {
 		map.getCanvas().style.cursor = editMode === "add" ? "crosshair" : "";
 	}, [editMode, mapRef]);
 
-	// Mini-map mode hides the route-edit toggle group (see the toolbar below), so there's no way
-	// for the operator to switch back out of "add" once mini; force it back to pan-only "edit" the
-	// moment mini-map turns on, rather than leaving a stale add-mode cursor/click-to-place behavior
-	// active on a map with no visible affordance to turn it off.
+	// Hiding controls hides the route-edit toggle group (see the toolbar below), so there's no way
+	// for the operator to switch back out of "add" once hidden; force it back to pan-only "edit"
+	// the moment controls hide, rather than leaving a stale add-mode cursor/click-to-place
+	// behavior active on a map with no visible affordance to turn it off.
 	useEffect(() => {
-		if (miniMap) setEditMode("edit");
-	}, [miniMap]);
+		if (!showControls) setEditMode("edit");
+	}, [showControls]);
 
 	// H/N/C chart orientation: bearing follows true heading, course over
 	// ground, or stays fixed at true north depending on the selected mode.
@@ -168,12 +174,9 @@ export function MapWidget() {
 		[],
 	);
 
-	const handleMiniMapValue = useCallback(
-		(e: CustomEvent<{ value: string; previousValue: string }>) => {
-			setMiniMap(e.detail.value === "mini");
-		},
-		[],
-	);
+	const handleToggleControls = useCallback(() => {
+		setShowControls((v) => !v);
+	}, []);
 
 	const handleZoomIn = useCallback(() => {
 		mapRef.current?.zoomIn();
@@ -186,21 +189,23 @@ export function MapWidget() {
 	return (
 		<div className={styles.mapWrapper}>
 			<div ref={containerRef} className={styles.mapContainer} aria-label="Oslo Fjord chart" />
-			<div className={styles.toolbar}>
-				<ObcToggleButtonGroup
-					aria-label="Map detail"
-					value={miniMap ? "mini" : "full"}
-					type={ObcToggleButtonOptionType.icon}
-					onValue={handleMiniMapValue}
+			{/* The toggle button is a permanent first child of the bar, not floated separately over
+			    the map: that keeps it visually grouped with the bar's own chrome (background,
+			    border, shadow) in both states, rather than reading as a stray overlay control. Only
+			    the other controls are conditionally rendered; the bar itself shrinks to fit-content
+			    (see .toolbar[data-collapsed] below) around just this button when they're hidden,
+			    instead of unmounting entirely. Icon shows the action a click performs, same
+			    convention as TileCard's view-mode button. */}
+			<div className={styles.toolbar} data-collapsed={showControls ? undefined : ""}>
+				<ObcIconButton
+					className={styles.controlsToggle}
+					variant={IconButtonVariant.normal}
+					aria-label={showControls ? "Hide map controls" : "Show map controls"}
+					onClick={handleToggleControls}
 				>
-					<ObcToggleButtonOption value="full" aria-label="Full map">
-						<ObiExpand slot="icon" />
-					</ObcToggleButtonOption>
-					<ObcToggleButtonOption value="mini" aria-label="Mini-map">
-						<ObiContentCollapseGoogle slot="icon" />
-					</ObcToggleButtonOption>
-				</ObcToggleButtonGroup>
-				{!miniMap && (
+					{showControls ? <ObiArrowBottomLeft /> : <ObiArrowTopRight />}
+				</ObcIconButton>
+				{showControls && (
 					<>
 						<ObcStepperBox
 							aria-label="Chart range"

@@ -475,41 +475,50 @@ describe("MapWidget", () => {
 		expect(mapInstances[0]?.zoomOut).toHaveBeenCalled();
 	});
 
-	it("defaults to mini-map in the Conning app, and full map elsewhere", () => {
+	function clickButton(el: Element) {
+		act(() => {
+			(el as HTMLElement).click();
+		});
+	}
+
+	it("defaults to hidden controls in the Conning app, and shown elsewhere", () => {
 		setGnss();
 		setTrack();
 		setMission();
 		setApp("custom");
 		const { container: customContainer } = render(<MapWidget />);
 		expect(customContainer.querySelector('[aria-label="Chart range"]')).not.toBeNull();
+		expect(findByLabel(customContainer, "Hide map controls")).toBeInTheDocument();
 		cleanup();
 
 		setApp("conning");
 		const { container: conningContainer } = render(<MapWidget />);
 		expect(conningContainer.querySelector('[aria-label="Chart range"]')).toBeNull();
-		expect(findByLabel(conningContainer, "Mini-map")).toBeInTheDocument();
+		expect(findByLabel(conningContainer, "Show map controls")).toBeInTheDocument();
 	});
 
-	it("hides the rest of the toolbar in mini-map mode, and restores it when switched back", () => {
+	it("hides the whole toolbar when controls are toggled off, and restores it when toggled back on", () => {
 		setGnss();
 		setTrack();
 		setMission();
 		setApp("custom");
 		const { container } = render(<MapWidget />);
+		expect(container.querySelector('[aria-label="Chart range"]')).not.toBeNull();
 		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
 		expect(container.querySelector('[aria-label="AIS targets"]')).not.toBeNull();
 
-		dispatchToggleValue(findByLabel(container, "Map detail"), "mini", "full");
+		clickButton(findByLabel(container, "Hide map controls"));
+		expect(container.querySelector('[aria-label="Chart range"]')).toBeNull();
 		expect(container.querySelector('[aria-label="Chart orientation"]')).toBeNull();
 		expect(container.querySelector('[aria-label="AIS targets"]')).toBeNull();
 		expect(container.querySelector('[aria-label="Route edit mode"]')).toBeNull();
 		expect(container.querySelector('[aria-label="Camera lock"]')).toBeNull();
 
-		dispatchToggleValue(findByLabel(container, "Map detail"), "full", "mini");
+		clickButton(findByLabel(container, "Show map controls"));
 		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
 	});
 
-	it("forces edit mode back to pan-only when switching into mini-map while adding a waypoint", () => {
+	it("forces edit mode back to pan-only when controls are hidden while adding a waypoint", () => {
 		setGnss();
 		setTrack();
 		setMission();
@@ -522,13 +531,13 @@ describe("MapWidget", () => {
 		});
 		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
 
-		dispatchToggleValue(findByLabel(container, "Map detail"), "mini", "full");
-		dispatchToggleValue(findByLabel(container, "Map detail"), "full", "mini");
+		clickButton(findByLabel(container, "Hide map controls"));
+		clickButton(findByLabel(container, "Show map controls"));
 		act(() => {
 			mapInstances[0]?.emit("click", { lngLat: { lat: 59.6, lng: 10.6 } });
 		});
-		// Still 1: mini-map reset edit mode back to "edit" (pan-only), so re-entering full map
-		// doesn't leave "add" active and this second click doesn't place a waypoint.
+		// Still 1: hiding controls reset edit mode back to "edit" (pan-only), so showing them
+		// again doesn't leave "add" active and this second click doesn't place a waypoint.
 		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
 	});
 
