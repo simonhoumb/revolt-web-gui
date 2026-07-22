@@ -6,18 +6,41 @@
 	min-height: 0;
 }
 
-/* obc-pitch-roll has no default :host size (it renders its inner SVG at 100% of the host box,
-   which is itself unsized without this), so without an explicit size it rendered nothing visible
-   inside TileCard's overflow: hidden body. */
-.instrument {
+/* Unlike GnssWidget's compass (readout content on one side only, an empty spacer on the other),
+   both flanking columns here carry real content -- accel readout on the left, pitch/roll readout
+   on the right. With the middle column as plain auto (sized to the instrument's own aspect-ratio-
+   derived width, unconstrained), a tall/narrow tile could make that width exceed what's actually
+   left over, pushing the right-hand readout out past the tile's edge. minmax(0, 1fr) bounds the
+   instrument's column to whatever space remains after both readouts claim their own natural
+   (auto) width, so the readouts stay put and the instrument is what shrinks instead. */
+.instrumentLayout {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 4px;
 	flex: 1;
 	min-height: 0;
-	width: 100%;
 }
 
-.toolbar {
+.readout {
 	display: flex;
-	justify-content: flex-end;
+	flex-direction: column;
+	justify-content: center;
+	gap: 4px;
+	justify-self: end;
+	align-items: end;
+}
+
+/* obc-pitch-roll has no default :host size (it renders its inner SVG at 100% of the host box,
+   which is itself unsized without this). Filling both dimensions of its now-bounded grid cell
+   (rather than height: 100% + aspect-ratio, which is what let it grow past the available width)
+   lets it shrink along with the column; its own preserveAspectRatio scaling keeps the dial
+   circular without needing a CSS aspect-ratio pin. */
+.instrument {
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
 }
 
 .statusRow {

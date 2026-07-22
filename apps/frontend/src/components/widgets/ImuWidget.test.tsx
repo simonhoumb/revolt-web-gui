@@ -1,20 +1,14 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { ImuWidget } from "./ImuWidget.js";
 import { useImuData, type ImuData } from "../../hooks/useImuData.js";
-import { useApps } from "../../context/AppContext.js";
-import { APPS } from "./apps.js";
 
 vi.mock("../../hooks/useImuData.js", () => ({
 	useImuData: vi.fn(),
 }));
-vi.mock("../../context/AppContext.js", () => ({
-	useApps: vi.fn(),
-}));
 
 const mockUseImuData = useImuData as Mock;
-const mockUseApps = useApps as Mock;
 
 function makeImuData(overrides: Partial<ImuData> = {}): ImuData {
 	return {
@@ -31,34 +25,23 @@ function makeImuData(overrides: Partial<ImuData> = {}): ImuData {
 	};
 }
 
-function setApp(activeAppId: keyof typeof APPS = "custom") {
-	mockUseApps.mockReturnValue({
-		activeAppId,
-		appDef: APPS[activeAppId],
-		isLocked: activeAppId !== "custom",
-		setActiveApp: vi.fn(),
-	});
-}
-
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
 });
 
 describe("ImuWidget", () => {
-	it("shows 'No data' when there is no roll reading, and 'Live' once there is", () => {
-		setApp();
+	it("shows 'No data' when there is no roll reading, and 'Live' once there is, in detailed view", () => {
 		mockUseImuData.mockReturnValue(makeImuData());
-		const { rerender } = render(<ImuWidget />);
+		const { rerender } = render(<ImuWidget viewMode="detailed" />);
 		expect(screen.getByText("No data")).toBeInTheDocument();
 
 		mockUseImuData.mockReturnValue(makeImuData({ rollDeg: 1.2 }));
-		rerender(<ImuWidget />);
+		rerender(<ImuWidget viewMode="detailed" />);
 		expect(screen.getByText("Live")).toBeInTheDocument();
 	});
 
 	it("shows roll/pitch/yaw and accel values to their expected precision in detailed view", () => {
-		setApp();
 		mockUseImuData.mockReturnValue(
 			makeImuData({
 				rollDeg: 1.234,
@@ -69,7 +52,7 @@ describe("ImuWidget", () => {
 				accelZ: 0.0,
 			}),
 		);
-		render(<ImuWidget />);
+		render(<ImuWidget viewMode="detailed" />);
 		expect(screen.getByText("1.2°")).toBeInTheDocument();
 		expect(screen.getByText("-2.5°")).toBeInTheDocument();
 		expect(screen.getByText("90.0°")).toBeInTheDocument();
@@ -78,33 +61,16 @@ describe("ImuWidget", () => {
 		expect(screen.getByText("0.00 m/s²")).toBeInTheDocument();
 	});
 
-	it("defaults to detailed view outside the Conning app, and instrument view inside it", () => {
-		setApp("custom");
+	it("defaults to instrument view when no viewMode prop is given", () => {
 		mockUseImuData.mockReturnValue(makeImuData({ rollDeg: 5, pitchDeg: -3 }));
 		render(<ImuWidget />);
-		expect(screen.getByText("5.0°")).toBeInTheDocument();
-		expect(document.querySelector("obc-pitch-roll")).toBeNull();
-		cleanup();
-
-		setApp("conning");
-		render(<ImuWidget />);
-		expect(screen.queryByText("5.0°")).not.toBeInTheDocument();
 		expect(document.querySelector("obc-pitch-roll")).not.toBeNull();
+		expect(screen.queryByText("5.0°")).not.toBeInTheDocument();
 	});
 
-	it("maps pitch/roll onto obc-pitch-roll in instrument view, and keeps accel visible in both views", () => {
-		setApp("custom");
+	it("maps pitch/roll onto obc-pitch-roll in instrument view", () => {
 		mockUseImuData.mockReturnValue(makeImuData({ rollDeg: 12, pitchDeg: -6, accelX: 1.5 }));
-		render(<ImuWidget />);
-		expect(screen.getByText("1.50 m/s²")).toBeInTheDocument();
-
-		act(() => {
-			document.querySelector("obc-toggle-button-group")?.dispatchEvent(
-				new CustomEvent("value", {
-					detail: { value: "instrument", previousValue: "detailed" },
-				}),
-			);
-		});
+		render(<ImuWidget viewMode="instrument" />);
 
 		const pitchRoll = document.querySelector("obc-pitch-roll") as HTMLElement & {
 			pitch: number;
@@ -112,7 +78,6 @@ describe("ImuWidget", () => {
 		};
 		expect(pitchRoll.pitch).toBe(-6);
 		expect(pitchRoll.roll).toBe(12);
-		expect(screen.getByText("1.50 m/s²")).toBeInTheDocument();
 		expect(screen.queryByText("12.0°")).not.toBeInTheDocument();
 	});
 });
