@@ -1,65 +1,77 @@
 .content {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
 	height: 100%;
+	overflow-y: auto;
 }
 
-.batteryRow {
-	flex: 1;
-	min-height: 0;
-	display: flex;
+/* Every row (voltage, plus each location's current) is a uniform icon + label + value line, laid
+   out as a CSS grid rather than a flex row per line. A shared grid across all rows means the
+   icon column's width is driven by whichever icon (obc-battery-icon or obc-status-indicator, each
+   with their own intrinsic rendered size) is actually widest, so every row's label/value line up
+   in the same columns automatically instead of needing hand-tuned pixel sizes to match by hand.
+   Exactly 3 columns, and every row (via display: contents below) always contributes exactly 3
+   items, icon, label, value-cell, to the grid's auto-placement. The voltage row's optional
+   alarm/warning badge lives inside .readingValueCell rather than being its own 4th grid item, since
+   auto-placement wraps into a new row strictly every N items (N = column count): a row that
+   sometimes contributes 4 items and sometimes 3 shifts every following row's items into the wrong
+   columns.
+   None of it flex-grows or shrinks. The previous layout had the icon/voltage row as the only
+   flexible element sharing space with the current rows below, so it silently shrank to nothing
+   (and the current rows got clipped by TileCard's overflow: hidden) once the tile got small.
+   Fixed-size rows plus the scroll container above mean nothing becomes invisible now, however
+   small the tile is; you scroll to see the rest instead. */
+.readingList {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
 	align-items: center;
-	gap: 12px;
-}
-
-/* Stretches to full batteryRow height so the icon inside can fill it */
-.iconWrapper {
-	align-self: stretch;
-	display: flex;
-	align-items: center;
+	column-gap: 8px;
+	row-gap: 8px;
 	flex-shrink: 0;
 }
 
-/* OBC battery icon: host is display:flex, internal SVG is 100%×100% */
+/* display: contents so each row's own children (icon/label/value-cell) become direct grid items
+   of .readingList above, placed into its shared columns, rather than this wrapper div becoming a
+   single opaque grid item itself. */
+.readingRow {
+	display: contents;
+}
+
+/* Not stretched to fill available height like the old vertical icon was, see the .readingList
+   comment above. horizontal orientation suits sitting inline in a text row better than the
+   previous tall/narrow vertical icon did. */
 .batteryIcon {
-	height: 100%;
-	width: auto;
+	height: 24px;
+	width: 24px;
+	justify-self: center;
 }
 
-.voltageBlock {
-	display: flex;
-	align-items: center;
-	gap: 6px;
+/* obc-status-indicator's visible dot is inset within its own component box (a 16x8 pill centered
+   inside a 24x24 icon-container, itself inside a wider fit-content wrapper, see its own
+   status-indicator.css.js), while obc-battery-icon's SVG fills its box edge to edge. Left-aligned
+   (the grid default), that inset makes the status indicators sit visibly further right in the
+   icon column than the battery icon does. Centering both icons within the column (rather than the
+   grid's default left/start alignment) corrects for that mismatch. */
+.statusIcon {
+	justify-self: center;
 }
 
-.voltage {
-	font-size: 1.1rem;
-	font-weight: 600;
-	white-space: nowrap;
-	color: var(--element-active-color, #eaa75e);
-}
-
-.currentList {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	flex-shrink: 0;
-}
-
-.currentRow {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.currentLabel {
-	flex: 1;
+.readingLabel {
 	font-size: 0.8rem;
 	color: var(--element-active-color, #eaa75e);
 }
 
-.currentValue {
+/* The third grid item: value text plus, for the voltage row only, an optional alarm/warning
+   badge alongside it. See the .readingList comment on why this stays one grid item rather than
+   two. */
+.readingValueCell {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	justify-self: end;
+}
+
+.readingValue {
 	font-size: 0.8rem;
 	font-variant-numeric: tabular-nums;
 	color: var(--element-active-color, #eaa75e);
