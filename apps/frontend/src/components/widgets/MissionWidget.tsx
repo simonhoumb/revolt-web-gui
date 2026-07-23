@@ -201,7 +201,7 @@ export function MissionWidget() {
 
 			{legs.length > 0 && (
 				<div className={styles.summaryRow}>
-					Total: {totalDistanceNm.toFixed(1)} nm · ETE{" "}
+					Total: {totalDistanceNm.toFixed(1)} NM · ETE{" "}
 					{formatDuration(totalDurationHours)}
 				</div>
 			)}

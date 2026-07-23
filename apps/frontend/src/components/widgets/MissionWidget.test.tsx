@@ -146,7 +146,7 @@ describe("MissionWidget", () => {
 		});
 
 		render(<MissionWidget />);
-		expect(screen.getByText(/Total: 10\.0 nm/)).toBeInTheDocument();
+		expect(screen.getByText(/Total: 10\.0 NM/)).toBeInTheDocument();
 		expect(screen.getByText(/ETE 1h 0m/)).toBeInTheDocument();
 	});
 
