@@ -1,0 +1,52 @@
+.anchor {
+	position: relative;
+	display: inline-flex;
+}
+
+/* Positioned via inline style (top/left, computed in Tooltip.tsx from getBoundingClientRect()
+   against the viewport) rather than pure CSS side rules -- picking a side that actually fits
+   needs to know the bubble's own rendered size and the trigger's real viewport position, neither
+   of which CSS alone has access to. position: fixed (not absolute) matches
+   getBoundingClientRect()'s viewport-relative coordinates directly, with no scroll-offset math
+   needed.
+   --tooltip-show-delay/--tooltip-hide-delay (defaults below, each overridable per instance via
+   inline style on the trigger, e.g. style={{ "--tooltip-show-delay": "0.2s" }}) apply on the way
+   into and out of the hover/focus state respectively: the base rule here (hide-delay) is what
+   applies once :hover/:focus-within stop matching, so it lingers briefly rather than vanishing
+   the instant the cursor leaves, while the :hover/:focus-within rule (show-delay) holds off the
+   initial appearance. */
+.bubble {
+	--tooltip-show-delay: 500ms;
+	--tooltip-hide-delay: 0ms;
+
+	position: fixed;
+	z-index: 10;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition:
+		opacity 0.15s ease-in-out var(--tooltip-hide-delay),
+		visibility 0.15s var(--tooltip-hide-delay);
+}
+
+.anchor:hover > .bubble,
+.anchor:focus-within > .bubble {
+	opacity: 1;
+	visibility: visible;
+	transition-delay: var(--tooltip-show-delay);
+}
+
+/* obc-tooltip's own arrow always points down out of its bottom edge (fixed in its shadow DOM,
+   nothing exposed to restyle it from outside) -- only correct when the bubble sits above the
+   trigger (side="top"). The other three sides clip it away instead of showing it pointing away
+   from, or sideways past, the trigger it's meant to indicate: the arrow protrudes a few px past
+   obc-tooltip's own rounded-rect box (which is this wrapper's natural size, absolutely positioned
+   children don't contribute to it), so overflow: hidden here cuts it off cleanly. The matching
+   border-radius keeps the clip edge from cutting a square corner across the bubble's own rounded
+   one. */
+.bubble[data-side="bottom"],
+.bubble[data-side="left"],
+.bubble[data-side="right"] {
+	overflow: hidden;
+	border-radius: var(--ui-components-tooltip-border-radius, 12px);
+}
