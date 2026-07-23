@@ -29,6 +29,7 @@ import { useVesselTrackLayer } from "../../hooks/useVesselTrackLayer.js";
 import { useWaypointMarkers } from "../../hooks/useWaypointMarkers.js";
 import { useAisMarkers } from "../../hooks/useAisMarkers.js";
 import styles from "./MapWidget.module.css";
+import { Tooltip } from "./Tooltip.js";
 
 type RotationMode = "H" | "N" | "C"; // HEADING-UP || NORTH-UP || COURSE-UP
 type EditMode = "edit" | "add";
@@ -197,14 +198,16 @@ export function MapWidget() {
 			    instead of unmounting entirely. Icon shows the action a click performs, same
 			    convention as TileCard's view-mode button. */}
 			<div className={styles.toolbar} data-collapsed={showControls ? undefined : ""}>
-				<ObcIconButton
-					className={styles.controlsToggle}
-					variant={IconButtonVariant.normal}
-					aria-label={showControls ? "Hide map controls" : "Show map controls"}
-					onClick={handleToggleControls}
-				>
-					{showControls ? <ObiArrowBottomLeft /> : <ObiArrowTopRight />}
-				</ObcIconButton>
+				<Tooltip label={showControls ? "Hide map controls" : "Show map controls"}>
+					<ObcIconButton
+						className={styles.controlsToggle}
+						variant={IconButtonVariant.normal}
+						aria-label={showControls ? "Hide map controls" : "Show map controls"}
+						onClick={handleToggleControls}
+					>
+						{showControls ? <ObiArrowBottomLeft /> : <ObiArrowTopRight />}
+					</ObcIconButton>
+				</Tooltip>
 				{showControls && (
 					<>
 						<ObcStepperBox
@@ -221,15 +224,21 @@ export function MapWidget() {
 							type={ObcToggleButtonOptionType.icon}
 							onValue={handleRotationValue}
 						>
-							<ObcToggleButtonOption value="H" aria-label="Heading up">
-								<ObiHeadingHUpProposal slot="icon" />
-							</ObcToggleButtonOption>
-							<ObcToggleButtonOption value="N" aria-label="North up">
-								<ObiHeadingNUpProposal slot="icon" />
-							</ObcToggleButtonOption>
-							<ObcToggleButtonOption value="C" aria-label="Course up">
-								<ObiHeadingCUpProposal slot="icon" />
-							</ObcToggleButtonOption>
+							<Tooltip label="Heading up" asChild>
+								<ObcToggleButtonOption value="H" aria-label="Heading up">
+									<ObiHeadingHUpProposal slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="North up" asChild>
+								<ObcToggleButtonOption value="N" aria-label="North up">
+									<ObiHeadingNUpProposal slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Course up" asChild>
+								<ObcToggleButtonOption value="C" aria-label="Course up">
+									<ObiHeadingCUpProposal slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
 						</ObcToggleButtonGroup>
 						<ObcToggleButtonGroup
 							aria-label="Camera lock"
@@ -237,15 +246,19 @@ export function MapWidget() {
 							type={ObcToggleButtonOptionType.icon}
 							onValue={handleCameraLockValue}
 						>
-							<ObcToggleButtonOption
-								value="locked"
-								aria-label="Lock camera on vessel"
-							>
-								<ObiCenterIec slot="icon" />
-							</ObcToggleButtonOption>
-							<ObcToggleButtonOption value="free" aria-label="Free camera">
-								<ObiCenterOffIec slot="icon" />
-							</ObcToggleButtonOption>
+							<Tooltip label="Lock camera to vessel" asChild>
+								<ObcToggleButtonOption
+									value="locked"
+									aria-label="Lock camera on vessel"
+								>
+									<ObiCenterIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Free camera" asChild>
+								<ObcToggleButtonOption value="free" aria-label="Free camera">
+									<ObiCenterOffIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
 						</ObcToggleButtonGroup>
 						<ObcToggleButtonGroup
 							aria-label="Route edit mode"
@@ -253,12 +266,16 @@ export function MapWidget() {
 							type={ObcToggleButtonOptionType.icon}
 							onValue={handleEditModeValue}
 						>
-							<ObcToggleButtonOption value="edit" aria-label="Edit waypoints">
-								<ObiWaypointEditIec slot="icon" />
-							</ObcToggleButtonOption>
-							<ObcToggleButtonOption value="add" aria-label="Add waypoint">
-								<ObiWaypointAddIec slot="icon" />
-							</ObcToggleButtonOption>
+							<Tooltip label="Edit waypoints" asChild>
+								<ObcToggleButtonOption value="edit" aria-label="Edit waypoints">
+									<ObiWaypointEditIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Add waypoint" asChild>
+								<ObcToggleButtonOption value="add" aria-label="Add waypoint">
+									<ObiWaypointAddIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
 						</ObcToggleButtonGroup>
 						<ObcToggleButtonGroup
 							aria-label="AIS targets"
@@ -266,12 +283,19 @@ export function MapWidget() {
 							type={ObcToggleButtonOptionType.icon}
 							onValue={handleAisVisibleValue}
 						>
-							<ObcToggleButtonOption value="visible" aria-label="Show AIS targets">
-								<ObiVisibilityOnGoogle slot="icon" />
-							</ObcToggleButtonOption>
-							<ObcToggleButtonOption value="hidden" aria-label="Hide AIS targets">
-								<ObiVisibilityOffGoogle slot="icon" />
-							</ObcToggleButtonOption>
+							<Tooltip label="Show AIS targets" asChild>
+								<ObcToggleButtonOption
+									value="visible"
+									aria-label="Show AIS targets"
+								>
+									<ObiVisibilityOnGoogle slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Hide AIS targets" asChild>
+								<ObcToggleButtonOption value="hidden" aria-label="Hide AIS targets">
+									<ObiVisibilityOffGoogle slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
 						</ObcToggleButtonGroup>
 					</>
 				)}
