@@ -24,6 +24,7 @@ import { useMinuteUpdate } from "../../hooks/useMinuteUpdate.js";
 import { AlertMenu } from "./AlertMenu.js";
 import { WidgetPicker } from "./WidgetPicker.js";
 import { NavigationMenu } from "./NavigationMenu.js";
+import { Tooltip } from "../widgets/Tooltip.js";
 import styles from "./TopNav.module.css";
 
 function toObcAlertType(level: AlertLevel | null): AlertType | undefined {
@@ -197,12 +198,14 @@ export function TopNav() {
 					timeZoneOffsetHours={-(new Date().getTimezoneOffset() / 60)}
 				/>
 				<div slot="alerts" className={styles.statusCluster}>
-					<span
-						className={styles.latencyBadge}
-						data-stale={latencyMs === null || undefined}
-					>
-						{latencyMs !== null ? `${latencyMs.toString()} ms` : "— ms"}
-					</span>
+					<Tooltip label="ROS bridge latency">
+						<span
+							className={styles.latencyBadge}
+							data-stale={latencyMs === null || undefined}
+						>
+							{latencyMs !== null ? `${latencyMs.toString()} ms` : "— ms"}
+						</span>
+					</Tooltip>
 					<div className={styles.systemButtonAnchor}>
 						<ObcSystemButton
 							ref={systemButtonRef}
