@@ -224,7 +224,7 @@ export function TopNav() {
 					<ObcAlertButton
 						nAlerts={alertCount}
 						alertType={toObcAlertType(highestAlertLevel)}
-						type={ObcAlertButtonType.Normal}
+						type={ObcAlertButtonType.Flat}
 						counter={true}
 						blinking={emergencyStopActive}
 						onClickAlert={handleAlertClick}
