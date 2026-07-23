@@ -433,7 +433,13 @@ async def pause_mission(
 
 	mission.status = MissionStatus.paused
 	await db.commit()
-	remaining_count = len(remaining) if remaining else 0
+	# None here means no /waypoint_list echo has ever been received (e.g. testing against a
+	# rosbag replay that doesn't include this topic) -- "we don't actually know," not "confirmed
+	# empty." Collapsing that into remaining_count=0 the same way an actually-emptied queue would
+	# understates this as 100% complete instead of correctly reporting that nothing is known to
+	# have been reached yet. Mirrors _push_mission_execution_status_to's own is not None
+	# distinction, and falls back to the same "assume nothing consumed" default it uses.
+	remaining_count = len(remaining) if remaining is not None else len(mission.waypoints)
 	bridge.broadcast_tracked_status(resume_key, "paused", None, remaining_count)
 
 	await log_action(
@@ -469,7 +475,17 @@ async def terminate_mission(
 	)
 	resume_key = str(mission_id)
 	reject_if_stale_mission(bridge, mission_id)
-	bridge.pop_resume_point(resume_key)
+	# Terminating a paused mission: the live echo (bridge.latest_waypoint_list) is already the
+	# empty list that pause itself cleared, not the real remaining count -- the resume snapshot
+	# taken at that earlier pause is the accurate source instead. Terminating a still-active
+	# mission (never paused): there's no resume snapshot, so the live echo is the accurate,
+	# current source, same as pause_mission's own remaining_count above.
+	resume_point = bridge.pop_resume_point(resume_key)
+	remaining = resume_point if resume_point is not None else bridge.latest_waypoint_list
+	# None means no /waypoint_list echo has ever been received (e.g. testing against a rosbag
+	# replay that doesn't include this topic) -- "we don't actually know," not "confirmed empty."
+	# See pause_mission's own identical comment above for why that distinction matters here.
+	remaining_count = len(remaining) if remaining is not None else len(mission.waypoints)
 
 	status = await bridge.publish_and_await_ack(
 		"/update_waypoint_list", "custom_msgs/WaypointList", {"waypoints": []}, []
@@ -480,7 +496,7 @@ async def terminate_mission(
 	mission.status = MissionStatus.aborted
 	mission.completed_at = datetime.now(UTC)
 	await db.commit()
-	bridge.broadcast_tracked_status(resume_key, "aborted", None, 0)
+	bridge.broadcast_tracked_status(resume_key, "aborted", None, remaining_count)
 	bridge.untrack_mission()
 
 	await log_action(
@@ -488,12 +504,12 @@ async def terminate_mission(
 		session_id=session_id,
 		action="mission.terminate",
 		severity="warning",
-		params={"mission_id": resume_key, "status": status},
+		params={"mission_id": resume_key, "status": status, "remaining_count": remaining_count},
 	)
 	return MissionExecutionResult(
 		status=status,
 		state="aborted",
 		autonomy_engaged=False,
 		autonomy_note=None,
-		waypoint_count=0,
+		waypoint_count=remaining_count,
 	)

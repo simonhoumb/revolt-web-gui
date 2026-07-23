@@ -892,10 +892,18 @@ class RosBridgeClient:
 		self._check_pending_ack(waypoints)
 		self._mission_tracker.record_waypoint_list_echo(waypoints)
 		tracked_mission_id = self._mission_tracker.tracked_mission_id
-		if tracked_mission_id is not None:
+		tracked_state = self._mission_tracker.tracked_state
+		# Only an actively-executing mission's echo reflects genuine waypoint progress. Once
+		# paused/terminated, the queue was intentionally emptied by our own pause/terminate
+		# command (see mission_service.py) to stop the vessel -- its echo of that now-empty list
+		# would otherwise overwrite the real, already-correct progress broadcast at the moment of
+		# pause/terminate with a misleading "0 remaining", which renders identically to a
+		# genuinely completed route (100%, all waypoints reached) in the frontend. Skipping the
+		# rebroadcast here leaves whatever progress was last known standing.
+		if tracked_mission_id is not None and tracked_state in ("starting", "active"):
 			self.broadcast_mission_execution_status(
 				tracked_mission_id,
-				self._mission_tracker.tracked_state,
+				tracked_state,
 				waypoints[0]["id"] if waypoints else None,
 				len(waypoints),
 				self._mission_tracker.tracked_total_count,
