@@ -5,6 +5,7 @@ import { ObcInstrumentField } from "@oicl/openbridge-webcomponents-react/navigat
 import { CompassDirection } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/compass/compass.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { formatCoordinate } from "../../lib/format.js";
+import { METERS_PER_SECOND_TO_KNOTS } from "../../lib/geo.js";
 import type { WidgetViewMode } from "./ViewModeToggle.js";
 import styles from "./GnssWidget.module.css";
 import { InstrumentFieldSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/instrument-field/instrument-field.js";
@@ -14,8 +15,6 @@ import { VesselImage } from "@oicl/openbridge-webcomponents/dist/navigation-inst
 // Higher precision than mission-planning displays (formatLatLon's default of 5) -- a live GNSS
 // fix benefits from finer resolution for monitoring, not an oversight.
 const GNSS_COORDINATE_PRECISION = 6;
-
-const METERS_PER_SECOND_TO_KNOTS = 1.94384;
 
 function fixIndicatorStatus(fixStatus: number | null): StatusIndicatorStatus {
 	if (fixStatus === null) return StatusIndicatorStatus.inactive;

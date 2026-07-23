@@ -5,6 +5,9 @@ import type { Mission, MissionExecutionStatusMsg, Waypoint } from "@revolt/share
 import { MissionControlWidget } from "./MissionControlWidget.js";
 import { useMission } from "../../context/useMission.js";
 import { useBridgeData } from "../../context/useBridgeData.js";
+import { haversineDistanceM, METERS_PER_NM, METERS_PER_SECOND_TO_KNOTS } from "../../lib/geo.js";
+import { accumulateRouteEta } from "../../lib/missionMath.js";
+import { formatDuration } from "../../lib/format.js";
 
 vi.mock("../../context/useMission.js", () => ({
 	useMission: vi.fn(),
@@ -86,13 +89,30 @@ function setBridgeData(
 		missionExecutionStatus?: MissionExecutionStatusMsg | null;
 		gnssFix?: { latitude: number; longitude: number } | null;
 		bridgeStatus?: { target: string } | null;
+		// useGnssData() (used for the SPD instrument field) reads speed off gnssVelocityPhysical --
+		// this is the raw useBridgeData() shape it expects, not useGnssData()'s own derived speedMs.
+		speedMs?: number;
 	} = {},
 ) {
 	mockUseBridgeData.mockReturnValue({
 		missionExecutionStatus: overrides.missionExecutionStatus ?? null,
 		gnssFix: overrides.gnssFix ?? null,
 		bridgeStatus: overrides.bridgeStatus ?? null,
+		// useGnssData() (used for the SPD instrument field) also reads gnssHeading/gnssVelocity --
+		// left as null (not undefined) to match useBridgeData's own initialData shape, since
+		// useGnssData()'s heading derivation checks `gnssVelocity !== null` and dereferences it.
+		gnssHeading: null,
+		gnssVelocity: null,
+		gnssVelocityPhysical:
+			overrides.speedMs !== undefined ? { speed_ms: overrides.speedMs } : null,
 	});
+}
+
+function getInstrumentFields(): Map<string, { value: number | undefined; setpoint: number | undefined }> {
+	const fields = document.querySelectorAll("obc-instrument-field") as NodeListOf<
+		HTMLElement & { tag: string; value: number | undefined; setpoint: number | undefined }
+	>;
+	return new Map([...fields].map((f) => [f.tag, { value: f.value, setpoint: f.setpoint }]));
 }
 
 function getProgressButton(
@@ -248,6 +268,76 @@ describe("MissionControlWidget", () => {
 		setBridgeData();
 		render(<MissionControlWidget />);
 		expect(getProgressButton("Terminate").disabled).toBe(true);
+	});
+
+	it("renders leg-relative DTW/SPD/ETA readouts from live status, waypoints, and GNSS data", () => {
+		const ownship = { latitude: 59.0, longitude: 10.0 };
+		const currentWaypoint = makeWaypoint({
+			id: "wp-2",
+			sequence_number: 1,
+			position: { latitude: 59.01, longitude: 10.01 },
+			target_speed: 6,
+		});
+		const mission = makeMission({ status: "active" as Mission["status"] }, [
+			makeWaypoint({ id: "wp-1", sequence_number: 0 }),
+			currentWaypoint,
+		]);
+		setLoadedMission(mission);
+		setBridgeData({
+			gnssFix: ownship,
+			speedMs: 3,
+			missionExecutionStatus: {
+				v: "1",
+				type: "mission_execution_status",
+				timestamp_ms: 1000,
+				mission_id: mission.id,
+				state: "active",
+				current_waypoint_seq: 1,
+				remaining_count: 1,
+				total_count: 2,
+			},
+		});
+		render(<MissionControlWidget />);
+
+		const distanceM = haversineDistanceM(
+			ownship.latitude,
+			ownship.longitude,
+			currentWaypoint.position.latitude,
+			currentWaypoint.position.longitude,
+		);
+		const expectedEta = accumulateRouteEta([{ distanceM, speedKt: currentWaypoint.target_speed }]);
+
+		const fields = getInstrumentFields();
+		expect(fields.get("DTW")?.value).toBeCloseTo(distanceM / METERS_PER_NM, 5);
+		expect(fields.get("SPD")?.value).toBeCloseTo(3 * METERS_PER_SECOND_TO_KNOTS, 5);
+		expect(fields.get("SPD")?.setpoint).toBe(6);
+		expect(document.body.textContent).toContain(formatDuration(expectedEta.hours));
+	});
+
+	it("renders dashed placeholders for leg readouts when there's no GNSS fix", () => {
+		const mission = makeMission({ status: "active" as Mission["status"] }, [
+			makeWaypoint({ id: "wp-1", sequence_number: 0 }),
+			makeWaypoint({ id: "wp-2", sequence_number: 1 }),
+		]);
+		setLoadedMission(mission);
+		setBridgeData({
+			gnssFix: null,
+			missionExecutionStatus: {
+				v: "1",
+				type: "mission_execution_status",
+				timestamp_ms: 1000,
+				mission_id: mission.id,
+				state: "active",
+				current_waypoint_seq: 1,
+				remaining_count: 1,
+				total_count: 2,
+			},
+		});
+		render(<MissionControlWidget />);
+
+		const fields = getInstrumentFields();
+		expect(fields.get("DTW")?.value).toBeUndefined();
+		expect(fields.get("SPD")?.value).toBeUndefined();
 	});
 
 	it("buttons follow a live mission_execution_status update, not just the mission's own stale status", () => {

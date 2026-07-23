@@ -38,8 +38,8 @@ const CONNING_TILES: TileLayout[] = [
 ];
 
 const MISSION_TILES: TileLayout[] = [
-	{ i: "mission", x: 0, y: 0, w: 2, h: 17 },
-	{ i: "mission_control", x: 0, y: 17, w: 2, h: 5 },
+	{ i: "mission", x: 0, y: 0, w: 2, h: 14 },
+	{ i: "mission_control", x: 0, y: 14, w: 2, h: 8 },
 	{ i: "map", x: 2, y: 0, w: 4, h: 22 },
 ];
 
