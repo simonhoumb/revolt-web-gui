@@ -295,6 +295,25 @@ def test_ais_target_sog_decoder_default_sentinel(client: RosBridgeClient) -> Non
 	assert result["sog_kn"] is None
 
 
+def test_ais_target_position_not_available_sentinel(client: RosBridgeClient) -> None:
+	# ITU-R M.1371's own "position not available" sentinel (lat=91, lon=181), decoded verbatim
+	# by pyais with no filtering -- outside the real geographic range, which is exactly what
+	# crashed the frontend's map marker before this was dropped here instead.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 91.0, "lon": 181.0, "sog": 0.0, "heading": 511},
+	)
+	assert result is None
+
+
+def test_ais_target_out_of_range_position_dropped(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 95.0, "lon": 10.601, "sog": 0.0, "heading": 511},
+	)
+	assert result is None
+
+
 def test_unknown_topic_returns_none(client: RosBridgeClient) -> None:
 	assert client._transform("/some/unknown/topic", {"data": 42}) is None
 

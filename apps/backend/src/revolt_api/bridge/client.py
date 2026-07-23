@@ -1007,13 +1007,28 @@ class RosBridgeClient:
 		heading = int(msg["heading"])
 		sog_kn = None if sog >= 102.25 or sog < 0.001 else sog
 		heading_deg = None if heading == 511 else heading
+
+		# ITU-R M.1371 (the AIS message spec) has its own "position not available" sentinel too:
+		# lat=91, lon=181 -- decoded verbatim by pyais (Hardware/ais/ais/ais_decoder.py) with no
+		# filtering, and genuinely on the wire for reports from a target that hasn't got a fix yet
+		# (e.g. some base station/AtoN messages). Both values sit outside the real geographic
+		# range, which is exactly what crashed the frontend's map marker (maplibre's LngLat
+		# rejects a latitude outside -90..90) -- checked generally rather than against the exact
+		# sentinel so any other corrupted decode off this same unvalidated serial line is caught
+		# too, same posture as _handle_physical_gnss_fix's missing-fields check below.
+		lat = float(msg["lat"])
+		lon = float(msg["lon"])
+		if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+			logger.warning("rosbridge_ais_target_invalid_position", lat=lat, lon=lon)
+			return None
+
 		return AisTargetMsg(
 			v="1",
 			type="ais_target",
 			timestamp_ms=now,
 			mmsi=int(msg["mmsi"]),
-			lat=float(msg["lat"]),
-			lon=float(msg["lon"]),
+			lat=lat,
+			lon=lon,
 			sog_kn=sog_kn,
 			heading_deg=heading_deg,
 		)
