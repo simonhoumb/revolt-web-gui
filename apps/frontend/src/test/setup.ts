@@ -86,6 +86,7 @@ vi.mock("maplibre-gl", () => {
 		project = vi.fn(() => ({ x: 0, y: 0 }));
 		queryRenderedFeatures = vi.fn(() => []);
 		dragPan = { enable: vi.fn(), disable: vi.fn(), isActive: vi.fn(() => false) };
+		isZooming = vi.fn(() => false);
 		touchZoomRotate = { disableRotation: vi.fn() };
 		scrollZoom = { enable: vi.fn(), disable: vi.fn() };
 		on = vi.fn();

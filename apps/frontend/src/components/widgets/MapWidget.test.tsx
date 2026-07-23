@@ -142,6 +142,7 @@ interface MockMapInstance {
 	jumpTo: ReturnType<typeof vi.fn>;
 	zoomIn: ReturnType<typeof vi.fn>;
 	zoomOut: ReturnType<typeof vi.fn>;
+	isZooming: ReturnType<typeof vi.fn>;
 	dragPan: {
 		enable: ReturnType<typeof vi.fn>;
 		disable: ReturnType<typeof vi.fn>;
@@ -228,6 +229,7 @@ vi.mock("maplibre-gl", () => {
 		// (encValidation.test.ts covers that in isolation), just need queryRenderedFeatures'
 		// layer list to come through unfiltered.
 		getLayer = vi.fn(() => ({}));
+		isZooming = vi.fn(() => false);
 		dragPan = new MockDragPan();
 		touchZoomRotate = new MockTouchZoomRotate();
 		scrollZoom = new MockScrollZoom();
@@ -586,6 +588,25 @@ describe("MapWidget", () => {
 
 		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
 		mapInstances[0]?.dragPan.isActive.mockReturnValue(true);
+		mapInstances[0]?.easeTo.mockClear();
+
+		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");
+
+		expect(mapInstances[0]?.easeTo).not.toHaveBeenCalled();
+	});
+
+	it("does not fight an active scroll-zoom gesture with a bearing update", () => {
+		// Same reasoning as the drag-gesture guard above: a heading/course tick arriving mid-zoom
+		// retargeting the camera's bearing via its own easeTo, while MapLibre's own zoom
+		// interpolation is also actively driving the same camera, is what read as jitter
+		// specifically while zooming.
+		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
+		setTrack();
+		setMission();
+		const { container } = render(<MapWidget />);
+
+		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
+		mapInstances[0]?.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easeTo.mockClear();
 
 		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");

@@ -91,11 +91,14 @@ export function MapWidget() {
 	// the chart's bearing changes. Skip the update while the operator is
 	// actively dragging -- same guard the OpenBridge ECDIS demo uses --
 	// otherwise every heading/course tick fights the pan gesture and the drag
-	// feels like it keeps getting cancelled. eased (not snapped) so the
-	// rotation itself isn't jarring once it does apply.
+	// feels like it keeps getting cancelled. Same reasoning extends to scroll-zoom (isZooming):
+	// without it, a heading/course tick arriving mid-gesture retargets the camera's bearing via
+	// its own easeTo while MapLibre's own zoom interpolation is also actively driving the same
+	// camera, and the two fighting over the same transition is what read as jitter specifically
+	// while zooming. eased (not snapped) so the rotation itself isn't jarring once it does apply.
 	useEffect(() => {
 		const map = mapRef.current;
-		if (!map || map.dragPan.isActive()) return;
+		if (!map || map.dragPan.isActive() || map.isZooming()) return;
 		const bearing =
 			rotationMode === "H" ? (headingDeg ?? 0) : rotationMode === "C" ? (courseDeg ?? 0) : 0;
 		map.easeTo({ bearing, duration: 300 });
