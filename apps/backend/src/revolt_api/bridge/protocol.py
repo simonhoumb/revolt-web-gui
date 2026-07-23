@@ -95,6 +95,17 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/fix",
 		"sensor_msgs/NavSatFix",
+		# Confirmed via ros2 topic hz against a real rosbag: the VS330 publishes at a steady
+		# 20Hz, not the ~1Hz this mock server's own comment ("rates matching real hardware")
+		# assumed when it was built. 1Hz matches standard marine GPS/NMEA output and IEC 61174
+		# display conventions -- a vessel this slow (~0.5-1 kn normal transit) moves well under a
+		# metre between 1-second fixes, imperceptible at any chart zoom level that matters -- and
+		# throttling down to it also stops this topic from swamping BridgeDataContext's single
+		# combined reducer with re-renders 20x more often than every other consumer (MapWidget's
+		# camera-follow/marker updates especially) actually needs, which was making map zoom feel
+		# laggy during real playback in a way the mock's own gentler simulated rate never showed.
+		throttle_rate_ms=1000,
+		frontend_throttle_ms=1000,
 		description=(
 			"Primary GNSS fix (WGS84): latitude, longitude, altitude. "
 			"Published by the Hemisphere Vector VS330 GNSS compass via nmea_navsat."
@@ -103,6 +114,9 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/vel",
 		"geometry_msgs/TwistStamped",
+		# See /fix's own comment above -- same real-vs-assumed rate mismatch, same fix.
+		throttle_rate_ms=1000,
+		frontend_throttle_ms=1000,
 		description=(
 			"GNSS speed/course over ground (VTG-derived), ENU linear.x/y components. "
 			"Published by the Hemisphere Vector VS330 GNSS compass via nmea_navsat."
@@ -111,6 +125,9 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/heading",
 		"geometry_msgs/QuaternionStamped",
+		# See /fix's own comment above -- same real-vs-assumed rate mismatch, same fix.
+		throttle_rate_ms=1000,
+		frontend_throttle_ms=1000,
 		description=(
 			"True heading as a yaw-only quaternion, derived from the NMEA HDT sentence. "
 			"Published by the Hemisphere Vector VS330 GNSS compass (dual-antenna RTK "
