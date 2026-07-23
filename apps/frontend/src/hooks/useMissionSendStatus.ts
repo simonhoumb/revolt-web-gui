@@ -1,5 +1,5 @@
 import type { MissionSendStatusMsg } from "@revolt/shared-types";
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 
 /**
  * The live mission_send_status broadcast, scoped to missionId -- null if nothing has been sent

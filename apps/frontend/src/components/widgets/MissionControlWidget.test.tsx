@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, MissionExecutionStatusMsg, Waypoint } from "@revolt/shared-types";
 import { MissionControlWidget } from "./MissionControlWidget.js";
-import { useMission } from "../../context/MissionContext.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
+import { useMission } from "../../context/useMission.js";
+import { useBridgeData } from "../../context/useBridgeData.js";
 
-vi.mock("../../context/MissionContext.js", () => ({
+vi.mock("../../context/useMission.js", () => ({
 	useMission: vi.fn(),
 }));
-vi.mock("../../context/BridgeDataContext.js", () => ({
+vi.mock("../../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 

@@ -7,9 +7,9 @@ import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useAisTargets } from "../../hooks/useAisTargets.js";
-import { useMission } from "../../context/MissionContext.js";
-import { useLegHazards } from "../../context/LegHazardsContext.js";
-import { useApps } from "../../context/AppContext.js";
+import { useMission } from "../../context/useMission.js";
+import { useLegHazards } from "../../context/useLegHazards.js";
+import { useApps } from "../../context/useApps.js";
 import { APPS } from "./apps.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
@@ -23,13 +23,13 @@ vi.mock("../../hooks/useVesselTrack.js", () => ({
 vi.mock("../../hooks/useAisTargets.js", () => ({
 	useAisTargets: vi.fn(),
 }));
-vi.mock("../../context/MissionContext.js", () => ({
+vi.mock("../../context/useMission.js", () => ({
 	useMission: vi.fn(),
 }));
-vi.mock("../../context/LegHazardsContext.js", () => ({
+vi.mock("../../context/useLegHazards.js", () => ({
 	useLegHazards: vi.fn(),
 }));
-vi.mock("../../context/AppContext.js", () => ({
+vi.mock("../../context/useApps.js", () => ({
 	useApps: vi.fn(),
 }));
 

@@ -4,8 +4,8 @@ import type { Mock } from "vitest";
 import { TopNav } from "./TopNav.js";
 import { useVesselHealth } from "../../hooks/useVesselHealth.js";
 import { useBatteryData } from "../../hooks/useBatteryData.js";
-import { useLayout } from "../../context/LayoutContext.js";
-import { useApps } from "../../context/AppContext.js";
+import { useLayout } from "../../context/useLayout.js";
+import { useApps } from "../../context/useApps.js";
 import { APPS } from "../widgets/apps.js";
 import { useMinuteUpdate } from "../../hooks/useMinuteUpdate.js";
 
@@ -15,10 +15,10 @@ vi.mock("../../hooks/useVesselHealth.js", () => ({
 vi.mock("../../hooks/useBatteryData.js", () => ({
 	useBatteryData: vi.fn(),
 }));
-vi.mock("../../context/LayoutContext.js", () => ({
+vi.mock("../../context/useLayout.js", () => ({
 	useLayout: vi.fn(),
 }));
-vi.mock("../../context/AppContext.js", () => ({
+vi.mock("../../context/useApps.js", () => ({
 	useApps: vi.fn(),
 }));
 vi.mock("../../hooks/useMinuteUpdate.js", () => ({

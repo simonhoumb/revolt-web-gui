@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { APPS, type AppDefinition, type AppId } from "../components/widgets/apps.js";
+import { AppContext } from "./useApps.js";
 
-interface AppContextValue {
+export interface AppContextValue {
 	activeAppId: AppId;
 	setActiveApp: (id: AppId) => void;
 	appDef: AppDefinition;
@@ -31,8 +32,6 @@ function saveActiveAppId(id: AppId): void {
 	}
 }
 
-const AppContext = createContext<AppContextValue | null>(null);
-
 export function AppProvider({ children }: { children: ReactNode }) {
 	const [activeAppId, setActiveAppId] = useState<AppId>(loadActiveAppId);
 
@@ -54,10 +53,4 @@ export function AppProvider({ children }: { children: ReactNode }) {
 			{children}
 		</AppContext.Provider>
 	);
-}
-
-export function useApps(): AppContextValue {
-	const ctx = useContext(AppContext);
-	if (!ctx) throw new Error("useApps must be used within AppProvider");
-	return ctx;
 }

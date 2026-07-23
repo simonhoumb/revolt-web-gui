@@ -1,4 +1,4 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 import { ON_CURRENT_THRESHOLD_A } from "../lib/thresholds.js";
 
 export interface ThrusterStatus {

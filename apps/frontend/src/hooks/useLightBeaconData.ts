@@ -1,4 +1,4 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 
 export interface LightBeaconData {
 	red: boolean;

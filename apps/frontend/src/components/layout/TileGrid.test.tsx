@@ -2,16 +2,17 @@ import { useEffect } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { TileGrid, nextNeededRowsBasis } from "./TileGrid.js";
-import { useLayout } from "../../context/LayoutContext.js";
-import { useApps } from "../../context/AppContext.js";
+import { TileGrid } from "./TileGrid.js";
+import { nextNeededRowsBasis } from "./neededRowsBasis.js";
+import { useLayout } from "../../context/useLayout.js";
+import { useApps } from "../../context/useApps.js";
 import { APPS } from "../widgets/apps.js";
 
-vi.mock("../../context/LayoutContext.js", () => ({
+vi.mock("../../context/useLayout.js", () => ({
 	useLayout: vi.fn(),
 }));
 
-vi.mock("../../context/AppContext.js", () => ({
+vi.mock("../../context/useApps.js", () => ({
 	useApps: vi.fn(),
 }));
 
@@ -19,7 +20,7 @@ vi.mock("../../context/AppContext.js", () => ({
 // real BatteryWidget/GnssWidget), which read live telemetry via useBridgeData() -- stub it so
 // tiles mount without needing a real BridgeDataProvider, matching how App.test.tsx isn't
 // exercising these widgets' own data-driven behavior, just TileGrid's layout wiring.
-vi.mock("../../context/BridgeDataContext.js", () => ({
+vi.mock("../../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(() => ({
 		battery: null,
 		current: { stern_port: null, stern_star: null, bow: null },

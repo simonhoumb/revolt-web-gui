@@ -2,10 +2,10 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { WidgetPicker } from "./WidgetPicker.js";
-import { useLayout } from "../../context/LayoutContext.js";
+import { useLayout } from "../../context/useLayout.js";
 import { ALL_WIDGET_IDS } from "../widgets/registry.js";
 
-vi.mock("../../context/LayoutContext.js", () => ({
+vi.mock("../../context/useLayout.js", () => ({
 	useLayout: vi.fn(),
 }));
 

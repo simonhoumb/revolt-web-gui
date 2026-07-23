@@ -1,12 +1,4 @@
-import {
-	createContext,
-	useContext,
-	useState,
-	useEffect,
-	useCallback,
-	useMemo,
-	type ReactNode,
-} from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import {
 	type WidgetId,
 	type TileLayout,
@@ -14,6 +6,7 @@ import {
 	WIDGET_REGISTRY,
 	GRID_COLS,
 } from "../components/widgets/registry.js";
+import { LayoutContext } from "./useLayout.js";
 
 export interface LayoutConfig {
 	tiles: TileLayout[];
@@ -27,7 +20,7 @@ export interface LayoutTemplate {
 	savedAt: number;
 }
 
-interface LayoutContextValue {
+export interface LayoutContextValue {
 	config: LayoutConfig;
 	updateLayout: (tiles: TileLayout[]) => void;
 	addWidget: (id: WidgetId) => void;
@@ -148,8 +141,6 @@ function nextOpenPosition(tiles: TileLayout[]): { x: number; y: number } {
 	return { x: 0, y: maxY };
 }
 
-const LayoutContext = createContext<LayoutContextValue | null>(null);
-
 export function LayoutProvider({ children }: { children: ReactNode }) {
 	const [config, setConfig] = useState<LayoutConfig>(loadConfig);
 	const [userTemplates, setUserTemplates] = useState<LayoutTemplate[]>(loadTemplates);
@@ -264,10 +255,4 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 			{children}
 		</LayoutContext.Provider>
 	);
-}
-
-export function useLayout(): LayoutContextValue {
-	const ctx = useContext(LayoutContext);
-	if (!ctx) throw new Error("useLayout must be used within LayoutProvider");
-	return ctx;
 }

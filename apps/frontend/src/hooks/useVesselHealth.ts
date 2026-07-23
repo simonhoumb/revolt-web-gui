@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 import { voltageStatus } from "./useBatteryData.js";
 
 export type AlertLevel = "alarm" | "warning" | "caution";

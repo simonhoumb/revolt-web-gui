@@ -2,7 +2,8 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { RosCommandMeta, RosCommandResult } from "@revolt/shared-types";
-import { RosCommandWidget, matchRank } from "./RosCommandWidget.js";
+import { RosCommandWidget } from "./RosCommandWidget.js";
+import { matchRank } from "./matchRank.js";
 import { rosCommandApi } from "../../lib/rosCommandApi.js";
 
 vi.mock("../../lib/rosCommandApi.js", async () => {

@@ -1,8 +1,8 @@
 import { ObcNavigationMenu } from "@oicl/openbridge-webcomponents-react/components/navigation-menu/navigation-menu.js";
 import { ObcNavigationItem } from "@oicl/openbridge-webcomponents-react/components/navigation-item/navigation-item.js";
 import { ObcNavigationMenuVariant } from "@oicl/openbridge-webcomponents/dist/components/navigation-menu/navigation-menu.js";
-import { useApps } from "../../context/AppContext.js";
-import { useLayout } from "../../context/LayoutContext.js";
+import { useApps } from "../../context/useApps.js";
+import { useLayout } from "../../context/useLayout.js";
 import { APPS, ALL_APP_IDS, type AppId } from "../widgets/apps.js";
 import styles from "./NavigationMenu.module.css";
 

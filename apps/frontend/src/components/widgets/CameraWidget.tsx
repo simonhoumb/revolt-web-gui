@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
+import { useBridgeData } from "../../context/useBridgeData.js";
 import styles from "./CameraWidget.module.css";
 
 export function CameraWidget() {

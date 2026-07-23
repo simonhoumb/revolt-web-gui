@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
-import { Tooltip, TooltipVariant, boxForSide, fitsViewport, pickSide } from "./Tooltip.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Tooltip, TooltipVariant } from "./Tooltip.js";
+import { boxForSide, fitsViewport, parseCssTimeMs, pickSide } from "./tooltipPlacement.js";
 
 afterEach(() => {
 	cleanup();
@@ -103,6 +104,20 @@ describe("pickSide", () => {
 	});
 });
 
+describe("parseCssTimeMs", () => {
+	it("parses milliseconds", () => {
+		expect(parseCssTimeMs("500ms", 0)).toBe(500);
+	});
+
+	it("parses seconds", () => {
+		expect(parseCssTimeMs("1.5s", 0)).toBe(1500);
+	});
+
+	it("falls back on an unparseable value", () => {
+		expect(parseCssTimeMs("nonsense", 250)).toBe(250);
+	});
+});
+
 describe("Tooltip", () => {
 	it("renders its children", () => {
 		render(
@@ -169,7 +184,8 @@ describe("Tooltip", () => {
 			</Tooltip>,
 		);
 		const anchor = container.querySelector<HTMLElement>("span");
-		const bubble = anchor?.querySelector<HTMLElement>('[class*="bubble"]');
+		// Portaled to document.body (see Tooltip.tsx), so it's no longer a DOM descendant of anchor.
+		const bubble = document.querySelector<HTMLElement>('[class*="bubble"]');
 		if (!anchor || !bubble) throw new Error("expected anchor and bubble to be in the DOM");
 
 		// jsdom never lays anything out, so getBoundingClientRect() has to be mocked to exercise
@@ -184,5 +200,99 @@ describe("Tooltip", () => {
 
 		expect(bubble.dataset.side).toBe("top");
 		expect(bubble.style.top).toBe("558px"); // 590 - GAP(8) - bubble.height(24)
+	});
+
+	it("reveals only after the show delay elapses, and hides after the hide delay elapses", () => {
+		// jsdom doesn't implement real CSS custom-property inheritance for getComputedStyle, so this
+		// exercises the JS timer fallback path (DEFAULT_SHOW_DELAY_MS/DEFAULT_HIDE_DELAY_MS in
+		// Tooltip.tsx) rather than a --tooltip-show-delay/--tooltip-hide-delay override, which isn't
+		// reliably testable outside a real browser.
+		vi.useFakeTimers();
+		try {
+			const { container } = render(
+				<Tooltip label="Info">
+					<button>Trigger</button>
+				</Tooltip>,
+			);
+			const anchor = container.querySelector<HTMLElement>("span");
+			const bubble = document.querySelector<HTMLElement>('[class*="bubble"]');
+			if (!anchor || !bubble) throw new Error("expected anchor and bubble to be in the DOM");
+
+			act(() => {
+				fireEvent.mouseEnter(anchor);
+			});
+			expect(bubble.dataset.visible).toBeUndefined();
+
+			act(() => {
+				vi.advanceTimersByTime(499);
+			});
+			expect(bubble.dataset.visible).toBeUndefined();
+
+			act(() => {
+				vi.advanceTimersByTime(1);
+			});
+			expect(bubble.dataset.visible).toBe("true");
+
+			act(() => {
+				fireEvent.mouseLeave(anchor);
+				vi.advanceTimersByTime(0);
+			});
+			expect(bubble.dataset.visible).toBeUndefined();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	describe("asChild", () => {
+		it("renders the child directly with no wrapping element", () => {
+			const { container } = render(
+				<Tooltip label="Info" asChild>
+					<button>Trigger</button>
+				</Tooltip>,
+			);
+			expect(container.querySelector('[class*="anchor"]')).toBeNull();
+			expect(container.firstElementChild?.tagName).toBe("BUTTON");
+		});
+
+		it("attaches placement handlers directly to the child and still positions the bubble", () => {
+			Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
+			Object.defineProperty(window, "innerHeight", { configurable: true, value: 600 });
+
+			const { container } = render(
+				<Tooltip label="Info" asChild>
+					<button>Trigger</button>
+				</Tooltip>,
+			);
+			const button = container.querySelector("button");
+			const bubble = document.querySelector<HTMLElement>('[class*="bubble"]');
+			if (!button || !bubble) throw new Error("expected button and bubble to be in the DOM");
+
+			button.getBoundingClientRect = () => rect({ top: 100, left: 100, right: 140, bottom: 120 });
+			bubble.getBoundingClientRect = () => rect({ width: 60, height: 24 });
+
+			act(() => {
+				fireEvent.mouseEnter(button);
+			});
+
+			expect(bubble.dataset.side).toBe("bottom");
+			expect(bubble.style.top).toBe("128px"); // trigger.bottom(120) + GAP(8)
+		});
+
+		it("still calls the child's own handler alongside its own", () => {
+			const onMouseEnter = vi.fn();
+			const { container } = render(
+				<Tooltip label="Info" asChild>
+					<button onMouseEnter={onMouseEnter}>Trigger</button>
+				</Tooltip>,
+			);
+			const button = container.querySelector("button");
+			if (!button) throw new Error("expected button in the DOM");
+
+			act(() => {
+				fireEvent.mouseEnter(button);
+			});
+
+			expect(onMouseEnter).toHaveBeenCalledTimes(1);
+		});
 	});
 });

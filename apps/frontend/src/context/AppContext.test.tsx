@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AppProvider, useApps } from "./AppContext.js";
+import { AppProvider } from "./AppContext.js";
+import { useApps } from "./useApps.js";
 
 const ACTIVE_APP_KEY = "revolt-active-app";
 

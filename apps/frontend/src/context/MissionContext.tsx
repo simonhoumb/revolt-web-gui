@@ -1,12 +1,4 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useMemo,
-	useState,
-	type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
 	Mission,
 	MissionExecutionResult,
@@ -15,8 +7,9 @@ import type {
 } from "@revolt/shared-types";
 import { missionApi } from "../lib/missionApi.js";
 import { useMissionStatusSync } from "../hooks/useMissionStatusSync.js";
+import { MissionContext } from "./useMission.js";
 
-interface MissionContextValue {
+export interface MissionContextValue {
 	missions: Mission[];
 	loading: boolean;
 	activeMissionId: string | null;
@@ -43,8 +36,6 @@ interface MissionContextValue {
 	pauseMission: (missionId: string) => Promise<MissionExecutionResult>;
 	terminateMission: (missionId: string) => Promise<MissionExecutionResult>;
 }
-
-const MissionContext = createContext<MissionContextValue | null>(null);
 
 function replaceMission(missions: Mission[], updated: Mission): Mission[] {
 	return missions.map((m) => (m.id === updated.id ? updated : m));
@@ -373,10 +364,4 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	);
 
 	return <MissionContext.Provider value={value}>{children}</MissionContext.Provider>;
-}
-
-export function useMission(): MissionContextValue {
-	const ctx = useContext(MissionContext);
-	if (!ctx) throw new Error("useMission must be used within MissionProvider");
-	return ctx;
 }

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LayoutProvider, useLayout } from "./LayoutContext.js";
+import { LayoutProvider } from "./LayoutContext.js";
+import { useLayout } from "./useLayout.js";
 import { ALL_WIDGET_IDS, WIDGET_REGISTRY } from "../components/widgets/registry.js";
 
 const LAYOUT_KEY = "revolt-dashboard-layout";

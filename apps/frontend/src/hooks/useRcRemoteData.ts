@@ -1,4 +1,4 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 
 // custom_msgs/RCRemote.msg documents throttle/aileron/rudder as raw PWM in the range
 // 1070-1930, so 1500 is the stick's own documented center, not a tuned constant.

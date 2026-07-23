@@ -15,8 +15,8 @@ import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/compo
 import { ObiMediaPlay } from "@oicl/openbridge-webcomponents-react/icons/icon-media-play.js";
 import { ObiMediaPause } from "@oicl/openbridge-webcomponents-react/icons/icon-media-pause.js";
 import { ObiMediaStop } from "@oicl/openbridge-webcomponents-react/icons/icon-media-stop.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
-import { useMission } from "../../context/MissionContext.js";
+import { useBridgeData } from "../../context/useBridgeData.js";
+import { useMission } from "../../context/useMission.js";
 import { useMissionExecutionStatus } from "../../hooks/useMissionExecutionStatus.js";
 import { formatDuration, formatLatLon } from "../../lib/format.js";
 import { haversineDistanceM } from "../../lib/geo.js";

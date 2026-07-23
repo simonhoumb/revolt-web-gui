@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import type { Mission, MissionSendStatusMsg } from "@revolt/shared-types";
-import { MissionProvider, useMission } from "./MissionContext.js";
+import { MissionProvider } from "./MissionContext.js";
+import { useMission } from "./useMission.js";
 import { missionApi } from "../lib/missionApi.js";
-import { useBridgeData } from "./BridgeDataContext.js";
+import { useBridgeData } from "./useBridgeData.js";
 
 vi.mock("../lib/missionApi.js", () => ({
 	missionApi: {
@@ -24,7 +25,7 @@ vi.mock("../lib/missionApi.js", () => ({
 	},
 }));
 
-vi.mock("./BridgeDataContext.js", () => ({
+vi.mock("./useBridgeData.js", () => ({
 	useBridgeData: vi.fn(() => ({ missionSendStatus: null })),
 }));
 

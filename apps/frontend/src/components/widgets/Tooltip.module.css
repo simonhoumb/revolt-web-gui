@@ -3,37 +3,35 @@
 	display: inline-flex;
 }
 
-/* Positioned via inline style (top/left, computed in Tooltip.tsx from getBoundingClientRect()
-   against the viewport) rather than pure CSS side rules -- picking a side that actually fits
-   needs to know the bubble's own rendered size and the trigger's real viewport position, neither
-   of which CSS alone has access to. position: fixed (not absolute) matches
+/* Rendered through a portal to document.body (see Tooltip.tsx) rather than as a light-DOM child
+   of .anchor, so it isn't nested inside any ancestor that might apply a CSS transform (e.g.
+   react-grid-layout's tile positioning) -- a transformed ancestor becomes the containing block for
+   position: fixed descendants, which would otherwise resolve "fixed" relative to that ancestor
+   instead of the true viewport. Positioned via inline style (top/left, computed in Tooltip.tsx
+   from getBoundingClientRect() against the viewport); position: fixed matches
    getBoundingClientRect()'s viewport-relative coordinates directly, with no scroll-offset math
    needed.
-   --tooltip-show-delay/--tooltip-hide-delay (defaults below, each overridable per instance via
-   inline style on the trigger, e.g. style={{ "--tooltip-show-delay": "0.2s" }}) apply on the way
-   into and out of the hover/focus state respectively: the base rule here (hide-delay) is what
-   applies once :hover/:focus-within stop matching, so it lingers briefly rather than vanishing
-   the instant the cursor leaves, while the :hover/:focus-within rule (show-delay) holds off the
-   initial appearance. */
+   Visibility is JS-driven (data-visible, toggled from Tooltip.tsx after --tooltip-show-delay/
+   --tooltip-hide-delay elapse, read via getComputedStyle on .anchor -- override either one by
+   setting it on an ancestor of the <Tooltip> usage, not declared here since a default declared
+   directly on .anchor would always win over an inherited override; see parseCssTimeMs's own
+   comment in Tooltip.tsx for the defaults) rather than CSS :hover/:focus-within, since portaling
+   moves the bubble out of .anchor's own DOM subtree -- a CSS descendant selector can no longer
+   reach it. Only the fade itself stays a plain CSS transition. */
 .bubble {
-	--tooltip-show-delay: 500ms;
-	--tooltip-hide-delay: 0ms;
-
 	position: fixed;
-	z-index: 10;
+	z-index: 1000;
 	opacity: 0;
 	visibility: hidden;
 	pointer-events: none;
 	transition:
-		opacity 0.15s ease-in-out var(--tooltip-hide-delay),
-		visibility 0.15s var(--tooltip-hide-delay);
+		opacity 0.15s ease-in-out,
+		visibility 0.15s;
 }
 
-.anchor:hover > .bubble,
-.anchor:focus-within > .bubble {
+.bubble[data-visible] {
 	opacity: 1;
 	visibility: visible;
-	transition-delay: var(--tooltip-show-delay);
 }
 
 /* obc-tooltip's own arrow always points down out of its bottom edge (fixed in its shadow DOM,

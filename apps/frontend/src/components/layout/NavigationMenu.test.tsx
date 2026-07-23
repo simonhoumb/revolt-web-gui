@@ -2,14 +2,14 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { NavigationMenu } from "./NavigationMenu.js";
-import { useApps } from "../../context/AppContext.js";
-import { useLayout } from "../../context/LayoutContext.js";
+import { useApps } from "../../context/useApps.js";
+import { useLayout } from "../../context/useLayout.js";
 import { ALL_APP_IDS, APPS } from "../widgets/apps.js";
 
-vi.mock("../../context/AppContext.js", () => ({
+vi.mock("../../context/useApps.js", () => ({
 	useApps: vi.fn(),
 }));
-vi.mock("../../context/LayoutContext.js", () => ({
+vi.mock("../../context/useLayout.js", () => ({
 	useLayout: vi.fn(),
 }));
 
