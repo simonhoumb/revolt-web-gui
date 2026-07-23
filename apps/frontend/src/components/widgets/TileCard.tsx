@@ -8,6 +8,7 @@ import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/component
 import type { WidgetId } from "./registry.js";
 import type { WidgetViewMode } from "./ViewModeToggle.js";
 import styles from "./TileCard.module.css";
+import { Tooltip } from "./Tooltip.js";
 
 interface TileCardProps {
 	title: string;
@@ -36,19 +37,30 @@ export function TileCard({
 				{title}
 			</span>
 			{viewMode !== undefined && onViewModeChange !== undefined && (
-				<ObcIconButton
-					slot="title"
-					className={styles.viewModeButton}
-					variant={IconButtonVariant.flat}
-					aria-label={
-						viewMode === "instrument" ? "Switch to detailed view" : "Switch to instrument view"
+				<Tooltip
+					label={
+						viewMode === "instrument"
+							? "Switch to detailed view"
+							: "Switch to instrument view"
 					}
-					onClick={() => {
-						onViewModeChange(viewMode === "instrument" ? "detailed" : "instrument");
-					}}
+					asChild
 				>
-					{viewMode === "instrument" ? <ObiTable /> : <ObiSpeed />}
-				</ObcIconButton>
+					<ObcIconButton
+						slot="title"
+						className={styles.viewModeButton}
+						variant={IconButtonVariant.flat}
+						aria-label={
+							viewMode === "instrument"
+								? "Switch to detailed view"
+								: "Switch to instrument view"
+						}
+						onClick={() => {
+							onViewModeChange(viewMode === "instrument" ? "detailed" : "instrument");
+						}}
+					>
+						{viewMode === "instrument" ? <ObiTable /> : <ObiSpeed />}
+					</ObcIconButton>
+				</Tooltip>
 			)}
 			{editMode && (
 				<ObcIconButton
