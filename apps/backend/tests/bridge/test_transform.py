@@ -465,6 +465,33 @@ def test_physical_gnss_velocity(client: RosBridgeClient) -> None:
 	assert result["course_deg"] == pytest.approx(45.0)
 
 
+def test_gnss_velocity_below_min_speed_has_no_course(client: RosBridgeClient) -> None:
+	# Course over ground is an angle derived from the velocity vector -- below MIN_COG_SPEED_MS
+	# the vector is small enough that receiver noise dominates the angle, so it's published as
+	# None rather than a meaningless number (see MIN_COG_SPEED_MS's own comment in client.py).
+	msg = {"twist": {"linear": {"x": 0.01, "y": 0.01, "z": 0.0}}}
+	result = client._transform("/vel", msg)
+	assert result is not None
+	assert result["speed_ms"] == pytest.approx(0.01414, abs=1e-4)
+	assert result["course_deg"] is None
+
+
+def test_gnss_velocity_ema_smooths_course_across_messages(client: RosBridgeClient) -> None:
+	# Same speed (5 m/s), course swings from 45deg to 135deg between two messages -- the smoothed
+	# course should land somewhere between the two raw values, not jump straight to 135.
+	msg_45 = {"twist": {"linear": {"x": 3.5355339059327378, "y": 3.5355339059327378, "z": 0.0}}}
+	msg_135 = {"twist": {"linear": {"x": 3.5355339059327378, "y": -3.5355339059327378, "z": 0.0}}}
+
+	first = client._transform("/vel", msg_45)
+	assert first is not None
+	assert first["course_deg"] == pytest.approx(45.0)
+
+	second = client._transform("/vel", msg_135)
+	assert second is not None
+	assert second["course_deg"] is not None
+	assert 45.0 < second["course_deg"] < 135.0
+
+
 def test_sim_gnss_velocity(client: RosBridgeClient) -> None:
 	result = client._transform("/revolt/sim/stc/gnss/velocity_vector", _FLOAT32MA_2)
 	assert result is not None

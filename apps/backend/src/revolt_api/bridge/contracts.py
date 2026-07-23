@@ -161,7 +161,10 @@ class GnssVelocityMsg(TypedDict):
 	type: Literal["gnss_velocity"]
 	timestamp_ms: int
 	speed_ms: float  # from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
-	course_deg: float  # course over ground 0-360, from /vel TwistStamped linear.x/y bearing
+	# Course over ground 0-360, from /vel TwistStamped linear.x/y bearing. None below
+	# MIN_COG_SPEED_MS in client.py -- the angle is meaningless noise at near-zero speed, not
+	# just imprecise.
+	course_deg: float | None
 
 
 class SimGnssVelocityMsg(TypedDict):
