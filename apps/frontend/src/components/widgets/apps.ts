@@ -78,7 +78,7 @@ export const APPS: Record<AppId, AppDefinition> = {
 	},
 	custom: {
 		id: "custom",
-		label: "Customizable Dashboard",
+		label: "Custom Dashboard",
 		icon: ObiDashboard,
 		kind: "custom",
 	},
