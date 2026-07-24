@@ -14,12 +14,6 @@ import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/compone
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
 import { ObcInstrumentField } from "@oicl/openbridge-webcomponents-react/navigation-instruments/instrument-field/instrument-field.js";
 import { InstrumentFieldSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/instrument-field/instrument-field.js";
-import { ObcAlertFrame } from "@oicl/openbridge-webcomponents-react/components/alert-frame/alert-frame.js";
-import {
-	ObcAlertFrameStatus,
-	ObcAlertFrameThickness,
-	ObcAlertFrameType,
-} from "@oicl/openbridge-webcomponents/dist/components/alert-frame/alert-frame.js";
 import { ObiMediaPlay } from "@oicl/openbridge-webcomponents-react/icons/icon-media-play.js";
 import { ObiMediaPause } from "@oicl/openbridge-webcomponents-react/icons/icon-media-pause.js";
 import { ObiMediaStop } from "@oicl/openbridge-webcomponents-react/icons/icon-media-stop.js";

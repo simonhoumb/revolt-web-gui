@@ -80,13 +80,27 @@ describe("pickSide", () => {
 	const bubble = { width: 60, height: 24 };
 
 	it("defaults to bottom when there's room below", () => {
-		const trigger = rect({ top: 100, left: 100, right: 140, bottom: 120, width: 40, height: 20 });
+		const trigger = rect({
+			top: 100,
+			left: 100,
+			right: 140,
+			bottom: 120,
+			width: 40,
+			height: 20,
+		});
 		expect(pickSide(trigger, bubble, 800, 600).side).toBe("bottom");
 	});
 
 	it("falls back to top when the trigger is at the bottom of the viewport", () => {
 		// Right at the bottom edge -- placing below would push the bubble off-screen.
-		const trigger = rect({ top: 590, left: 100, right: 140, bottom: 600, width: 40, height: 10 });
+		const trigger = rect({
+			top: 590,
+			left: 100,
+			right: 140,
+			bottom: 600,
+			width: 40,
+			height: 10,
+		});
 		expect(pickSide(trigger, bubble, 800, 600).side).toBe("top");
 	});
 
@@ -267,7 +281,8 @@ describe("Tooltip", () => {
 			const bubble = document.querySelector<HTMLElement>('[class*="bubble"]');
 			if (!button || !bubble) throw new Error("expected button and bubble to be in the DOM");
 
-			button.getBoundingClientRect = () => rect({ top: 100, left: 100, right: 140, bottom: 120 });
+			button.getBoundingClientRect = () =>
+				rect({ top: 100, left: 100, right: 140, bottom: 120 });
 			bubble.getBoundingClientRect = () => rect({ width: 60, height: 24 });
 
 			act(() => {

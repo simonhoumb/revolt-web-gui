@@ -108,7 +108,10 @@ function setBridgeData(
 	});
 }
 
-function getInstrumentFields(): Map<string, { value: number | undefined; setpoint: number | undefined }> {
+function getInstrumentFields(): Map<
+	string,
+	{ value: number | undefined; setpoint: number | undefined }
+> {
 	const fields = document.querySelectorAll("obc-instrument-field") as NodeListOf<
 		HTMLElement & { tag: string; value: number | undefined; setpoint: number | undefined }
 	>;
@@ -305,7 +308,9 @@ describe("MissionControlWidget", () => {
 			currentWaypoint.position.latitude,
 			currentWaypoint.position.longitude,
 		);
-		const expectedEta = accumulateRouteEta([{ distanceM, speedKt: currentWaypoint.target_speed }]);
+		const expectedEta = accumulateRouteEta([
+			{ distanceM, speedKt: currentWaypoint.target_speed },
+		]);
 
 		const fields = getInstrumentFields();
 		expect(fields.get("DTW")?.value).toBeCloseTo(distanceM / METERS_PER_NM, 5);
