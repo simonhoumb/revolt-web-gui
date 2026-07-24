@@ -12,6 +12,7 @@ function toDeg(rad: number): number {
 	return (rad * 180) / Math.PI;
 }
 
+/** Great-circle distance between two lat/lon points, in meters (haversine formula). */
 export function haversineDistanceM(aLat: number, aLon: number, bLat: number, bLon: number): number {
 	const dLat = toRad(bLat - aLat);
 	const dLon = toRad(bLon - aLon);
@@ -21,6 +22,7 @@ export function haversineDistanceM(aLat: number, aLon: number, bLat: number, bLo
 	return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
 
+/** Initial great-circle bearing from point a to point b, in degrees, normalized to [0, 360). */
 export function bearingDeg(aLat: number, aLon: number, bLat: number, bLon: number): number {
 	const lat1 = toRad(aLat);
 	const lat2 = toRad(bLat);
@@ -35,7 +37,7 @@ function normalizeDeg180(deg: number): number {
 }
 
 /**
- * Great-circle destination point given a start position, bearing, and distance -- the standard
+ * Great-circle destination point given a start position, bearing, and distance: the standard
  * "direct geodesic" formula (same family as haversineDistanceM/bearingDeg above).
  */
 export function destinationPoint(
@@ -60,18 +62,21 @@ export function destinationPoint(
 	return { lat: toDeg(phi2), lon: normalizeDeg180(toDeg(lambda2)) };
 }
 
+/** One end of a route leg. */
 export interface LegEndpoint {
 	id: string;
 	lat: number;
 	lon: number;
 }
 
+/** One leg of the route, from one waypoint to the next. */
 export interface LegPositions {
 	toId: string;
 	from: LegEndpoint;
 	to: LegEndpoint;
 }
 
+/** Substitutes one waypoint's live position (e.g. mid-drag) ahead of it being persisted. */
 export interface PositionOverride {
 	id: string;
 	lat: number;
@@ -102,13 +107,14 @@ export function computeLegPositions(
 	return legs;
 }
 
-// Turns tighter than this are treated as effectively straight -- not worth drawing an arc for,
+// Turns tighter than this are treated as effectively straight: not worth drawing an arc for,
 // and the tangent-length formula below blows up as the turn approaches a full reversal anyway.
 const MIN_TURN_DEG = 2;
 // Points sampled along each arc; enough to look smoothly curved at chart zoom levels without
 // generating an excessive number of GeoJSON vertices per waypoint.
 const ARC_SEGMENTS = 16;
 
+/** One waypoint's turn-radius fillet, ready to render as a map line. */
 export interface TurnArc {
 	waypointId: string;
 	points: { lat: number; lon: number }[];
@@ -116,10 +122,10 @@ export interface TurnArc {
 
 /**
  * The circular-arc "fillet" a vessel actually follows through a waypoint, tangent to both the
- * inbound and outbound legs -- the same construction real ECDIS route planning uses to turn a
+ * inbound and outbound legs: the same construction real ECDIS route planning uses to turn a
  * per-waypoint turn radius into a course-change arc (paired with a wheel-over point marking where
  * the turn begins, not modeled here). Returns null when the turn is negligible or the radius is
- * zero -- nothing to draw, the straight-line corner is already an accurate picture.
+ * zero; nothing to draw, the straight-line corner is already an accurate picture.
  */
 export function computeTurnArc(
 	prev: { lat: number; lon: number },
@@ -136,7 +142,7 @@ export function computeTurnArc(
 
 	const legInM = haversineDistanceM(prev.lat, prev.lon, turn.lat, turn.lon);
 	const legOutM = haversineDistanceM(turn.lat, turn.lon, next.lat, next.lon);
-	// Tangent length from the waypoint to where the arc leaves each straight leg -- the standard
+	// Tangent length from the waypoint to where the arc leaves each straight leg: the standard
 	// circular-fillet formula (radius * tan(halfAngle)), the same math behind wheel-over point
 	// calculations.
 	let tangentM = radiusM * Math.tan(toRad(Math.abs(turnDelta)) / 2);
@@ -167,7 +173,7 @@ export function computeTurnArc(
 /**
  * Turn arcs for every interior waypoint (one with both a previous and next neighbor) that has a
  * non-negligible course change and a positive switch_radius. Endpoints of the route never get an
- * arc -- there's no incoming or outgoing leg to blend.
+ * arc: there's no incoming or outgoing leg to blend.
  */
 export function computeTurnArcs(waypoints: Waypoint[], override?: PositionOverride): TurnArc[] {
 	const position = (w: Waypoint): { lat: number; lon: number } =>

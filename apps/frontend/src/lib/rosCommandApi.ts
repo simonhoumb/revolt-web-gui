@@ -40,6 +40,7 @@ async function handleJson<T>(res: Response): Promise<T> {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
+/** REST client for /api/ros-commands: the command registry and command execution. */
 export const rosCommandApi = {
 	async list(): Promise<RosCommandMeta[]> {
 		return handleJson<RosCommandMeta[]>(await apiFetch("/api/ros-commands"));
