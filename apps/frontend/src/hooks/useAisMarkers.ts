@@ -1,5 +1,5 @@
 import maplibregl, { type Map as MapLibreMap, type Marker } from "maplibre-gl";
-// Imported for their custom-element registration side effect (customElement(...)) -- markers
+// Imported for their custom-element registration side effect (customElement(...)); markers
 // below create the elements directly rather than mounting a nested React root, same technique
 // already used for the own-ship and waypoint markers. The "nohdgcog" variants render a target
 // with no heading/COG marker, for reports where heading isn't available (e.g. base stations).

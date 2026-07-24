@@ -12,6 +12,7 @@ export interface LidarData {
 	points: LidarPoint[];
 }
 
+/** Latest lidar scan plus its ranges converted to Cartesian points for canvas rendering. */
 export function useLidarData(): LidarData {
 	const { lidarScan } = useBridgeData();
 

@@ -6,6 +6,7 @@ export interface LightBeaconData {
 	green: boolean;
 }
 
+/** Stern light beacon red/yellow/green lamp state. */
 export function useLightBeaconData(): LightBeaconData {
 	const { lightBeacon } = useBridgeData();
 

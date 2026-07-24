@@ -17,6 +17,7 @@ export interface RcRemoteData {
 	gear: "manual" | "auto" | null;
 }
 
+/** RC transmitter stick positions as signed percentages, plus the gear (manual/auto) switch. */
 export function useRcRemoteData(): RcRemoteData {
 	const { rcRemote } = useBridgeData();
 

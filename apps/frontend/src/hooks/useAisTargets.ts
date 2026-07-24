@@ -18,6 +18,7 @@ export interface AisTarget {
 	stale: boolean;
 }
 
+/** Live AIS targets with staleness computed at read time (re-evaluated once a minute). */
 export function useAisTargets(): AisTarget[] {
 	const { aisTargets } = useBridgeData();
 	// Ticks once a minute purely to force staleness/expiry to re-evaluate against the current

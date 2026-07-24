@@ -3,12 +3,16 @@ import type { BridgeMessage } from "@revolt/shared-types";
 import { getSessionId } from "../session.js";
 
 export interface BridgeConnectionOptions {
+	/** Called for every non-ping message including bridge_status. */
 	onMessage?: (msg: BridgeMessage) => void;
 }
 
 export interface BridgeConnectionState {
+	/** Whether the native WebSocket itself is open. */
 	wsConnected: boolean;
+	/** Whether the backend has a live connection to rosbridge (from BridgeStatusMsg). */
 	bridgeConnected: boolean;
+	/** End-to-end latency estimate from the last message's timestamp (Date.now() - server time). */
 	latencyMs: number | null;
 }
 
@@ -22,15 +26,9 @@ function buildWsUrl(): string {
 }
 
 /**
- * Manages the WebSocket connection to /api/ws for the lifetime of the component
- * that mounts it. Reconnects with exponential backoff on close or error.
- *
- * wsConnected     — the native WebSocket is open
- * bridgeConnected — backend has a live connection to rosbridge (from BridgeStatusMsg)
- * latencyMs       — end-to-end latency estimate from the last PingMsg (Date.now() - server_ms)
- *
- * onMessage callback (optional): called for every non-ping message including bridge_status.
- * Stored in a ref so callers can dispatch without causing stale closure issues.
+ * Manages the WebSocket connection to /api/ws for the lifetime of the component that mounts it.
+ * Reconnects with exponential backoff on close or error. The onMessage callback is stored in a
+ * ref so callers can dispatch without causing stale closure issues.
  */
 export function useBridgeConnection(options: BridgeConnectionOptions = {}): BridgeConnectionState {
 	const [wsConnected, setWsConnected] = useState(false);
