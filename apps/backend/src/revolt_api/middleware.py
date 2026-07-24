@@ -1,3 +1,5 @@
+"""RequestLoggingMiddleware: logs every HTTP request with method, path, status, and duration."""
+
 import time
 
 import structlog
@@ -9,7 +11,10 @@ logger = structlog.get_logger(__name__)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
+	"""Logs every request's method, path, status, duration, and session_id."""
+
 	async def dispatch(self, request: Request, call_next: object) -> Response:
+		"""Time the request and log the result after call_next() completes it."""
 		start = time.perf_counter()
 		response: Response = await call_next(request)
 		duration_ms = round((time.perf_counter() - start) * 1000, 1)

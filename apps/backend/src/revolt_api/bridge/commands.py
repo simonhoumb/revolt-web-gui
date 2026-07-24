@@ -99,7 +99,7 @@ COMMANDS: dict[str, CommandSpec] = {
 		kind=CommandKind.SERVICE_CALL,
 		rosapi_service="/rosapi/get_param",
 		rosapi_type="rosapi_msgs/GetParam",
-		# Sourced from get_param_names' response (a <node>:<param> string) -- rosapi's own
+		# Sourced from get_param_names' response (a <node>:<param> string); rosapi's own
 		# service dispatcher (rosapi_node's _get_node_and_param_name) splits this same "name" on
 		# ":" to resolve which node's parameter to read, so the two are designed as a pair.
 		params=(CommandParamSpec(name="name", label="Parameter name", kind="param_select"),),

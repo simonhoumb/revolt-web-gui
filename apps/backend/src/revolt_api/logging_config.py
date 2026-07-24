@@ -1,3 +1,5 @@
+"""structlog JSON logging setup, called once at app startup."""
+
 import logging
 import sys
 

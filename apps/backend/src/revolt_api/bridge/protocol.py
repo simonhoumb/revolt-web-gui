@@ -148,7 +148,7 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		throttle_rate_ms=100,
 		description=(
 			"Intel RealSense D456 color camera, JPEG-compressed via image_transport "
-			"(realsense2_camera v4.x — namespace is /camera/camera/). Frame stored by "
+			"(realsense2_camera v4.x, namespace is /camera/camera/). Frame stored by "
 			"bridge client; served via MJPEG HTTP endpoint, not forwarded through WebSocket."
 		),
 	),
@@ -250,7 +250,7 @@ SIMULATION_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/revolt/sim/stc/gnss/antenna2/position",
 		"geometry_msgs/PointStamped",
-		description="Simulated GNSS antenna 2 position — subscribed but not forwarded to frontend.",
+		description="Simulated GNSS antenna 2 position; subscribed but not forwarded to frontend.",
 	),
 	TopicSpec(
 		"/revolt/sim/stc/gnss/velocity_vector",

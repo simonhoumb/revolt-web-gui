@@ -23,7 +23,7 @@ def _waypoint_cartesian(wp: Waypoint, bridge: RosBridgeClient) -> tuple[float, f
 def waypoint_to_ros_dict(wp: Waypoint, bridge: RosBridgeClient) -> dict:
 	"""Build a custom_msgs/Waypoint JSON dict matching the sim's wire format.
 
-	id is the waypoint's sequence_number, not its UUID — the sequence number is the
+	id is the waypoint's sequence_number, not its UUID; the sequence number is the
 	correlation key the /waypoint_list echo uses to confirm a send landed (see
 	RosBridgeClient.publish_and_await_ack). target_speed is stored in knots (matching the
 	rest of the domain model); the sim's desired_speed field is m/s.

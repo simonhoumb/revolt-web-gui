@@ -1,3 +1,5 @@
+"""FastAPI app entry point: lifespan (bridge startup/shutdown), middleware, and router mounts."""
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -18,6 +20,7 @@ from revolt_api.routers.ws import router as ws_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+	"""Start the RosBridgeClient and logging at app startup; stop them cleanly at shutdown."""
 	configure_logging(settings.log_level)
 	bridge = RosBridgeClient(
 		settings.ros2_bridge_url,
