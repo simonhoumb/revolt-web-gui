@@ -1,5 +1,6 @@
 import type { MissionExecutionState } from "./bridge.js";
 
+/** Mirrors the backend's ControlMode enum (models/vessel.py); the /control_mode topic's values. */
 export enum ControlMode {
 	Manual = "manual",
 	ManualAssisted = "manual_assisted",
@@ -7,6 +8,7 @@ export enum ControlMode {
 	Miscommunication = "miscommunication",
 }
 
+/** A mission's lifecycle state. */
 export enum MissionStatus {
 	Draft = "draft",
 	Active = "active",
@@ -15,6 +17,7 @@ export enum MissionStatus {
 	Aborted = "aborted",
 }
 
+/** Which vessel sensor a SensorReading came from. */
 export enum SensorType {
 	GNSS = "gnss",
 	IMU = "imu",
@@ -29,11 +32,13 @@ export enum SensorType {
 	Radar = "radar",
 }
 
+/** A WGS84 lat/lon pair, the API's wire format for any geometry column. */
 export interface Position {
 	latitude: number;
 	longitude: number;
 }
 
+/** A single point-in-time snapshot of vessel position, heading, and status. */
 export interface VesselState {
 	id: string;
 	timestamp: string;
@@ -47,6 +52,7 @@ export interface VesselState {
 	updated_at: string;
 }
 
+/** One raw reading from a vessel sensor; the shape of raw_data varies by sensor_type. */
 export interface SensorReading {
 	id: string;
 	timestamp: string;
@@ -57,6 +63,7 @@ export interface SensorReading {
 	updated_at: string;
 }
 
+/** One point in a Mission's route, in send order (sequence_number). */
 export interface Waypoint {
 	id: string;
 	mission_id: string;
@@ -70,6 +77,7 @@ export interface Waypoint {
 	reached_at: string | null;
 }
 
+/** A named, ordered route: metadata plus its waypoints. */
 export interface Mission {
 	id: string;
 	name: string;
@@ -86,36 +94,43 @@ export interface Mission {
 	updated_at: string;
 }
 
+/** One hazard layer a route came within the safety margin of, and how many features hit. */
 export interface HazardHit {
 	layer: string;
 	description: string;
 	count: number;
 }
 
-// Per-leg hazard summary computed client-side (Phase 1 ENC check, apps/frontend/src/lib/
-// encValidation.ts) against currently-rendered map layers -- distinct from HazardHit above, which
-// is the server-side (Phase 2) PostGIS check's per-layer aggregate hit count.
+/** Per-leg hazard summary computed client-side (Phase 1 ENC check).
+ *
+ * Computed by apps/frontend/src/lib/encValidation.ts against currently-rendered map layers,
+ * distinct from HazardHit above, which is the server-side (Phase 2) PostGIS check's per-layer
+ * aggregate hit count.
+ */
 export interface HazardSummary {
 	status: "safe" | "warning" | "no_data" | "blocked";
 	description: string;
 }
 
+/** Response from sending a mission to the vessel: the Phase 2 re-validation result plus what was sent. */
 export interface MissionSendResult {
 	status: string;
 	waypoint_count: number;
 	checked_at: string;
 	// The Phase 2 check /send always runs before publishing. "blocked" never reaches this
-	// response (the backend rejects with 409 instead) -- only ever "safe", "warning", or "no_data".
+	// response (the backend rejects with 409 instead); only ever "safe", "warning", or "no_data".
 	validation_status: "safe" | "warning" | "no_data" | "blocked";
 	hazards: HazardHit[];
 }
 
+/** Response from validating a mission's route against charted hazards. */
 export interface MissionValidationResult {
 	status: "safe" | "warning" | "no_data" | "blocked";
 	hazards: HazardHit[];
 	checked_at: string;
 }
 
+/** Response from the start/pause/terminate command endpoints. */
 export interface MissionExecutionResult {
 	status: string;
 	state: MissionExecutionState;
@@ -126,17 +141,19 @@ export interface MissionExecutionResult {
 	waypoint_count: number;
 }
 
+/** Describes one parameter a ROS command accepts, resolved for the current registry response. */
 export interface RosCommandParamMeta {
 	name: string;
 	label: string;
 	kind: "topic_select" | "param_select" | "text";
 	required: boolean;
 	// Populated for kind="topic_select" (bridge/protocol.py's topic allow-list) and
-	// kind="param_select" (a live /rosapi/get_param_names call), both resolved server-side --
+	// kind="param_select" (a live /rosapi/get_param_names call), both resolved server-side;
 	// the frontend never keeps its own copy of either list.
 	allowed_values: string[] | null;
 }
 
+/** Response entry from GET /api/ros-commands: one command's UI metadata. */
 export interface RosCommandMeta {
 	command_id: string;
 	label: string;
@@ -144,6 +161,7 @@ export interface RosCommandMeta {
 	params: RosCommandParamMeta[];
 }
 
+/** Response from a ROS command execution. */
 export interface RosCommandResult {
 	command_id: string;
 	ok: boolean;
