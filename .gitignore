@@ -15,6 +15,9 @@ build/
 **/tsconfig.tsbuildinfo
 **/.tsc-out/
 
+# Generated API reference docs (docs.sh: TypeDoc + pdoc)
+api-docs/
+
 # Python
 __pycache__/
 **/__pycache__/
