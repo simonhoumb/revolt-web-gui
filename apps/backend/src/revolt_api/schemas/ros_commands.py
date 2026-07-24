@@ -1,4 +1,4 @@
-"""Pydantic request/response schemas for the ROS2 command console (Feature 16)."""
+"""Pydantic request/response schemas for the ROS2 command console."""
 
 from datetime import datetime
 from typing import Any, Literal

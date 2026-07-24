@@ -1,4 +1,4 @@
-"""ROS2 introspection command orchestration (Feature 16).
+"""ROS2 introspection command orchestration.
 
 Extracted into its own service module rather than folded into mission_service.py: a different
 command family (introspection over the ROS graph, not mission/waypoint orchestration) with its
