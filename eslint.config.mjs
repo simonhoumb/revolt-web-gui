@@ -3,6 +3,7 @@ import tseslint from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
 import reactRefreshPlugin from "eslint-plugin-react-refresh";
+import tsdocPlugin from "eslint-plugin-tsdoc";
 import globals from "globals";
 
 export default tseslint.config(
@@ -27,11 +28,20 @@ export default tseslint.config(
 			...tseslint.configs.strictTypeChecked,
 			...tseslint.configs.stylisticTypeChecked,
 		],
+		plugins: {
+			tsdoc: tsdocPlugin,
+		},
 		languageOptions: {
 			parserOptions: {
 				projectService: true,
 				tsconfigRootDir: import.meta.dirname,
 			},
+		},
+		rules: {
+			// warn, not error: no TSDoc comments exist yet to conflict, but this keeps a doc-comment
+			// typo from blocking an unrelated PR during rollout. Promote to error once the
+			// backend/frontend doc pass is done.
+			"tsdoc/syntax": "warn",
 		},
 	},
 
