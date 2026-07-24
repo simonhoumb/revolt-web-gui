@@ -1,3 +1,5 @@
+"""GET /api/camera/{id}/stream: relays the bridge's latest decoded camera frame as MJPEG."""
+
 import asyncio
 
 from fastapi import APIRouter, Depends
@@ -10,6 +12,8 @@ router = APIRouter(prefix="/api")
 
 @router.get("/camera/{camera_id}/stream")
 async def camera_stream(camera_id: str, bridge: RosBridgeClient = Depends(get_bridge)):  # noqa: B008
+	"""Poll the bridge's latest decoded frame and stream it as a multipart MJPEG response."""
+
 	async def frame_generator():
 		boundary = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
 		last_counter = -1

@@ -1,3 +1,9 @@
+"""Mission/waypoint CRUD plus the validate/send/start/pause/terminate command endpoints.
+
+A thin HTTP boundary only: each command endpoint just fetches the mission (404 boundary) and
+delegates to services/mission_service.py, which owns the actual orchestration.
+"""
+
 import math
 import uuid
 from collections.abc import Sequence
@@ -53,6 +59,7 @@ async def _get_waypoint_or_404(
 
 
 def _heading_rad(heading_deg: float | None) -> float | None:
+	"""Convert the API's degrees to the radians Waypoint.heading_rad is stored in."""
 	return None if heading_deg is None else math.radians(heading_deg)
 
 
@@ -72,6 +79,7 @@ async def list_missions(
 	status: MissionStatus | None = None,
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Sequence[Mission]:
+	"""List missions, newest first, optionally filtered by status."""
 	stmt = (
 		select(Mission).options(selectinload(Mission.waypoints)).order_by(Mission.created_at.desc())
 	)
@@ -87,6 +95,7 @@ async def create_mission(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Mission:
+	"""Create a new mission, optionally with its initial waypoints."""
 	mission = Mission(name=body.name, description=body.description, status=MissionStatus.draft)
 	for wp in body.waypoints:
 		mission.waypoints.append(_new_waypoint(wp.sequence_number, wp))
@@ -98,9 +107,12 @@ async def create_mission(
 
 @router.get("/missions/loaded", response_model=MissionRead)
 async def get_loaded_mission(db: AsyncSession = Depends(get_db)) -> Mission:  # noqa: B008
-	"""The mission Mission Control currently targets -- whichever mission was most recently sent
-	to the vessel (see mission_service.get_loaded_mission_id). Registered before
-	/missions/{mission_id} so FastAPI doesn't try to parse "loaded" as a mission_id UUID."""
+	"""The mission Mission Control currently targets.
+
+	Whichever mission was most recently sent to the vessel (see
+	mission_service.get_loaded_mission_id). Registered before /missions/{mission_id} so FastAPI
+	doesn't try to parse "loaded" as a mission_id UUID.
+	"""
 	loaded_id = await mission_service.get_loaded_mission_id(db)
 	if loaded_id is None:
 		raise HTTPException(status_code=404, detail="No mission is currently loaded on the vessel.")
@@ -112,6 +124,7 @@ async def get_mission(
 	mission_id: uuid.UUID,
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Mission:
+	"""Fetch one mission by id."""
 	return await _get_mission_or_404(db, mission_id)
 
 
@@ -122,6 +135,7 @@ async def update_mission(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Mission:
+	"""Partially update a mission's name/description/status; unset fields are left unchanged."""
 	mission = await _get_mission_or_404(db, mission_id)
 	if body.name is not None:
 		mission.name = body.name
@@ -146,6 +160,7 @@ async def delete_mission(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> None:
+	"""Delete a mission and its waypoints (cascade)."""
 	result = await db.execute(delete(Mission).where(Mission.id == mission_id))
 	if result.rowcount == 0:
 		raise HTTPException(status_code=404, detail="Mission not found")
@@ -162,6 +177,7 @@ async def create_waypoint(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Waypoint:
+	"""Append a new waypoint to a mission, auto-assigning the next sequence number."""
 	mission = await _get_mission_or_404(db, mission_id)
 	max_seq = await db.scalar(
 		select(func.max(Waypoint.sequence_number)).where(Waypoint.mission_id == mission_id)
@@ -190,6 +206,7 @@ async def update_waypoint(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Waypoint:
+	"""Partially update one waypoint; unset fields are left unchanged."""
 	waypoint = await _get_waypoint_or_404(db, mission_id, waypoint_id)
 	if (body.latitude is None) != (body.longitude is None):
 		raise HTTPException(
@@ -226,6 +243,7 @@ async def delete_waypoint(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> None:
+	"""Delete one waypoint and resequence the remaining waypoints to close the gap."""
 	waypoint = await _get_waypoint_or_404(db, mission_id, waypoint_id)
 	await db.delete(waypoint)
 	await db.flush()
@@ -240,6 +258,8 @@ async def delete_waypoint(
 		.scalars()
 		.all()
 	)
+	# sequence_number must stay a contiguous 0..N-1 route order; a deleted middle waypoint would
+	# otherwise leave a gap.
 	for i, wp in enumerate(remaining):
 		wp.sequence_number = i
 	mission = await db.get(Mission, mission_id)
@@ -261,6 +281,7 @@ async def replace_waypoints(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Sequence[Waypoint]:
+	"""Replace a mission's entire waypoint list in one operation (reorder/bulk edit)."""
 	mission = await _get_mission_or_404(db, mission_id)
 	mission.waypoints = [_new_waypoint(i, item) for i, item in enumerate(body)]
 	mission_service.invalidate_load_if_edited(mission)
@@ -281,8 +302,11 @@ async def validate_mission(
 	session_id: str = Depends(_session_id),  # noqa: B008
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> MissionValidationResult:
-	"""Authoritative server-side ENC hazard check (Phase 2) -- see mission_service.validate_mission
-	for the full rationale and how this relates to send_mission's own re-validation."""
+	"""Authoritative server-side ENC hazard check (Phase 2).
+
+	See mission_service.validate_mission for the full rationale and how this relates to
+	send_mission's own re-validation.
+	"""
 	mission = await _get_mission_or_404(db, mission_id)
 	return await mission_service.validate_mission(db, session_id, mission)
 
@@ -294,8 +318,10 @@ async def send_mission(
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> MissionSendResult:
-	"""Re-validate and publish the mission's full waypoint list to the vessel -- see
-	mission_service.send_mission for the full rationale."""
+	"""Re-validate and publish the mission's full waypoint list to the vessel.
+
+	See mission_service.send_mission for the full rationale.
+	"""
 	mission = await _get_mission_or_404(db, mission_id)
 	return await mission_service.send_mission(db, bridge, session_id, mission)
 
@@ -307,8 +333,10 @@ async def start_mission(
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> MissionExecutionResult:
-	"""Start executing a mission (fresh start or resume-from-pause) -- see
-	mission_service.start_mission for the full rationale."""
+	"""Start executing a mission (fresh start or resume-from-pause).
+
+	See mission_service.start_mission for the full rationale.
+	"""
 	mission = await _get_mission_or_404(db, mission_id)
 	return await mission_service.start_mission(db, bridge, session_id, mission)
 
@@ -320,8 +348,10 @@ async def pause_mission(
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> MissionExecutionResult:
-	"""Pause a mission, snapshotting a resume point -- see mission_service.pause_mission for the
-	full rationale."""
+	"""Pause a mission, snapshotting a resume point.
+
+	See mission_service.pause_mission for the full rationale.
+	"""
 	mission = await _get_mission_or_404(db, mission_id)
 	return await mission_service.pause_mission(db, bridge, session_id, mission)
 
@@ -333,7 +363,9 @@ async def terminate_mission(
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> MissionExecutionResult:
-	"""Terminate/abort a mission -- see mission_service.terminate_mission for the full
-	rationale."""
+	"""Terminate/abort a mission.
+
+	See mission_service.terminate_mission for the full rationale.
+	"""
 	mission = await _get_mission_or_404(db, mission_id)
 	return await mission_service.terminate_mission(db, bridge, session_id, mission)
