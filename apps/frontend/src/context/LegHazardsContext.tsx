@@ -14,7 +14,7 @@ export interface LegHazardsContextValue {
  * Owns the client-side (Phase 1) ENC hazard-check results, keyed by leg. Separate from
  * MissionContext so that "which mission is selected / its CRUD" and "what did the last hazard
  * evaluation for its route find" are two independently-changing pieces of state, not one context
- * that changes for both reasons. Must be rendered inside MissionProvider -- it reads
+ * that changes for both reasons. Must be rendered inside MissionProvider; it reads
  * activeMissionId to know when to clear a stale result.
  */
 export function LegHazardsProvider({ children }: { children: ReactNode }) {

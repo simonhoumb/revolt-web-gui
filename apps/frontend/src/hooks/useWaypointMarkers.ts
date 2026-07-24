@@ -1,5 +1,5 @@
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from "maplibre-gl";
-// Imported for their custom-element registration side effect (customElement(...)) -- markers
+// Imported for their custom-element registration side effect (customElement(...)); markers
 // below create the elements directly rather than mounting a nested React root, since unmounting
 // a secondary root synchronously during the parent's own unmount trips a React warning. Same
 // technique already used for the own-ship marker.
@@ -25,10 +25,10 @@ const LEGS_LINE_LAYER_ID = "mission-legs-line";
 
 // metersToPixels(meters, zoom, lat) is exactly proportional to 2^zoom, so sampling it at two zoom
 // levels and letting MapLibre's exponential-base-2 zoom interpolation fill in between reproduces
-// the true value at every intermediate zoom, not just an approximation -- the standard technique
+// the true value at every intermediate zoom, not just an approximation; the standard technique
 // for a real-world-sized paint property. Latitude is fixed at the chart's reference point rather
 // than per-leg (see evaluateEncHazards, which does use the real per-leg latitude) since Oslo
-// Fjord's coverage area spans well under a degree of latitude -- the resulting difference is
+// Fjord's coverage area spans well under a degree of latitude; the resulting difference is
 // under 1%, not worth a per-feature "lat" property and a cos() expression to eliminate.
 const CORRIDOR_MIN_ZOOM = 0;
 const CORRIDOR_MAX_ZOOM = 24;
@@ -51,9 +51,9 @@ const LEGS_CORRIDOR_WIDTH: [
 ];
 
 // Status colors match the maritime safe/caution/danger convention (green/amber/red), not an
-// arbitrary categorical palette -- picking a hue too close to the chart's own water/depth fill
+// arbitrary categorical palette; picking a hue too close to the chart's own water/depth fill
 // (blues/teals) makes a leg blend into the background it's drawn over. "no_data" (no charted ENC
-// coverage at all) is deliberately NOT on that safe-to-danger gradient -- it's a grey/neutral,
+// coverage at all) is deliberately NOT on that safe-to-danger gradient; it's a grey/neutral,
 // matching how real ECDIS/S-52 renders unsurveyed areas distinctly from the safety-tier colors,
 // since "unknown" isn't a point on a scale from safe to dangerous.
 const HAZARD_LINE_COLOR: [
@@ -83,7 +83,7 @@ const HAZARD_LINE_COLOR: [
 // server-side check will eventually pair this with a proper vessel-beam/safety-margin config.
 const SAFETY_CONTOUR_M = 3;
 
-// Local structural types for the legs source's GeoJSON payload -- see useVesselTrackLayer's
+// Local structural types for the legs source's GeoJSON payload; see useVesselTrackLayer's
 // TrackFeature comment for why this isn't @types/geojson.
 interface LegFeature {
 	type: "Feature";
@@ -118,7 +118,7 @@ function legsToGeoJSON(
 				}),
 			),
 			// Turn arcs are additional LineString features in the same source, not a separate layer
-			// -- the casing/colored-line/corridor layers already style every LineString by its
+			//; the casing/colored-line/corridor layers already style every LineString by its
 			// "severity" property, so the arc automatically gets the exact same visual treatment as
 			// the straight legs and layers on top of the straight-line corner it replaces, with no
 			// change to those layers needed.
@@ -136,7 +136,7 @@ function legsToGeoJSON(
 	};
 }
 
-// A waypoint marker must be explicitly selected (a single click) before it becomes draggable --
+// A waypoint marker must be explicitly selected (a single click) before it becomes draggable;
 // otherwise a click-drag meant to pan the chart could land on an unselected marker and move it
 // instead of panning. Selected markers use the "active" icon pair (outline while idle, filled
 // while actively being dragged, matching how the own-ship marker uses a distinct look for its
@@ -163,7 +163,7 @@ function createWaypointElement(sequenceNumber: number): { el: HTMLDivElement } {
 }
 
 // evaluateEncHazards() only sees whatever the map's vector tiles have actually rendered so far
-// (queryRenderedFeatures), not what will be there once loading finishes -- calling this before the
+// (queryRenderedFeatures), not what will be there once loading finishes; calling this before the
 // relevant tiles have loaded (e.g. right after the mission's waypoints first arrive from the API,
 // which can easily race the map's own initial tile fetch on a fresh page load) sees empty results
 // everywhere, which the coverage check reads as "no charted data" for every leg. Shared by the
@@ -228,7 +228,7 @@ export function useWaypointMarkers(
 		legValidationRef.current = legValidation;
 	}, [legValidation]);
 
-	// Which waypoint (if any) is currently selected -- only the selected one is draggable. See
+	// Which waypoint (if any) is currently selected; only the selected one is draggable. See
 	// iconTagFor's comment for why. Fully internal: MapWidget's own render doesn't need to know
 	// the current selection.
 	const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
@@ -250,7 +250,7 @@ export function useWaypointMarkers(
 			// corridor standard ECDIS route planning shows around the track: a real-world-meters
 			// width (CORRIDOR_HALF_WIDTH_M on each side) that renders correctly bigger when zoomed in
 			// and smaller when zoomed out, matching what evaluateEncHazards() actually checks for
-			// hazards -- not a to-scale XTD/vessel-beam setting (out of scope for a vessel this size),
+			// hazards; not a to-scale XTD/vessel-beam setting (out of scope for a vessel this size),
 			// and not a fixed pixel width either (that meant a different real-world margin at every
 			// zoom level). Tinted by the same severity color as the centerline so it still reads as a
 			// safety cue.
@@ -265,7 +265,7 @@ export function useWaypointMarkers(
 				},
 			});
 			// A dark, semi-transparent casing under the colored line keeps the status color legible
-			// regardless of what's underneath it on the chart (depth fill, land, hazard shading) --
+			// regardless of what's underneath it on the chart (depth fill, land, hazard shading);
 			// no single hue survives contact with every background color a nautical chart can show,
 			// which is exactly the standard technique real chart/route symbology uses for this.
 			map.addLayer({
@@ -291,7 +291,7 @@ export function useWaypointMarkers(
 
 		// See recomputeLegHazards' comment: a waypoints-driven evaluation can run before the map's
 		// vector tiles have actually loaded (most commonly right on initial page load), and "idle"
-		// is exactly the event that fires once loading/rendering has genuinely settled -- catches
+		// is exactly the event that fires once loading/rendering has genuinely settled; catches
 		// and corrects that case without needing a waypoint change to trigger a recompute.
 		const handleIdle = () => {
 			recomputeLegHazards(map, waypointsRef.current, setLegValidation);
@@ -302,8 +302,8 @@ export function useWaypointMarkers(
 			map.off("style.load", addLegsLayer);
 			map.off("idle", handleIdle);
 			// waypointMarkersRef holds a plain Map we manage ourselves (not a React-rendered DOM
-			// node), so reading .current fresh at cleanup time -- to catch whichever markers exist
-			// at unmount, not just the ones from mount -- is exactly the intended behavior.
+			// node), so reading .current fresh at cleanup time; to catch whichever markers exist
+			// at unmount, not just the ones from mount; is exactly the intended behavior.
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			for (const wpMarker of waypointMarkersRef.current.values()) {
 				wpMarker.remove();
@@ -313,10 +313,10 @@ export function useWaypointMarkers(
 	}, [mapRef, setLegValidation]);
 
 	// Route-edit mode gates whether a click places a new waypoint. Otherwise, clicking the chart
-	// (not a marker -- a marker's own click handler, registered in the marker-sync effect below,
+	// (not a marker; a marker's own click handler, registered in the marker-sync effect below,
 	// stops the click from reaching the map at all since it's a separate DOM element on top of
 	// the canvas) deselects whatever waypoint was selected, since you clicked empty water.
-	// Re-registers whenever editMode/addWaypoint change, rather than reading them via a ref --
+	// Re-registers whenever editMode/addWaypoint change, rather than reading them via a ref;
 	// infrequent (only on an explicit mode toggle or mission switch), so there's no need for the
 	// mount-once-and-mirror-via-ref pattern the other long-lived handlers in this hook still need.
 	useEffect(() => {
@@ -338,7 +338,7 @@ export function useWaypointMarkers(
 	}, [mapRef, editMode, addWaypoint]);
 
 	// Waypoint markers: diff the active mission's waypoints against the live marker set. New
-	// waypoints get a marker (not draggable until explicitly selected -- see iconTagFor's
+	// waypoints get a marker (not draggable until explicitly selected; see iconTagFor's
 	// comment); removed ones (delete, or switching to a different mission) get their marker torn
 	// down; existing ones just get repositioned/relabelled in place so drag state and the DOM
 	// node identity aren't disturbed by unrelated list changes.
@@ -363,7 +363,7 @@ export function useWaypointMarkers(
 					.addTo(map);
 
 				// A newly created marker is never already selected, so a plain click just selects
-				// it -- the dedicated selection-sync effect below then makes it draggable. This is
+				// it; the dedicated selection-sync effect below then makes it draggable. This is
 				// what forces select and drag into two separate gestures: a drag starting on an
 				// unselected marker (e.g. a click-drag meant to pan the chart that happened to land
 				// on it) can't move it, since draggable only flips on in a later render, not
@@ -371,7 +371,7 @@ export function useWaypointMarkers(
 				// stopPropagation matters here: the marker element lives inside the same map
 				// container MapLibre's own "click" listener is bound to, so without it the click
 				// bubbles up and also fires handleMapClick above, which (seeing a non-"add" click)
-				// immediately deselects again -- selecting a marker would silently no-op.
+				// immediately deselects again; selecting a marker would silently no-op.
 				el.addEventListener("click", (e) => {
 					e.stopPropagation();
 					setSelectedWaypointId(wp.id);
@@ -407,7 +407,7 @@ export function useWaypointMarkers(
 				wpMarker.on("dragend", () => {
 					const ll = wpMarker.getLngLat();
 					void updateWaypointPosition(wp.id, ll.lat, ll.lng);
-					// Still selected -- only the dragging part ends here.
+					// Still selected; only the dragging part ends here.
 					el.querySelector(WAYPOINT_ICON_SELECTOR)?.replaceWith(
 						document.createElement(iconTagFor(true, false)),
 					);
@@ -441,7 +441,7 @@ export function useWaypointMarkers(
 		}
 	}, [selectedWaypointId]);
 
-	// Clears a stale selection -- the selected waypoint was deleted, or a different mission (with
+	// Clears a stale selection; the selected waypoint was deleted, or a different mission (with
 	// no waypoint sharing that id) was switched to.
 	useEffect(() => {
 		if (selectedWaypointId && !waypoints.some((w) => w.id === selectedWaypointId)) {

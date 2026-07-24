@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 
+/** Re-renders the calling component once a minute, aligned to the wall-clock minute boundary. */
 export function useMinuteUpdate(): string {
 	const [time, setTime] = useState(new Date().toISOString());
 

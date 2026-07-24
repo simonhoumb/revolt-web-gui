@@ -53,6 +53,7 @@ interface AzimuthFeedback {
 	starboard: AzimuthFeedbackMsg | null;
 }
 
+/** Latest known value of every bridge message type, keyed by topic/sensor. */
 export interface BridgeData {
 	battery: BatteryMsg | null;
 	current: CurrentReadings;
@@ -119,6 +120,7 @@ export const initialData: BridgeData = {
 	latencyMs: null,
 };
 
+/** Merges one incoming BridgeMessage into the per-type BridgeData state. */
 export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): BridgeData {
 	switch (msg.type) {
 		case "battery":

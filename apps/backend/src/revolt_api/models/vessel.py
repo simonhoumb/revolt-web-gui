@@ -1,3 +1,5 @@
+"""The VesselState table model: a single point-in-time snapshot of vessel telemetry."""
+
 import enum
 import uuid
 from datetime import datetime
@@ -12,6 +14,8 @@ from revolt_api.models.base import Base, TimestampMixin, new_uuid
 
 
 class ControlMode(enum.StrEnum):
+	"""Mirrors the /control_mode ROS2 topic's values."""
+
 	manual = "manual"
 	manual_assisted = "manual_assisted"
 	autonomous = "autonomous"
@@ -19,6 +23,8 @@ class ControlMode(enum.StrEnum):
 
 
 class VesselState(Base, TimestampMixin):
+	"""A single point-in-time snapshot of vessel position, heading, and status."""
+
 	__tablename__ = "vessel_state"
 
 	id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)

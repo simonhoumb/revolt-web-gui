@@ -6,7 +6,7 @@ const TRACK_SOURCE_ID = "vessel-track";
 const TRACK_LINE_LAYER_ID = "vessel-track-line";
 const TRACK_POINTS_LAYER_ID = "vessel-track-points";
 
-// Local structural types for the track source's GeoJSON payload -- avoids depending on
+// Local structural types for the track source's GeoJSON payload; avoids depending on
 // @types/geojson's ambient global, which pnpm's isolated node_modules layout doesn't expose to
 // this package. maplibre-gl's own source-data types are checked structurally, so this shape is
 // enough.

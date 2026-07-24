@@ -7,13 +7,13 @@ const DARK_STYLE_URL = "/map-styles/oslo-fjord-dark.json";
 
 // Centre of the DNV ENC delivery's actual coverage area (outer/southern
 // Oslofjord around Horten, Tonsberg, Moss and Asgardstrand), not central
-// Oslo city -- see infra/enc-pipeline/README.md for the coverage caveat.
+// Oslo city; see infra/enc-pipeline/README.md for the coverage caveat.
 export const OSLO_FJORD_CENTER: [number, number] = [10.55, 59.38];
 const DEFAULT_ZOOM = 11;
 
 function styleUrlForTheme(): string {
 	// TopNav toggles data-obc-theme between "day" and "dusk" (see TopNav.tsx's
-	// dimming button) -- "day" is the light theme, anything else (currently
+	// dimming button); "day" is the light theme, anything else (currently
 	// just "dusk", the default) gets the dark chart style.
 	const isDay = document.documentElement.getAttribute("data-obc-theme") === "day";
 	return isDay ? LIGHT_STYLE_URL : DARK_STYLE_URL;
@@ -22,7 +22,7 @@ function styleUrlForTheme(): string {
 // Rough NM-per-screen approximation from zoom level, matching OpenBridge's own
 // ECDIS demo (Ocean-Industries-Concept-Lab/openbridge-webcomponents,
 // packages/vue-demo/src/views/ECDIS.vue). Not a navigationally precise chart
-// scale -- that also depends on viewport size and latitude -- just the same
+// scale; that also depends on viewport size and latitude; just the same
 // display convention the reference demo uses for the range stepper.
 export function scaleNmForZoom(zoom: number): number {
 	return Math.pow(2, 14 - zoom);
@@ -61,10 +61,10 @@ export function useMapLibreInstance(
 			center: OSLO_FJORD_CENTER,
 			zoom: DEFAULT_ZOOM,
 			// Chart bearing is driven by the H/N/C control in MapWidget, not free
-			// rotation gestures -- matches the OpenBridge ECDIS demo.
+			// rotation gestures; matches the OpenBridge ECDIS demo.
 			dragRotate: false,
 			// The style's carto-basemap source is CARTO's free-tier raster basemap, which per
-			// CARTO's own terms requires attribution -- disabled here as a deliberate, accepted
+			// CARTO's own terms requires attribution; disabled here as a deliberate, accepted
 			// gap for now (not an oversight), since MapLibre's compact attribution control kept
 			// starting in an expanded-looking state on load regardless of the compact option.
 			// Revisit before this is customer-facing or public.

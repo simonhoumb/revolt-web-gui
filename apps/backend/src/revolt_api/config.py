@@ -1,9 +1,13 @@
+"""App-wide settings, loaded from environment variables / .env via pydantic-settings."""
+
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+	"""All environment-configurable settings; see individual fields for what each controls."""
+
 	model_config = SettingsConfigDict(
 		env_file=".env",
 		env_file_encoding="utf-8",
@@ -18,11 +22,11 @@ class Settings(BaseSettings):
 	# Logging
 	log_level: str = "INFO"
 
-	# CORS — comma-separated browser origins allowed to call the API.
+	# CORS: comma-separated browser origins allowed to call the API.
 	# Add the Tailscale frontend URL (e.g. http://revolt-gui-dev:5173) when accessing via tailnet.
 	allowed_origins: list[str] = ["http://localhost:5173"]
 
-	# Vessel connection — resolved via Tailscale sidecar in Docker
+	# Vessel connection: resolved via Tailscale sidecar in Docker
 	vessel_host: str = "revolt-onboard"
 	ros2_bridge_port: int = 9090
 
@@ -37,17 +41,19 @@ class Settings(BaseSettings):
 	# Phase 2 (server-side authoritative) ENC validation. Matches the Phase 1 client-side check's
 	# own fixed values exactly (encValidation.ts's CORRIDOR_HALF_WIDTH_M and MapWidget's
 	# SAFETY_CONTOUR_M) rather than a separately configurable vessel_beam_m + margin split, since
-	# neither phase has a real documented vessel beam to build that split on -- a single margin,
+	# neither phase has a real documented vessel beam to build that split on; a single margin,
 	# treated the same way in both phases, is honest about what's actually known.
 	safety_margin_m: float = 15.0  # half-width of the buffered route corridor checked for hazards
 	safety_contour_m: float = 3.0  # depths shallower than this trigger a warning, not a block
 
 	@property
 	def is_dev(self) -> bool:
+		"""Whether ENVIRONMENT is "development" (enables SQLAlchemy echo, etc.)."""
 		return self.environment == "development"
 
 	@property
 	def ros2_bridge_url(self) -> str:
+		"""The rosbridge WebSocket URL RosBridgeClient connects to."""
 		return f"ws://{self.vessel_host}:{self.ros2_bridge_port}"
 
 

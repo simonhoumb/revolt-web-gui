@@ -12,6 +12,7 @@ export interface ImuData {
 	angVelZ: number | null;
 }
 
+/** IMU attitude (roll/pitch/yaw) plus raw acceleration and angular velocity. */
 export function useImuData(): ImuData {
 	const { imu } = useBridgeData();
 

@@ -67,7 +67,9 @@ describe("GnssWidget", () => {
 	});
 
 	it("maps heading/course/speed onto the compass and the HDG/COG/SPD instrument fields", () => {
-		mockUseGnssData.mockReturnValue(makeGnssData({ headingDeg: 45, courseDeg: 50, speedMs: 2 }));
+		mockUseGnssData.mockReturnValue(
+			makeGnssData({ headingDeg: 45, courseDeg: 50, speedMs: 2 }),
+		);
 		render(<GnssWidget viewMode="instrument" />);
 
 		const compass = document.querySelector("obc-compass") as HTMLElement & {

@@ -1,5 +1,5 @@
 import maplibregl, { type Map as MapLibreMap, type Marker } from "maplibre-gl";
-// Imported for its custom-element registration side effect (customElement(...)) -- the marker
+// Imported for its custom-element registration side effect (customElement(...)); the marker
 // below creates the element directly rather than mounting a nested React root, since unmounting a
 // secondary root synchronously during the parent's own unmount trips a React warning.
 import "@oicl/openbridge-webcomponents/dist/icons/icon-own-ship-iec.js";

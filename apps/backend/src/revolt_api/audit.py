@@ -1,3 +1,5 @@
+"""log_action(): the single write path for the audit_log table, used by every command endpoint."""
+
 from typing import Any
 
 import structlog

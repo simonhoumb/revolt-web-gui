@@ -3,8 +3,8 @@ import { ON_CURRENT_THRESHOLD_A } from "../lib/thresholds.js";
 
 const BATTERY_FULL_V = 14.4; // Trad/Gel charge voltage (charger spec)
 const BATTERY_EMPTY_V = 10.0; // Arduino firmware emergency floor (critical_battery_voltage_level)
-const BATTERY_ALARM_V = 11.0; // GUI alarm — warn operator before Arduino emergency at 10.0 V
-const BATTERY_WARN_V = 11.5; // GUI warning — early advisory
+const BATTERY_ALARM_V = 11.0; // GUI alarm: warn operator before Arduino emergency at 10.0 V
+const BATTERY_WARN_V = 11.5; // GUI warning: early advisory
 const BATTERY_OVERVOLT_V = 16.0; // hardware guide "Over Voltage" threshold
 
 export type VoltageStatus = "normal" | "warning" | "alarm" | "overvolt" | "unknown";
@@ -44,6 +44,7 @@ function toCurrentData(amperes: number | null): CurrentReadingData {
 	};
 }
 
+/** Battery voltage/percent/status plus per-motor current draw and on/off state. */
 export function useBatteryData(): BatteryData {
 	const { battery, current } = useBridgeData();
 

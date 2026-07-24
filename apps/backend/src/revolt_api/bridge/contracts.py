@@ -1,12 +1,18 @@
+"""Versioned TypedDict message contracts for the ROS2 bridge WebSocket connection.
+
+Mirror of packages/shared-types/src/bridge.ts; keep the two in sync. The `v` literal is bumped
+per-type (not globally) on breaking changes; never remove a field within a version, add new
+optional fields instead.
+"""
+
 from typing import Literal
 
 from typing_extensions import TypedDict
 
-# Version literal embedded in every message. Bump per-type (not globally) on breaking changes.
-# Never remove fields within a version; add new optional fields instead.
-
 
 class BatteryMsg(TypedDict):
+	"""Battery voltage reading from /arduino/stern/battery_voltage."""
+
 	v: Literal["1"]
 	type: Literal["battery"]
 	timestamp_ms: int  # unix epoch ms, UTC, set at backend receive time
@@ -14,6 +20,8 @@ class BatteryMsg(TypedDict):
 
 
 class CurrentMsg(TypedDict):
+	"""Per-motor current draw, converted from raw ADC via the ACS712 formula."""
+
 	v: Literal["1"]
 	type: Literal["current"]
 	timestamp_ms: int
@@ -23,6 +31,8 @@ class CurrentMsg(TypedDict):
 
 
 class TemperatureMsg(TypedDict):
+	"""DHT22 enclosure temperature reading, stern or bow."""
+
 	v: Literal["1"]
 	type: Literal["temperature"]
 	timestamp_ms: int
@@ -31,6 +41,8 @@ class TemperatureMsg(TypedDict):
 
 
 class HumidityMsg(TypedDict):
+	"""DHT22 enclosure humidity reading, stern or bow."""
+
 	v: Literal["1"]
 	type: Literal["humidity"]
 	timestamp_ms: int
@@ -39,6 +51,8 @@ class HumidityMsg(TypedDict):
 
 
 class AzimuthFeedbackMsg(TypedDict):
+	"""Stern thruster azimuth angle feedback, port or starboard."""
+
 	v: Literal["1"]
 	type: Literal["azimuth_feedback"]
 	timestamp_ms: int
@@ -47,6 +61,8 @@ class AzimuthFeedbackMsg(TypedDict):
 
 
 class RcRemoteMsg(TypedDict):
+	"""Raw RC transmitter channel values, from custom_msgs/RCRemote."""
+
 	v: Literal["1"]
 	type: Literal["rc_remote"]
 	timestamp_ms: int
@@ -57,6 +73,8 @@ class RcRemoteMsg(TypedDict):
 
 
 class LightBeaconMsg(TypedDict):
+	"""Stern light beacon lamp state, decoded from the firmware's red/yellow/green bitmask."""
+
 	v: Literal["1"]
 	type: Literal["light_beacon"]
 	timestamp_ms: int
@@ -66,6 +84,8 @@ class LightBeaconMsg(TypedDict):
 
 
 class ControlModeMsg(TypedDict):
+	"""Current vessel control mode."""
+
 	v: Literal["1"]
 	type: Literal["control_mode"]
 	timestamp_ms: int
@@ -73,6 +93,8 @@ class ControlModeMsg(TypedDict):
 
 
 class EmergencyStopMsg(TypedDict):
+	"""Stern emergency-stop status."""
+
 	v: Literal["1"]
 	type: Literal["emergency_stop"]
 	timestamp_ms: int
@@ -80,6 +102,8 @@ class EmergencyStopMsg(TypedDict):
 
 
 class LinearActuatorMsg(TypedDict):
+	"""Bow linear actuator retract/extend state."""
+
 	v: Literal["1"]
 	type: Literal["linear_actuator"]
 	timestamp_ms: int
@@ -87,6 +111,12 @@ class LinearActuatorMsg(TypedDict):
 
 
 class BridgeStatusMsg(TypedDict):
+	"""Backend-to-rosbridge connection status.
+
+	Always the first message sent after a frontend WebSocket connects, so the UI knows
+	immediately whether telemetry is live before any topic data arrives.
+	"""
+
 	v: Literal["1"]
 	type: Literal["bridge_status"]
 	timestamp_ms: int
@@ -96,6 +126,8 @@ class BridgeStatusMsg(TypedDict):
 
 
 class CameraStatusMsg(TypedDict):
+	"""Liveness status for a camera feed, derived from recent frame arrival."""
+
 	v: Literal["1"]
 	type: Literal["camera_status"]
 	timestamp_ms: int
@@ -104,6 +136,8 @@ class CameraStatusMsg(TypedDict):
 
 
 class PingMsg(TypedDict):
+	"""Keepalive the frontend uses to compute round-trip latency."""
+
 	v: Literal["1"]
 	type: Literal["ping"]
 	server_ms: int  # backend unix epoch ms; frontend computes Date.now() - server_ms for latency
@@ -113,6 +147,8 @@ class PingMsg(TypedDict):
 
 
 class SimHullPositionMsg(TypedDict):
+	"""Simulated hull pose from the pygemini/STC simulation environment."""
+
 	v: Literal["1"]
 	type: Literal["sim_hull_position"]
 	timestamp_ms: int
@@ -126,6 +162,8 @@ class SimHullPositionMsg(TypedDict):
 
 
 class SimHullVelocityMsg(TypedDict):
+	"""Simulated hull linear and angular velocity."""
+
 	v: Literal["1"]
 	type: Literal["sim_hull_velocity"]
 	timestamp_ms: int
@@ -138,6 +176,12 @@ class SimHullVelocityMsg(TypedDict):
 
 
 class GnssFixMsg(TypedDict):
+	"""GNSS position fix.
+
+	Sourced from /fix on the physical vessel, or converted from the sim's local-Cartesian
+	antenna position (see client.py's flat-earth projection for the sim case).
+	"""
+
 	v: Literal["1"]
 	type: Literal["gnss_fix"]
 	timestamp_ms: int
@@ -148,6 +192,8 @@ class GnssFixMsg(TypedDict):
 
 
 class GnssHeadingMsg(TypedDict):
+	"""True heading from the VS330 GNSS compass's dual-antenna RTK solution."""
+
 	v: Literal["1"]
 	type: Literal["gnss_heading"]
 	timestamp_ms: int
@@ -157,17 +203,21 @@ class GnssHeadingMsg(TypedDict):
 
 
 class GnssVelocityMsg(TypedDict):
+	"""GNSS-derived speed and course over ground from the VS330 compass."""
+
 	v: Literal["1"]
 	type: Literal["gnss_velocity"]
 	timestamp_ms: int
 	speed_ms: float  # from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
 	# Course over ground 0-360, from /vel TwistStamped linear.x/y bearing. None below
-	# MIN_COG_SPEED_MS in client.py -- the angle is meaningless noise at near-zero speed, not
+	# MIN_COG_SPEED_MS in client.py; the angle is meaningless noise at near-zero speed, not
 	# just imprecise.
 	course_deg: float | None
 
 
 class SimGnssVelocityMsg(TypedDict):
+	"""Simulated GNSS speed/heading vector."""
+
 	v: Literal["1"]
 	type: Literal["sim_gnss_velocity"]
 	timestamp_ms: int
@@ -176,6 +226,8 @@ class SimGnssVelocityMsg(TypedDict):
 
 
 class SimImuMsg(TypedDict):
+	"""Simulated IMU linear acceleration and angular velocity."""
+
 	v: Literal["1"]
 	type: Literal["sim_imu"]
 	timestamp_ms: int
@@ -188,6 +240,13 @@ class SimImuMsg(TypedDict):
 
 
 class ImuMsg(TypedDict):
+	"""Physical IMU attitude and raw motion data from the Xsens unit.
+
+	roll/pitch/yaw are extracted from the orientation quaternion via standard ZYX Euler formulas;
+	the VS330 GNSS compass remains the authoritative heading/velocity source, this topic is
+	attitude-only.
+	"""
+
 	v: Literal["1"]
 	type: Literal["imu_data"]
 	timestamp_ms: int
@@ -203,6 +262,8 @@ class ImuMsg(TypedDict):
 
 
 class SimThrusterFeedbackMsg(TypedDict):
+	"""Simulated per-thruster force/angle feedback."""
+
 	v: Literal["1"]
 	type: Literal["sim_thruster_feedback"]
 	timestamp_ms: int
@@ -212,6 +273,8 @@ class SimThrusterFeedbackMsg(TypedDict):
 
 
 class SimWaypoint(TypedDict):
+	"""Single waypoint as echoed back by the simulation's /waypoint_list."""
+
 	id: int
 	pos_x: float  # PoseStamped.pose.position.x; frame TBD
 	pos_y: float
@@ -223,6 +286,12 @@ class SimWaypoint(TypedDict):
 
 
 class SimWaypointListMsg(TypedDict):
+	"""Full waypoint queue echoed back by the simulation.
+
+	Used to confirm mission sends landed (publish_and_await_ack) and to derive live mission
+	execution progress (see MissionExecutionStatusMsg).
+	"""
+
 	v: Literal["1"]
 	type: Literal["sim_waypoint_list"]
 	timestamp_ms: int
@@ -233,6 +302,8 @@ MissionSendStatus = Literal["sending", "acknowledged", "timed_out", "not_connect
 
 
 class MissionSendStatusMsg(TypedDict):
+	"""Progress of a mission send-to-vessel operation's ack/echo flow."""
+
 	v: Literal["1"]
 	type: Literal["mission_send_status"]
 	timestamp_ms: int
@@ -247,6 +318,11 @@ MissionExecutionState = Literal[
 
 
 class MissionExecutionStatusMsg(TypedDict):
+	"""Live mission execution progress, derived from the /waypoint_list echo.
+
+	Presentation-only; never written to the DB (see mission_tracker.py for why).
+	"""
+
 	v: Literal["1"]
 	type: Literal["mission_execution_status"]
 	timestamp_ms: int
@@ -258,6 +334,8 @@ class MissionExecutionStatusMsg(TypedDict):
 
 
 class LidarScanMsg(TypedDict):
+	"""2D lidar scan, from the Velodyne VLP-16's ring-8 horizontal slice."""
+
 	v: Literal["1"]
 	type: Literal["lidar_scan"]
 	timestamp_ms: int
@@ -270,6 +348,12 @@ class LidarScanMsg(TypedDict):
 
 
 class RadarSpokeMsg(TypedDict):
+	"""One aggregated radar azimuth bin.
+
+	Forwarded after RADAR_NUM_BINS-way binning (see client.py's RADAR_NUM_BINS comment); never a
+	raw 1:1 spoke.
+	"""
+
 	v: Literal["1"]
 	type: Literal["radar_spoke"]
 	timestamp_ms: int
@@ -283,6 +367,8 @@ class RadarSpokeMsg(TypedDict):
 
 
 class AisTargetMsg(TypedDict):
+	"""Decoded AIS target report, keyed by MMSI on the frontend."""
+
 	v: Literal["1"]
 	type: Literal["ais_target"]
 	timestamp_ms: int

@@ -30,6 +30,7 @@ function toThrusterStatus(
 	};
 }
 
+/** Per-thruster on/off, current, and force/angle feedback, plus control mode and bow actuator state. */
 export function useThrusterData(): ThrusterData {
 	const {
 		current,
@@ -56,7 +57,7 @@ export function useThrusterData(): ThrusterData {
 		bow: toThrusterStatus(
 			current.bow?.amperes ?? null,
 			isSimulation ? (thrusterFeedback.bow ?? null) : null,
-			null, // bow is a linear actuator, not azimuthing -- no feedback angle exists
+			null, // bow is a linear actuator, not azimuthing; no feedback angle exists
 		),
 		bowRetracted: linearActuator?.retracted ?? null,
 		controlMode: controlMode?.mode ?? null,

@@ -21,6 +21,7 @@ export interface WaypointDraft {
 // mission (a fresh [] literal would otherwise be a new reference each time).
 const EMPTY_WAYPOINTS: Waypoint[] = [];
 
+/** The active mission's waypoints plus derived per-leg distance/bearing/hazard summaries. */
 export function useWaypointDraft(): WaypointDraft {
 	const { activeMission } = useMission();
 	const { legValidation } = useLegHazards();

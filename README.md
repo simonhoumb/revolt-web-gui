@@ -9,7 +9,7 @@ Web-based GUI for monitoring and controlling the Revolt autonomous surface vesse
 | Frontend         | React 18 + TypeScript, Vite, OpenBridge Design System |
 | Backend          | FastAPI (Python 3.12), SQLAlchemy 2, Alembic          |
 | Database         | PostgreSQL 16 + PostGIS 3.4                           |
-| Real-time        | WebSocket gateway (rosbridge or custom rclpy node)    |
+| Real-time        | WebSocket gateway (rosbridge_suite)                   |
 | Map              | MapLibre GL JS + TileServer GL / martin               |
 | Containers       | Docker Compose                                        |
 | Package managers | pnpm 9 (Node), uv (Python)                            |
@@ -24,7 +24,13 @@ WebApp/
 ├── packages/
 │   └── shared-types/    Shared TypeScript types (@revolt/shared-types)
 ├── infra/
-│   └── db/init/         SQL init scripts (PostGIS extension)
+│   ├── db/init/         SQL init scripts (PostGIS extension)
+│   ├── rosbridge_mock/  Mock ROS2 bridge for local dev without a vessel
+│   ├── enc-pipeline/    ENC chart data -> vector tiles + PostGIS ingestion
+│   └── martin/          Vector tile server config and fonts
+├── test.sh               Run test suites
+├── lint.sh               Run linters/formatters
+├── docs.sh               Generate API reference docs
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -58,6 +64,16 @@ docker compose up
 
 # Or start only the database (useful while developing the backend directly)
 docker compose up db
+
+# Apply the DB schema (first time, and after pulling new migrations)
+cd apps/backend && uv run alembic upgrade head && cd ../..
+```
+
+By default the backend expects a real vessel or simulation to connect to over Tailscale. To get realistic sensor data flowing without either, start the mock bridge instead and point `.env` at it:
+
+```bash
+docker compose --profile mock up
+# .env: VESSEL_HOST=rosbridge-mock, BRIDGE_TARGET=physical
 ```
 
 | Service             | URL                            |
@@ -65,16 +81,17 @@ docker compose up db
 | Frontend            | http://localhost:5173          |
 | Backend API         | http://localhost:8000          |
 | API docs (dev only) | http://localhost:8000/api/docs |
+| Map tiles (martin)  | http://localhost:3000/tiles    |
 | PostgreSQL          | localhost:5432                 |
 
 ### Running without Docker
 
 ```bash
-# Terminal 1 — backend
+# Terminal 1: backend
 cd apps/backend
 uv run uvicorn revolt_api.main:app --reload --port 8000
 
-# Terminal 2 — frontend
+# Terminal 2: frontend
 pnpm dev
 ```
 
@@ -83,20 +100,32 @@ pnpm dev
 ### Useful commands
 
 ```bash
-pnpm typecheck       # TypeScript check across the whole workspace
-pnpm lint            # ESLint
-pnpm lint:fix        # ESLint with auto-fix
-pnpm format          # Prettier
-pnpm format:check    # Prettier check (no writes)
+./lint.sh                  # Lint + format check (frontend + backend)
+./lint.sh --fix            # Auto-fix lint issues and write formatting
 
-cd apps/backend
-uv run ruff check .  # Python lint
-uv run ruff format . # Python format
+./test.sh                  # Frontend + backend unit tests
+./test.sh --coverage       # ...with coverage reporting
+./test.sh --integration    # Backend integration tests (needs a running DB, see below)
+
+./docs.sh                  # Generate API reference docs (TypeDoc + pdoc) into api-docs/
+./docs.sh --open           # ...and open them in your browser
+```
+
+Each script also takes `--frontend`/`--backend` to scope to one side, and mirrors what the CI pipeline runs. See each script's own header comment for the full flag list.
+
+### Testing
+
+`./test.sh` runs the frontend Vitest suite and the backend pytest unit suite (no DB required). Backend integration tests need a real PostgreSQL/PostGIS database with the schema applied:
+
+```bash
+docker compose up -d db
+cd apps/backend && uv run alembic upgrade head && cd ../..
+./test.sh --integration
 ```
 
 ### Networking (Tailscale)
 
-The backend reaches the vessel over Tailscale. A Tailscale sidecar container runs alongside the backend and joins the existing tailnet — no Tailscale installation on the host is needed.
+The backend reaches the physical vessel over Tailscale via a small `vessel-proxy` sidecar, not by joining the tailnet directly from the backend container. `network_mode: "service:tailscale"` on the backend itself breaks Docker's internal DNS (`db` would become unreachable).
 
 **To connect to the vessel:**
 
@@ -104,67 +133,32 @@ The backend reaches the vessel over Tailscale. A Tailscale sidecar container run
 2. Add it to your `.env`:
     ```
     TAILSCALE_AUTHKEY=tskey-auth-...
-    VESSEL_HOST=revolt-onboard
-    ROS2_BRIDGE_PORT=9090
+    VESSEL_HOST=vessel-proxy
+    BRIDGE_TARGET=physical
     ```
-3. Run `docker compose up` — the sidecar joins the tailnet automatically and the backend resolves `revolt-onboard` whether you are on local WiFi or remote 5G. No code changes needed either way.
+3. Run `docker compose --profile vessel up`; the `tailscale` and `vessel-proxy` sidecars join the tailnet and expose the vessel's rosbridge port to the rest of the compose network as `vessel-proxy:9090`.
 
-Leave `TAILSCALE_AUTHKEY` empty to run without joining the tailnet (local development without the vessel).
+See [.env.example](.env.example) for the mock, physical-vessel, and simulation connection modes.
 
 ### Environment variables
 
 See [.env.example](.env.example) for all required variables. Never commit `.env`.
 
-## CI/CD pipeline
+### Troubleshooting
 
-The pipeline is defined in `azure-pipelines.yml` and uses templates under `.azuredevops/templates/`.
+- **`pnpm`/`uv`: command not found**: both install to `~/.local/bin` rather than system-wide on some setups. If the shell can't find them, run `export PATH="$HOME/.local/bin:$PATH"`.
+- **pytest fails on startup with a `PYTHONPATH` or launch_pytest error**: if ROS2 is sourced in the shell (e.g. `source /opt/ros/.../setup.bash` in your `.bashrc`), its `PYTHONPATH` leaks into the backend's Python environment and conflicts with pytest. Clear it before running: `PYTHONPATH="" uv run pytest`. `test.sh` already does this for you.
 
-### What runs and when
+## Contributing
 
-| Event                    | Stages                                                          |
-| ------------------------ | --------------------------------------------------------------- |
-| PR into `dev` or `main`  | `ci` only (used as branch policy gate)                          |
-| Push to `dev`            | `ci` → `push_images` → `deploy_staging` (stub)                  |
-| Push to `main`           | `ci` → `push_images` → `deploy_prod` (manual approval required) |
-| Push to feature branches | nothing (pipeline fires only when a PR is opened)               |
+- Branches are named `summer/<year>/<type>/<short-description>` and always cut from `dev`, never `main`.
+- Open PRs against `dev`; `dev` → `main` happens separately at meaningful milestones.
+- Commit messages use a type prefix: `feat`, `fix`, `chore`, `ci`, `docs`, `build`, `perf`, `refactor`, `revert`, `style`, `test` (e.g. `fix: correct GNSS heading offset`).
 
-The `push_images` and deploy stages are currently gated by `AZURE_READY: "false"` in `azure-pipelines.yml` and will be skipped until an Azure subscription and ACR are in place. Change the value to `"true"` to enable them.
+PR template: `.azuredevops/pull_request_template.md`.
 
-### CI stage
+## CI/CD
 
-Two jobs run in parallel on `ubuntu-latest`:
+The pipeline (`azure-pipelines.yml`) runs a `ci` stage on every PR into `dev` or `main`: frontend (typecheck, lint, format check, tests, build) and backend (Ruff lint/format, pytest, Docker build) jobs run in parallel and gate merging. Push/deploy stages also exist in the pipeline but are inactive (`AZURE_READY: "false"`) until Azure infrastructure is provisioned.
 
-**Frontend** — installs pnpm deps, then runs typecheck (tsc), ESLint, Prettier check, Vitest, and a production Vite build.
-
-**Backend** — installs Python deps via uv, then runs Ruff lint, Ruff format check, pytest, and a Docker build of the production image.
-
-Test results from both jobs are published to the Azure DevOps Tests tab (JUnit XML).
-
-### Azure DevOps setup required
-
-These steps are one-time portal configuration and are not in code:
-
-1. **Service connection** — create a Docker Registry connection pointing at your ACR. Name it exactly `revolt-acr-service-connection` (Project Settings → Service connections).
-
-2. **Variable groups** — create the following groups in Pipelines → Library and link them to the pipeline:
-
-    | Group                 | Variables                                                                         |
-    | --------------------- | --------------------------------------------------------------------------------- |
-    | `revolt-acr`          | `ACR_LOGIN_SERVER`                                                                |
-    | `revolt-staging-env`  | `DATABASE_URL`, `SECRET_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
-    | `revolt-prod-env`     | same shape as staging, with production values                                     |
-    | `revolt-azure-deploy` | `AZURE_SUBSCRIPTION`, `AZURE_RESOURCE_GROUP`, ARM service connection name         |
-
-3. **Register the pipeline** — point Azure DevOps at `azure-pipelines.yml` in the repo root.
-
-4. **Branch policies** — on both `dev` and `main`, add a Build Validation policy that runs this pipeline. Mark it as required and set expiry to 12 hours.
-
-5. **Production environment** — create an Environment named `production` (Pipelines → Environments) and add an Approvals check with the relevant approvers. This is what gates the `deploy_prod` stage.
-
-### Staging deployment
-
-The `deploy_staging` stage is currently a stub. Once the deployment target is decided, fill in the deploy step in `azure-pipelines.yml`:
-
-- **Azure Container Apps:** `az containerapp update --name <app> --resource-group <rg> --image <acr>/revolt-api:<tag>`
-- **AKS:** `kubectl set image deployment/revolt-api revolt-api=<acr>/revolt-api:<tag>`
-- **VM:** `ssh user@host 'docker compose pull && docker compose up -d'`
+See the project's Azure DevOps wiki for deployment and infrastructure setup details.

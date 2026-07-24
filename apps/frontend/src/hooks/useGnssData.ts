@@ -21,6 +21,7 @@ const FIX_LABELS: Record<number, FixLabel> = {
 	[2]: "GBAS",
 };
 
+/** GNSS position, heading, and speed, from the physical compass or the simulation's own feed. */
 export function useGnssData(): GnssData {
 	const { gnssFix, gnssHeading, gnssVelocity, gnssVelocityPhysical, bridgeStatus } =
 		useBridgeData();

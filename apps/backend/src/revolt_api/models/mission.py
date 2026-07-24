@@ -1,3 +1,5 @@
+"""The Mission and Waypoint table models."""
+
 import enum
 import uuid
 from datetime import datetime
@@ -12,6 +14,8 @@ from revolt_api.models.base import Base, TimestampMixin, new_uuid
 
 
 class MissionStatus(enum.StrEnum):
+	"""A mission's lifecycle state."""
+
 	draft = "draft"
 	active = "active"
 	paused = "paused"
@@ -20,6 +24,8 @@ class MissionStatus(enum.StrEnum):
 
 
 class Mission(Base, TimestampMixin):
+	"""A named, ordered route: metadata plus its Waypoint children."""
+
 	__tablename__ = "mission"
 
 	id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
@@ -51,6 +57,8 @@ class Mission(Base, TimestampMixin):
 
 
 class Waypoint(Base):
+	"""One point in a Mission's route, in send order (sequence_number)."""
+
 	__tablename__ = "waypoint"
 
 	id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)

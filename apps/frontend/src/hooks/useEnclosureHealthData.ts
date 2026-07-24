@@ -3,7 +3,7 @@ import { useBridgeData } from "../context/useBridgeData.js";
 // Hardware/actuators/firmware/stern/src/main.cpp:79-80 and .../bow/src/main.cpp:54-55 define
 // critical_temperature_level = 100.0 and critical_humidity_level = 99.0 identically on both
 // boards. These feed the firmware's own emergency escalation, so they're used here as the alarm
-// tier. The warning tier below has no firmware precedent -- it's a GUI-only early advisory.
+// tier. The warning tier below has no firmware precedent; it's a GUI-only early advisory.
 const TEMP_ALARM_C = 100.0;
 const TEMP_WARN_C = 60.0;
 const HUMIDITY_ALARM_PCT = 99.0;
@@ -38,6 +38,7 @@ export function humidityStatus(v: number | null): EnvStatus {
 	return "normal";
 }
 
+/** Stern/bow temperature and humidity with status thresholds, plus e-stop and actuator state. */
 export function useEnclosureHealthData(): EnclosureHealthData {
 	const { temperature, humidity, emergencyStop, linearActuator } = useBridgeData();
 

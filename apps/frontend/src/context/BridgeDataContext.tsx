@@ -4,6 +4,7 @@ import { useBridgeConnection } from "../hooks/useBridgeConnection.js";
 import { initialData, bridgeDataReducer } from "./bridgeDataReducer.js";
 import { BridgeDataContext } from "./useBridgeData.js";
 
+/** Owns the WebSocket connection and reduces incoming BridgeMessages into per-type state. */
 export function BridgeDataProvider({ children }: { children: ReactNode }) {
 	const [data, dispatch] = useReducer(bridgeDataReducer, initialData);
 

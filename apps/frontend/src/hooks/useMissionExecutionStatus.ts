@@ -2,7 +2,7 @@ import type { MissionExecutionStatusMsg } from "@revolt/shared-types";
 import { useBridgeData } from "../context/useBridgeData.js";
 
 /**
- * The live mission_execution_status broadcast, scoped to missionId -- null if nothing is
+ * The live mission_execution_status broadcast, scoped to missionId. Null if nothing is
  * currently tracked, or the broadcast currently on the wire describes a different mission.
  */
 export function useMissionExecutionStatus(

@@ -1,3 +1,5 @@
+"""Pydantic request/response schemas for Mission and Waypoint."""
+
 import math
 import uuid
 from datetime import datetime
@@ -20,6 +22,8 @@ def position_to_wkt(latitude: float, longitude: float) -> WKTElement:
 
 
 class WaypointCreate(BaseModel):
+	"""Request body for adding a waypoint to a mission."""
+
 	sequence_number: int = Field(ge=0)
 	latitude: float
 	longitude: float
@@ -30,6 +34,8 @@ class WaypointCreate(BaseModel):
 
 
 class WaypointUpdate(BaseModel):
+	"""Request body for a partial waypoint update; unset fields are left unchanged."""
+
 	latitude: float | None = None
 	longitude: float | None = None
 	target_speed: float | None = Field(default=None, ge=0)
@@ -39,6 +45,8 @@ class WaypointUpdate(BaseModel):
 
 
 class WaypointReplace(BaseModel):
+	"""Request body for one waypoint within a full-list PUT reorder/replace."""
+
 	latitude: float
 	longitude: float
 	target_speed: float = Field(ge=0)
@@ -48,6 +56,8 @@ class WaypointReplace(BaseModel):
 
 
 class WaypointRead(BaseModel):
+	"""Response body for a stored waypoint."""
+
 	model_config = ConfigDict(from_attributes=True)
 
 	id: uuid.UUID
@@ -76,18 +86,24 @@ class WaypointRead(BaseModel):
 
 
 class MissionCreate(BaseModel):
+	"""Request body for creating a new mission, optionally with its initial waypoints."""
+
 	name: str
 	description: str | None = None
 	waypoints: list[WaypointCreate] = Field(default_factory=list)
 
 
 class MissionUpdate(BaseModel):
+	"""Request body for a partial mission update; unset fields are left unchanged."""
+
 	name: str | None = None
 	description: str | None = None
 	status: MissionStatus | None = None
 
 
 class MissionRead(BaseModel):
+	"""Response body for a stored mission, including its ordered waypoints."""
+
 	model_config = ConfigDict(from_attributes=True)
 
 	id: uuid.UUID
@@ -106,11 +122,13 @@ class MissionRead(BaseModel):
 
 
 class MissionSendResult(BaseModel):
+	"""Response body for POST /missions/{id}/send."""
+
 	status: str
 	waypoint_count: int
 	checked_at: datetime
 	# The Phase 2 check send_mission() always runs before publishing. "blocked" never reaches this
-	# response (send_mission() raises 409 instead) -- these fields only ever carry "safe" or
+	# response (send_mission() raises 409 instead); these fields only ever carry "safe" or
 	# "warning", so the frontend can surface a non-blocking warning instead of it being silently
 	# persisted to Mission.last_validation_status with nothing in the UI ever showing it.
 	validation_status: ValidationStatus
@@ -118,12 +136,16 @@ class MissionSendResult(BaseModel):
 
 
 class MissionValidationResult(BaseModel):
+	"""Response body for POST /missions/{id}/validate."""
+
 	status: ValidationStatus
 	hazards: list[HazardHit]
 	checked_at: datetime
 
 
 class MissionExecutionResult(BaseModel):
+	"""Response body for the start/pause/terminate command endpoints."""
+
 	status: str
 	state: MissionExecutionState
 	autonomy_engaged: bool
