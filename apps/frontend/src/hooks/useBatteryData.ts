@@ -1,4 +1,4 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 import { ON_CURRENT_THRESHOLD_A } from "../lib/thresholds.js";
 
 const BATTERY_FULL_V = 14.4; // Trad/Gel charge voltage (charger spec)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { HazardHit, Waypoint } from "@revolt/shared-types";
+import type { HazardHit } from "@revolt/shared-types";
 import { ObcDropdownButton } from "@oicl/openbridge-webcomponents-react/components/dropdown-button/dropdown-button.js";
 import { ObcTextInputField } from "@oicl/openbridge-webcomponents-react/components/text-input-field/text-input-field.js";
 import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
@@ -14,7 +14,7 @@ import {
 	ProgressButtonType,
 	ProgressMode,
 } from "@oicl/openbridge-webcomponents/dist/components/progress-button/progress-button.js";
-import { useMission } from "../../context/MissionContext.js";
+import { useMission } from "../../context/useMission.js";
 import { useMissionSendStatus } from "../../hooks/useMissionSendStatus.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import { inputValue } from "../../lib/dom.js";
@@ -24,6 +24,7 @@ import { MissionBlockedError } from "../../lib/missionApi.js";
 import { statusIndicatorFor } from "../../lib/statusIndicator.js";
 import { HazardList } from "./HazardList.js";
 import { WaypointRow } from "./WaypointRow.js";
+import { moveWaypointId } from "./moveWaypointId.js";
 import styles from "./MissionWidget.module.css";
 
 const SEND_STATUS_LABEL: Record<string, string> = {
@@ -52,22 +53,6 @@ const SEND_INDICATOR_STATUS: Partial<Record<string, StatusIndicatorStatus>> = {
 	not_connected: StatusIndicatorStatus.alarm,
 	mismatched: StatusIndicatorStatus.alarm,
 };
-
-export function moveWaypointId(
-	waypoints: Waypoint[],
-	waypointId: string,
-	direction: -1 | 1,
-): string[] {
-	const ids = waypoints.map((w) => w.id);
-	const index = ids.indexOf(waypointId);
-	const target = index + direction;
-	if (index < 0 || target < 0 || target >= ids.length) return ids;
-	return ids.map((id, i) => {
-		if (i === index) return ids[target] ?? id;
-		if (i === target) return ids[index] ?? id;
-		return id;
-	});
-}
 
 export function MissionWidget() {
 	const {
@@ -216,7 +201,7 @@ export function MissionWidget() {
 
 			{legs.length > 0 && (
 				<div className={styles.summaryRow}>
-					Total: {totalDistanceNm.toFixed(1)} nm · ETE{" "}
+					Total: {totalDistanceNm.toFixed(1)} NM · ETE{" "}
 					{formatDuration(totalDurationHours)}
 				</div>
 			)}

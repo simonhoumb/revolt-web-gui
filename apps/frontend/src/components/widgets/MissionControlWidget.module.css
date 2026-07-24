@@ -40,6 +40,11 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.legReadouts {
+	display: flex;
+	gap: 12px;
+}
+
 .waypointLabel {
 	color: var(--element-inactive-color, #9c6a34);
 }
@@ -51,15 +56,17 @@
 	text-align: right;
 }
 
+/* obc-progress-button never stretches its own internal <button> to fill its host box (no
+   width: 100% in its shadow CSS, no ::part() exposed to add one from outside) -- flex: 1 on the
+   host still sizes the host correctly, but the extra width beyond the button's own natural
+   content just sits there as unstyleable dead space, reading as a much bigger gap than the 4px
+   set here. Left at natural (shrink-wrapped) size instead, so the visible gap actually matches
+   this gap value. */
 .buttonRow {
 	display: flex;
 	gap: 8px;
 	padding-top: 6px;
 	border-top: 1px solid var(--border-divider-color, #271b10);
-}
-
-.buttonRow > * {
-	flex: 1;
 }
 
 .autonomyNote {
@@ -72,13 +79,32 @@
 }
 
 /* Real OBC theme severity token (not the nonexistent --alarm-color MissionWidget.module.css
-   falls back from). */
+   falls back from). Still used directly by actionError's plain-text banner; blockedError's own
+   border now comes from obc-alert-frame instead (see .blockedErrorWrapper below). */
 .blockedError {
 	margin-top: 4px;
 	padding: 6px 8px;
 	border: 1px solid var(--alert-alarm-color, #e30019);
 	border-radius: 4px;
 	background: color-mix(in srgb, var(--alert-alarm-color, #e30019) 12%, transparent);
+}
+
+.blockedErrorWrapper {
+	position: relative;
+	margin-top: 4px;
+}
+
+.blockedErrorContent {
+	padding: 6px 8px;
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--alert-alarm-color, #e30019) 12%, transparent);
+}
+
+/* obc-alert-frame's :host is absolutely positioned over its sibling content -- without this it
+   sits on top in paint order and swallows clicks on anything underneath (same fix ConfirmDialog's
+   own alert-frame usage needed). */
+.alertFrame {
+	pointer-events: none;
 }
 
 .blockedErrorMessage {

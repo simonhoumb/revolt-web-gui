@@ -30,12 +30,22 @@ function makeThrusterData(overrides: Partial<ThrusterData> = {}): ThrusterData {
 
 afterEach(() => {
 	cleanup();
+	vi.clearAllMocks();
 });
 
 describe("ThrusterWidget", () => {
-	it("labels each thruster row", () => {
+	it("labels each obc-azimuth-thruster-labeled gauge in instrument view", () => {
 		mockUseThrusterData.mockReturnValue(makeThrusterData());
-		render(<ThrusterWidget />);
+		render(<ThrusterWidget viewMode="instrument" />);
+		const labeled = document.querySelectorAll("obc-azimuth-thruster-labeled") as NodeListOf<
+			HTMLElement & { label: string }
+		>;
+		expect([...labeled].map((el) => el.label).sort()).toEqual(["Bow", "Port", "Starboard"]);
+	});
+
+	it("labels each thruster row in detailed view", () => {
+		mockUseThrusterData.mockReturnValue(makeThrusterData());
+		render(<ThrusterWidget viewMode="detailed" />);
 		expect(screen.getByText("Port")).toBeInTheDocument();
 		expect(screen.getByText("Starboard")).toBeInTheDocument();
 		expect(screen.getByText("Bow")).toBeInTheDocument();
@@ -61,7 +71,7 @@ describe("ThrusterWidget", () => {
 		expect(screen.getAllByText("Miscommunication").length).toBeGreaterThan(0);
 	});
 
-	it("shows sim force/angle only in simulation, and the actuator state for the bow thruster", () => {
+	it("shows sim force/angle only in simulation, and the actuator state for the bow thruster, in detailed view", () => {
 		mockUseThrusterData.mockReturnValue(
 			makeThrusterData({
 				bow: { isOn: true, amperes: 1.5, force: 3.2, angleDeg: 45 },
@@ -69,15 +79,49 @@ describe("ThrusterWidget", () => {
 				isSimulation: true,
 			}),
 		);
-		render(<ThrusterWidget />);
+		render(<ThrusterWidget viewMode="detailed" />);
 		expect(screen.getByText("Force: 3.2 N")).toBeInTheDocument();
 		expect(screen.getByText("Angle: 45.0°")).toBeInTheDocument();
 		expect(screen.getByText("Deployed")).toBeInTheDocument();
 	});
 
-	it("shows actuator unknown when bowRetracted has no reading", () => {
+	it("shows actuator unknown when bowRetracted has no reading, in detailed view", () => {
 		mockUseThrusterData.mockReturnValue(makeThrusterData({ bowRetracted: null }));
-		render(<ThrusterWidget />);
+		render(<ThrusterWidget viewMode="detailed" />);
 		expect(screen.getByText("Actuator unknown")).toBeInTheDocument();
+	});
+
+	it("defaults to instrument view when no viewMode prop is given", () => {
+		mockUseThrusterData.mockReturnValue(makeThrusterData());
+		render(<ThrusterWidget />);
+		expect(document.querySelectorAll("obc-azimuth-thruster-labeled")).toHaveLength(3);
+	});
+
+	it("renders the detailed thruster rows instead of the gauges when viewMode is 'detailed'", () => {
+		mockUseThrusterData.mockReturnValue(makeThrusterData());
+		render(<ThrusterWidget viewMode="detailed" />);
+		expect(document.querySelector("obc-azimuth-thruster-labeled")).toBeNull();
+	});
+
+	it("maps angle/thrust onto the azimuth thrusters in instrument view, with a fixed angle of 0 for the bow", () => {
+		mockUseThrusterData.mockReturnValue(
+			makeThrusterData({
+				stern_port: { isOn: true, amperes: 15, force: null, angleDeg: 30 },
+				stern_star: { isOn: false, amperes: null, force: null, angleDeg: null },
+			}),
+		);
+		render(<ThrusterWidget viewMode="instrument" />);
+
+		const labeled = document.querySelectorAll("obc-azimuth-thruster-labeled") as NodeListOf<
+			HTMLElement & { label: string; angle: number; thrust: number; commandStatus: string }
+		>;
+		const byLabel = new Map([...labeled].map((el) => [el.label, el]));
+		expect(byLabel.get("Port")?.angle).toBe(30);
+		expect(byLabel.get("Port")?.thrust).toBe(50); // 15A / THRUSTER_MAX_AMPERES(30.0) * 100
+		expect(byLabel.get("Port")?.commandStatus).toBe("in-command");
+		expect(byLabel.get("Starboard")?.angle).toBe(0);
+		expect(byLabel.get("Starboard")?.thrust).toBe(0);
+		expect(byLabel.get("Starboard")?.commandStatus).toBe("no-command");
+		expect(byLabel.get("Bow")?.angle).toBe(0);
 	});
 });

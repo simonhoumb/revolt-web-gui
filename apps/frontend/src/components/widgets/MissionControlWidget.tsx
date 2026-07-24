@@ -12,14 +12,23 @@ import {
 } from "@oicl/openbridge-webcomponents/dist/components/progress-bar/progress-bar.js";
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
+import { ObcInstrumentField } from "@oicl/openbridge-webcomponents-react/navigation-instruments/instrument-field/instrument-field.js";
+import { InstrumentFieldSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/instrument-field/instrument-field.js";
+import { ObcAlertFrame } from "@oicl/openbridge-webcomponents-react/components/alert-frame/alert-frame.js";
+import {
+	ObcAlertFrameStatus,
+	ObcAlertFrameThickness,
+	ObcAlertFrameType,
+} from "@oicl/openbridge-webcomponents/dist/components/alert-frame/alert-frame.js";
 import { ObiMediaPlay } from "@oicl/openbridge-webcomponents-react/icons/icon-media-play.js";
 import { ObiMediaPause } from "@oicl/openbridge-webcomponents-react/icons/icon-media-pause.js";
 import { ObiMediaStop } from "@oicl/openbridge-webcomponents-react/icons/icon-media-stop.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
-import { useMission } from "../../context/MissionContext.js";
+import { useBridgeData } from "../../context/useBridgeData.js";
+import { useMission } from "../../context/useMission.js";
 import { useMissionExecutionStatus } from "../../hooks/useMissionExecutionStatus.js";
+import { useGnssData } from "../../hooks/useGnssData.js";
 import { formatDuration, formatLatLon } from "../../lib/format.js";
-import { haversineDistanceM } from "../../lib/geo.js";
+import { haversineDistanceM, METERS_PER_SECOND_TO_KNOTS } from "../../lib/geo.js";
 import { accumulateRouteEta, type DistanceSpeedLeg, type RouteEta } from "../../lib/missionMath.js";
 import {
 	MissionBlockedError,
@@ -118,11 +127,29 @@ function computeRemainingEta(
 	return accumulateRouteEta(legs);
 }
 
+// Distance/ETA to the current waypoint specifically, not the whole remaining route --
+// computeRemainingEta above answers "how long until the mission finishes," this answers "how long
+// until the next waypoint," which accumulateRouteEta already supports with a single-leg array.
+function computeLegEta(
+	currentWaypoint: Waypoint | null,
+	ownship: { lat: number; lon: number } | null,
+): RouteEta | null {
+	if (!currentWaypoint || !ownship) return null;
+	const distanceM = haversineDistanceM(
+		ownship.lat,
+		ownship.lon,
+		currentWaypoint.position.latitude,
+		currentWaypoint.position.longitude,
+	);
+	return accumulateRouteEta([{ distanceM, speedKt: currentWaypoint.target_speed }]);
+}
+
 type DialogKind = "start" | "pause" | "terminate" | null;
 
 export function MissionControlWidget() {
 	const { loadedMission, startMission, pauseMission, terminateMission } = useMission();
 	const { gnssFix, bridgeStatus } = useBridgeData();
+	const { speedMs } = useGnssData();
 	const liveStatus = useMissionExecutionStatus(loadedMission?.id ?? null);
 
 	const [openDialog, setOpenDialog] = useState<DialogKind>(null);
@@ -149,6 +176,13 @@ export function MissionControlWidget() {
 			ownship,
 		);
 	}, [loadedMission, liveStatus, gnssFix]);
+
+	const legEta = useMemo(() => {
+		const ownship = gnssFix ? { lat: gnssFix.latitude, lon: gnssFix.longitude } : null;
+		return computeLegEta(currentWaypoint, ownship);
+	}, [currentWaypoint, gnssFix]);
+
+	const currentSpeedKt = speedMs !== null ? speedMs * METERS_PER_SECOND_TO_KNOTS : undefined;
 
 	const progressPct =
 		liveStatus && liveStatus.total_count > 0
@@ -276,6 +310,27 @@ export function MissionControlWidget() {
 						</span>
 					</div>
 
+					<div className={styles.legReadouts}>
+						<ObcInstrumentField
+							tag="DTW"
+							unit="NM"
+							fractionDigits={2}
+							value={legEta?.distanceNm}
+							size={InstrumentFieldSize.regular}
+							horizontal
+						/>
+						<ObcInstrumentField
+							tag="SPD"
+							unit="KN"
+							fractionDigits={1}
+							value={currentSpeedKt}
+							setpoint={currentWaypoint?.target_speed}
+							hasSetpoint
+							size={InstrumentFieldSize.regular}
+							horizontal
+						/>
+					</div>
+
 					<ObcProgressBar
 						type={ProgressBarType.linear}
 						mode={ProgressBarMode.determinate}
@@ -288,7 +343,11 @@ export function MissionControlWidget() {
 					</div>
 
 					<div className={styles.etaRow}>
-						<span className={styles.waypointLabel}>ETA (estimate)</span>
+						<span className={styles.waypointLabel}>ETA (leg)</span>
+						<span>{legEta ? formatDuration(legEta.hours) : "—"}</span>
+					</div>
+					<div className={styles.etaRow}>
+						<span className={styles.waypointLabel}>ETA (route)</span>
 						<span>{eta ? formatDuration(eta.hours) : "—"}</span>
 					</div>
 				</>

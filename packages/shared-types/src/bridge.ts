@@ -156,7 +156,10 @@ export interface GnssVelocityMsg {
 	type: "gnss_velocity";
 	timestamp_ms: number;
 	speed_ms: number; // from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
-	course_deg: number; // course over ground 0-360, from /vel TwistStamped linear.x/y bearing
+	// Course over ground 0-360, from /vel TwistStamped linear.x/y bearing. null below the
+	// backend's MIN_COG_SPEED_MS -- the angle is meaningless noise at near-zero speed, not just
+	// imprecise.
+	course_deg: number | null;
 }
 
 export interface SimGnssVelocityMsg {

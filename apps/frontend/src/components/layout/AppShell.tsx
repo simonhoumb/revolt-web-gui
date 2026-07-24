@@ -1,3 +1,4 @@
+import { AppProvider } from "../../context/AppContext.js";
 import { LayoutProvider } from "../../context/LayoutContext.js";
 import { MissionProvider } from "../../context/MissionContext.js";
 import { LegHazardsProvider } from "../../context/LegHazardsContext.js";
@@ -7,15 +8,17 @@ import styles from "./AppShell.module.css";
 
 export function AppShell() {
 	return (
-		<LayoutProvider>
-			<MissionProvider>
-				<LegHazardsProvider>
-					<div className={styles.shell}>
-						<TopNav />
-						<TileGrid />
-					</div>
-				</LegHazardsProvider>
-			</MissionProvider>
-		</LayoutProvider>
+		<AppProvider>
+			<LayoutProvider>
+				<MissionProvider>
+					<LegHazardsProvider>
+						<div className={styles.shell}>
+							<TopNav />
+							<TileGrid />
+						</div>
+					</LegHazardsProvider>
+				</MissionProvider>
+			</LayoutProvider>
+		</AppProvider>
 	);
 }

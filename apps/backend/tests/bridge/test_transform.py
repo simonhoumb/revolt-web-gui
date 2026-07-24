@@ -295,6 +295,25 @@ def test_ais_target_sog_decoder_default_sentinel(client: RosBridgeClient) -> Non
 	assert result["sog_kn"] is None
 
 
+def test_ais_target_position_not_available_sentinel(client: RosBridgeClient) -> None:
+	# ITU-R M.1371's own "position not available" sentinel (lat=91, lon=181), decoded verbatim
+	# by pyais with no filtering -- outside the real geographic range, which is exactly what
+	# crashed the frontend's map marker before this was dropped here instead.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 91.0, "lon": 181.0, "sog": 0.0, "heading": 511},
+	)
+	assert result is None
+
+
+def test_ais_target_out_of_range_position_dropped(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 95.0, "lon": 10.601, "sog": 0.0, "heading": 511},
+	)
+	assert result is None
+
+
 def test_unknown_topic_returns_none(client: RosBridgeClient) -> None:
 	assert client._transform("/some/unknown/topic", {"data": 42}) is None
 
@@ -463,6 +482,33 @@ def test_physical_gnss_velocity(client: RosBridgeClient) -> None:
 	assert result["type"] == "gnss_velocity"
 	assert result["speed_ms"] == pytest.approx(5.0)
 	assert result["course_deg"] == pytest.approx(45.0)
+
+
+def test_gnss_velocity_below_min_speed_has_no_course(client: RosBridgeClient) -> None:
+	# Course over ground is an angle derived from the velocity vector -- below MIN_COG_SPEED_MS
+	# the vector is small enough that receiver noise dominates the angle, so it's published as
+	# None rather than a meaningless number (see MIN_COG_SPEED_MS's own comment in client.py).
+	msg = {"twist": {"linear": {"x": 0.01, "y": 0.01, "z": 0.0}}}
+	result = client._transform("/vel", msg)
+	assert result is not None
+	assert result["speed_ms"] == pytest.approx(0.01414, abs=1e-4)
+	assert result["course_deg"] is None
+
+
+def test_gnss_velocity_ema_smooths_course_across_messages(client: RosBridgeClient) -> None:
+	# Same speed (5 m/s), course swings from 45deg to 135deg between two messages -- the smoothed
+	# course should land somewhere between the two raw values, not jump straight to 135.
+	msg_45 = {"twist": {"linear": {"x": 3.5355339059327378, "y": 3.5355339059327378, "z": 0.0}}}
+	msg_135 = {"twist": {"linear": {"x": 3.5355339059327378, "y": -3.5355339059327378, "z": 0.0}}}
+
+	first = client._transform("/vel", msg_45)
+	assert first is not None
+	assert first["course_deg"] == pytest.approx(45.0)
+
+	second = client._transform("/vel", msg_135)
+	assert second is not None
+	assert second["course_deg"] is not None
+	assert 45.0 < second["course_deg"] < 135.0
 
 
 def test_sim_gnss_velocity(client: RosBridgeClient) -> None:

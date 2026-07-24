@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TileCard } from "./TileCard.js";
 
@@ -34,37 +34,15 @@ describe("TileCard", () => {
 		expect(screen.getByLabelText("Remove widget")).toBeInTheDocument();
 	});
 
-	it("calls onRemove with this tile's widgetId when the title container fires action-click in edit mode", () => {
+	it("calls onRemove with this tile's widgetId when the remove button is clicked in edit mode", () => {
 		const onRemove = vi.fn();
 		render(
 			<TileCard title="Battery" widgetId="battery" editMode={true} onRemove={onRemove}>
 				<div>content</div>
 			</TileCard>,
 		);
-		// obc-title-container fires "action-click" on itself when a slotted action element is
-		// clicked (see the OBC library source) -- the @lit/react wrapper forwards that native
-		// event to the onActionClick prop, the same mechanism ConfirmDialog.test.tsx already
-		// exercises for obc-modal-window's cancel-click/done-click.
-		const container = document.querySelector("obc-title-container");
-		expect(container).not.toBeNull();
-		act(() => {
-			container?.dispatchEvent(new CustomEvent("action-click", { detail: { action: 1 } }));
-		});
+		screen.getByLabelText("Remove widget").click();
 		expect(onRemove).toHaveBeenCalledExactlyOnceWith("battery");
-	});
-
-	it("does not wire an action-click handler when not in edit mode", () => {
-		const onRemove = vi.fn();
-		render(
-			<TileCard title="Battery" widgetId="battery" editMode={false} onRemove={onRemove}>
-				<div>content</div>
-			</TileCard>,
-		);
-		const container = document.querySelector("obc-title-container");
-		act(() => {
-			container?.dispatchEvent(new CustomEvent("action-click", { detail: { action: 1 } }));
-		});
-		expect(onRemove).not.toHaveBeenCalled();
 	});
 
 	it("marks the tile with data-edit-mode only while editing", () => {
@@ -81,5 +59,65 @@ describe("TileCard", () => {
 			</TileCard>,
 		);
 		expect(document.querySelector("[data-edit-mode]")).not.toBeNull();
+	});
+
+	it("hides the view-mode button when viewMode/onViewModeChange aren't both provided", () => {
+		render(
+			<TileCard title="GNSS" widgetId="gnss" editMode={false} onRemove={vi.fn()}>
+				<div>content</div>
+			</TileCard>,
+		);
+		expect(screen.queryByLabelText("Switch to detailed view")).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("Switch to instrument view")).not.toBeInTheDocument();
+	});
+
+	it("shows the view-mode button regardless of edit mode when both props are provided", () => {
+		render(
+			<TileCard
+				title="GNSS"
+				widgetId="gnss"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="instrument"
+				onViewModeChange={vi.fn()}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		expect(screen.getByLabelText("Switch to detailed view")).toBeInTheDocument();
+	});
+
+	it("calls onViewModeChange with the opposite mode when the view-mode button is clicked", () => {
+		const onViewModeChange = vi.fn();
+		const { rerender } = render(
+			<TileCard
+				title="GNSS"
+				widgetId="gnss"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="instrument"
+				onViewModeChange={onViewModeChange}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		screen.getByLabelText("Switch to detailed view").click();
+		expect(onViewModeChange).toHaveBeenCalledExactlyOnceWith("detailed");
+		onViewModeChange.mockClear();
+
+		rerender(
+			<TileCard
+				title="GNSS"
+				widgetId="gnss"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="detailed"
+				onViewModeChange={onViewModeChange}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		screen.getByLabelText("Switch to instrument view").click();
+		expect(onViewModeChange).toHaveBeenCalledExactlyOnceWith("instrument");
 	});
 });

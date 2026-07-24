@@ -16,45 +16,47 @@ export function BatteryWidget() {
 
 	return (
 		<div className={styles.content}>
-			<div className={styles.batteryRow}>
-				<div className={styles.iconWrapper}>
+			<div className={styles.readingList}>
+				<div className={styles.readingRow}>
 					<ObcBatteryIcon
 						className={styles.batteryIcon}
 						level={voltagePercent ?? 0}
 						charging={false}
-						horizontal={false}
+						horizontal={true}
 						notification={voltageStatus !== "normal"}
 					/>
-				</div>
-				<div className={styles.voltageBlock}>
-					<span className={styles.voltage}>
-						{voltageV !== null ? `${voltageV.toFixed(2)} V` : "— V"}
+					<span className={styles.readingLabel}>Voltage</span>
+					<span className={styles.readingValueCell}>
+						{(voltageStatus === "alarm" || voltageStatus === "overvolt") && (
+							<ObcBadge type="alarm" showNumber={false} showIcon={true} />
+						)}
+						{voltageStatus === "warning" && (
+							<ObcBadge type="warning" showNumber={false} showIcon={true} />
+						)}
+						<span className={styles.readingValue}>
+							{voltageV !== null ? `${voltageV.toFixed(2)} V` : "— V"}
+						</span>
 					</span>
-					{(voltageStatus === "alarm" || voltageStatus === "overvolt") && (
-						<ObcBadge type="alarm" showNumber={false} showIcon={true} />
-					)}
-					{voltageStatus === "warning" && (
-						<ObcBadge type="warning" showNumber={false} showIcon={true} />
-					)}
 				</div>
-			</div>
-			<div className={styles.currentList}>
 				{(["stern_port", "stern_star", "bow"] as const).map((loc) => {
 					const reading = current[loc];
 					return (
-						<div key={loc} className={styles.currentRow}>
+						<div key={loc} className={styles.readingRow}>
 							<ObcStatusIndicator
+								className={styles.statusIcon}
 								status={
 									reading.isOn
 										? StatusIndicatorStatus.running
 										: StatusIndicatorStatus.inactive
 								}
 							/>
-							<span className={styles.currentLabel}>{LOCATION_LABELS[loc]}</span>
-							<span className={styles.currentValue}>
-								{reading.amperes !== null
-									? `${reading.amperes.toFixed(1)} A`
-									: "— A"}
+							<span className={styles.readingLabel}>{LOCATION_LABELS[loc]}</span>
+							<span className={styles.readingValueCell}>
+								<span className={styles.readingValue}>
+									{reading.amperes !== null
+										? `${reading.amperes.toFixed(1)} A`
+										: "— A"}
+								</span>
 							</span>
 						</div>
 					);

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { LidarScanMsg } from "@revolt/shared-types";
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 
 export interface LidarPoint {
 	x: number; // metres East (X=right in vessel frame)

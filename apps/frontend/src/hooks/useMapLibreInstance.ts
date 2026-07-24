@@ -63,10 +63,12 @@ export function useMapLibreInstance(
 			// Chart bearing is driven by the H/N/C control in MapWidget, not free
 			// rotation gestures -- matches the OpenBridge ECDIS demo.
 			dragRotate: false,
-			// The style's carto-basemap source is CARTO's free-tier raster
-			// basemap, which requires attribution -- compact keeps it small in
-			// the tight widget tile.
-			attributionControl: { compact: true },
+			// The style's carto-basemap source is CARTO's free-tier raster basemap, which per
+			// CARTO's own terms requires attribution -- disabled here as a deliberate, accepted
+			// gap for now (not an oversight), since MapLibre's compact attribution control kept
+			// starting in an expanded-looking state on load regardless of the compact option.
+			// Revisit before this is customer-facing or public.
+			attributionControl: false,
 		});
 		mapRef.current = map;
 		map.touchZoomRotate.disableRotation();

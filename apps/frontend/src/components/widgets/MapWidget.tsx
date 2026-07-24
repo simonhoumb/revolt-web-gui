@@ -3,6 +3,8 @@ import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/s
 import { ObcToggleButtonGroup } from "@oicl/openbridge-webcomponents-react/components/toggle-button-group/toggle-button-group.js";
 import { ObcToggleButtonOption } from "@oicl/openbridge-webcomponents-react/components/toggle-button-option/toggle-button-option.js";
 import { ObcToggleButtonOptionType } from "@oicl/openbridge-webcomponents/dist/components/toggle-button-option/toggle-button-option.js";
+import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
+import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
 import { ObiHeadingHUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-h-up-proposal.js";
 import { ObiHeadingNUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-n-up-proposal.js";
 import { ObiHeadingCUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-c-up-proposal.js";
@@ -12,28 +14,38 @@ import { ObiWaypointEditIec } from "@oicl/openbridge-webcomponents-react/icons/i
 import { ObiWaypointAddIec } from "@oicl/openbridge-webcomponents-react/icons/icon-waypoint-add-iec.js";
 import { ObiVisibilityOnGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-visibility-on-google.js";
 import { ObiVisibilityOffGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-visibility-off-google.js";
+import { ObiArrowTopRight } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-top-right.js";
+import { ObiArrowBottomLeft } from "@oicl/openbridge-webcomponents-react/icons/icon-arrow-bottom-left.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
 import { useAisTargets } from "../../hooks/useAisTargets.js";
-import { useMission } from "../../context/MissionContext.js";
-import { useLegHazards } from "../../context/LegHazardsContext.js";
+import { useMission } from "../../context/useMission.js";
+import { useLegHazards } from "../../context/useLegHazards.js";
+import { useApps } from "../../context/useApps.js";
 import { useMapLibreInstance, scaleNmForZoom } from "../../hooks/useMapLibreInstance.js";
 import { useOwnShipMarker } from "../../hooks/useOwnShipMarker.js";
 import { useVesselTrackLayer } from "../../hooks/useVesselTrackLayer.js";
 import { useWaypointMarkers } from "../../hooks/useWaypointMarkers.js";
 import { useAisMarkers } from "../../hooks/useAisMarkers.js";
 import styles from "./MapWidget.module.css";
+import { Tooltip } from "./Tooltip.js";
 
 type RotationMode = "H" | "N" | "C"; // HEADING-UP || NORTH-UP || COURSE-UP
 type EditMode = "edit" | "add";
 
 export function MapWidget() {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const { activeAppId } = useApps();
 	const [rotationMode, setRotationMode] = useState<RotationMode>("N");
 	const [cameraLocked, setCameraLocked] = useState(true);
 	const [editMode, setEditMode] = useState<EditMode>("edit");
 	const [aisVisible, setAisVisible] = useState(true);
+	// Whether the map's control bar (range stepper, orientation/camera-lock/edit-mode/AIS toggle
+	// groups) is shown at all, not just a "mini-map" zoomed-out view -- the map itself is always
+	// full size, this only hides its overlaid controls to get an unobstructed view (e.g. the
+	// Conning app's default, where the map is a supporting chart rather than the primary focus).
+	const [showControls, setShowControls] = useState(activeAppId !== "conning");
 
 	const { latitude, longitude, headingDeg, courseDeg } = useGnssData();
 	const track = useVesselTrack();
@@ -65,17 +77,28 @@ export function MapWidget() {
 		map.getCanvas().style.cursor = editMode === "add" ? "crosshair" : "";
 	}, [editMode, mapRef]);
 
+	// Hiding controls hides the route-edit toggle group (see the toolbar below), so there's no way
+	// for the operator to switch back out of "add" once hidden; force it back to pan-only "edit"
+	// the moment controls hide, rather than leaving a stale add-mode cursor/click-to-place
+	// behavior active on a map with no visible affordance to turn it off.
+	useEffect(() => {
+		if (!showControls) setEditMode("edit");
+	}, [showControls]);
+
 	// H/N/C chart orientation: bearing follows true heading, course over
 	// ground, or stays fixed at true north depending on the selected mode.
 	// dragRotate/touch rotation are disabled (see useMapLibreInstance), so this is the only way
 	// the chart's bearing changes. Skip the update while the operator is
 	// actively dragging -- same guard the OpenBridge ECDIS demo uses --
 	// otherwise every heading/course tick fights the pan gesture and the drag
-	// feels like it keeps getting cancelled. eased (not snapped) so the
-	// rotation itself isn't jarring once it does apply.
+	// feels like it keeps getting cancelled. Same reasoning extends to scroll-zoom (isZooming):
+	// without it, a heading/course tick arriving mid-gesture retargets the camera's bearing via
+	// its own easeTo while MapLibre's own zoom interpolation is also actively driving the same
+	// camera, and the two fighting over the same transition is what read as jitter specifically
+	// while zooming. eased (not snapped) so the rotation itself isn't jarring once it does apply.
 	useEffect(() => {
 		const map = mapRef.current;
-		if (!map || map.dragPan.isActive()) return;
+		if (!map || map.dragPan.isActive() || map.isZooming()) return;
 		const bearing =
 			rotationMode === "H" ? (headingDeg ?? 0) : rotationMode === "C" ? (courseDeg ?? 0) : 0;
 		map.easeTo({ bearing, duration: 300 });
@@ -155,6 +178,10 @@ export function MapWidget() {
 		[],
 	);
 
+	const handleToggleControls = useCallback(() => {
+		setShowControls((v) => !v);
+	}, []);
+
 	const handleZoomIn = useCallback(() => {
 		mapRef.current?.zoomIn();
 	}, [mapRef]);
@@ -166,66 +193,115 @@ export function MapWidget() {
 	return (
 		<div className={styles.mapWrapper}>
 			<div ref={containerRef} className={styles.mapContainer} aria-label="Oslo Fjord chart" />
-			<div className={styles.toolbar}>
-				<ObcStepperBox aria-label="Chart range" onUp={handleZoomIn} onDown={handleZoomOut}>
-					<div>{scaleNmForZoom(zoom).toFixed(1)}</div>
-					<div slot="unit">NM</div>
-				</ObcStepperBox>
-				<ObcToggleButtonGroup
-					aria-label="Chart orientation"
-					value={rotationMode}
-					type={ObcToggleButtonOptionType.icon}
-					onValue={handleRotationValue}
-				>
-					<ObcToggleButtonOption value="H" aria-label="Heading up">
-						<ObiHeadingHUpProposal slot="icon" />
-					</ObcToggleButtonOption>
-					<ObcToggleButtonOption value="N" aria-label="North up">
-						<ObiHeadingNUpProposal slot="icon" />
-					</ObcToggleButtonOption>
-					<ObcToggleButtonOption value="C" aria-label="Course up">
-						<ObiHeadingCUpProposal slot="icon" />
-					</ObcToggleButtonOption>
-				</ObcToggleButtonGroup>
-				<ObcToggleButtonGroup
-					aria-label="Camera lock"
-					value={cameraLocked ? "locked" : "free"}
-					type={ObcToggleButtonOptionType.icon}
-					onValue={handleCameraLockValue}
-				>
-					<ObcToggleButtonOption value="locked" aria-label="Lock camera on vessel">
-						<ObiCenterIec slot="icon" />
-					</ObcToggleButtonOption>
-					<ObcToggleButtonOption value="free" aria-label="Free camera">
-						<ObiCenterOffIec slot="icon" />
-					</ObcToggleButtonOption>
-				</ObcToggleButtonGroup>
-				<ObcToggleButtonGroup
-					aria-label="Route edit mode"
-					value={editMode}
-					type={ObcToggleButtonOptionType.icon}
-					onValue={handleEditModeValue}
-				>
-					<ObcToggleButtonOption value="edit" aria-label="Edit waypoints">
-						<ObiWaypointEditIec slot="icon" />
-					</ObcToggleButtonOption>
-					<ObcToggleButtonOption value="add" aria-label="Add waypoint">
-						<ObiWaypointAddIec slot="icon" />
-					</ObcToggleButtonOption>
-				</ObcToggleButtonGroup>
-				<ObcToggleButtonGroup
-					aria-label="AIS targets"
-					value={aisVisible ? "visible" : "hidden"}
-					type={ObcToggleButtonOptionType.icon}
-					onValue={handleAisVisibleValue}
-				>
-					<ObcToggleButtonOption value="visible" aria-label="Show AIS targets">
-						<ObiVisibilityOnGoogle slot="icon" />
-					</ObcToggleButtonOption>
-					<ObcToggleButtonOption value="hidden" aria-label="Hide AIS targets">
-						<ObiVisibilityOffGoogle slot="icon" />
-					</ObcToggleButtonOption>
-				</ObcToggleButtonGroup>
+			{/* The toggle button is a permanent first child of the bar, not floated separately over
+			    the map: that keeps it visually grouped with the bar's own chrome (background,
+			    border, shadow) in both states, rather than reading as a stray overlay control. Only
+			    the other controls are conditionally rendered; the bar itself shrinks to fit-content
+			    (see .toolbar[data-collapsed] below) around just this button when they're hidden,
+			    instead of unmounting entirely. Icon shows the action a click performs, same
+			    convention as TileCard's view-mode button. */}
+			<div className={styles.toolbar} data-collapsed={showControls ? undefined : ""}>
+				<Tooltip label={showControls ? "Hide map controls" : "Show map controls"}>
+					<ObcIconButton
+						className={styles.controlsToggle}
+						variant={IconButtonVariant.normal}
+						aria-label={showControls ? "Hide map controls" : "Show map controls"}
+						onClick={handleToggleControls}
+					>
+						{showControls ? <ObiArrowBottomLeft /> : <ObiArrowTopRight />}
+					</ObcIconButton>
+				</Tooltip>
+				{showControls && (
+					<>
+						<ObcStepperBox
+							aria-label="Chart range"
+							onUp={handleZoomIn}
+							onDown={handleZoomOut}
+						>
+							<div>{scaleNmForZoom(zoom).toFixed(1)}</div>
+							<div slot="unit">NM</div>
+						</ObcStepperBox>
+						<ObcToggleButtonGroup
+							aria-label="Chart orientation"
+							value={rotationMode}
+							type={ObcToggleButtonOptionType.icon}
+							onValue={handleRotationValue}
+						>
+							<Tooltip label="Heading up" asChild>
+								<ObcToggleButtonOption value="H" aria-label="Heading up">
+									<ObiHeadingHUpProposal slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="North up" asChild>
+								<ObcToggleButtonOption value="N" aria-label="North up">
+									<ObiHeadingNUpProposal slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Course up" asChild>
+								<ObcToggleButtonOption value="C" aria-label="Course up">
+									<ObiHeadingCUpProposal slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+						</ObcToggleButtonGroup>
+						<ObcToggleButtonGroup
+							aria-label="Camera lock"
+							value={cameraLocked ? "locked" : "free"}
+							type={ObcToggleButtonOptionType.icon}
+							onValue={handleCameraLockValue}
+						>
+							<Tooltip label="Lock camera to vessel" asChild>
+								<ObcToggleButtonOption
+									value="locked"
+									aria-label="Lock camera on vessel"
+								>
+									<ObiCenterIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Free camera" asChild>
+								<ObcToggleButtonOption value="free" aria-label="Free camera">
+									<ObiCenterOffIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+						</ObcToggleButtonGroup>
+						<ObcToggleButtonGroup
+							aria-label="Route edit mode"
+							value={editMode}
+							type={ObcToggleButtonOptionType.icon}
+							onValue={handleEditModeValue}
+						>
+							<Tooltip label="Edit waypoints" asChild>
+								<ObcToggleButtonOption value="edit" aria-label="Edit waypoints">
+									<ObiWaypointEditIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Add waypoint" asChild>
+								<ObcToggleButtonOption value="add" aria-label="Add waypoint">
+									<ObiWaypointAddIec slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+						</ObcToggleButtonGroup>
+						<ObcToggleButtonGroup
+							aria-label="AIS targets"
+							value={aisVisible ? "visible" : "hidden"}
+							type={ObcToggleButtonOptionType.icon}
+							onValue={handleAisVisibleValue}
+						>
+							<Tooltip label="Show AIS targets" asChild>
+								<ObcToggleButtonOption
+									value="visible"
+									aria-label="Show AIS targets"
+								>
+									<ObiVisibilityOnGoogle slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Hide AIS targets" asChild>
+								<ObcToggleButtonOption value="hidden" aria-label="Hide AIS targets">
+									<ObiVisibilityOffGoogle slot="icon" />
+								</ObcToggleButtonOption>
+							</Tooltip>
+						</ObcToggleButtonGroup>
+					</>
+				)}
 			</div>
 		</div>
 	);

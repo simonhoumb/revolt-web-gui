@@ -80,6 +80,10 @@
 	pointer-events: none;
 }
 
+.controlsToggle {
+	flex-shrink: 0;
+}
+
 .toolbar {
 	position: absolute;
 	left: 0;
@@ -91,14 +95,25 @@
 	align-items: center;
 	gap: 8px;
 	padding: 4px 8px;
-	/* maplibre's own attribution control (required by the CARTO basemap's terms, so it can't just
-	   be covered) sits in the same bottom-right corner with a higher default z-index than this bar.
-	   Reserve room for it so a 4th toolbar group doesn't reach into its footprint at typical tile
-	   widths -- past this point flex-wrap already pushes overflow onto its own row instead. */
-	padding-right: 240px;
 	min-height: var(--app-components-tool-bar-touch-target-size, 40px);
 	border-top: 1px solid var(--border-divider-color);
 	background: var(--container-section-color);
 	box-shadow: var(--shadow-flat-x) var(--shadow-flat-y) var(--shadow-flat-blur)
 		var(--shadow-flat-spread) var(--shadow-flat-color);
+}
+
+/* Collapsed (controls hidden): only the toggle button itself remains. The bar's own chrome
+   (background, border, shadow, min-height) is stripped entirely here, not just shrunk --
+   otherwise it left a visible box-behind-the-button remnant of the bar. The button supplies its
+   own background (normal variant, not flat -- flat's background is fully transparent in every
+   theme, see its own CSS custom property), so nothing else needs to render; only the positioning
+   (left/bottom-anchored, matching the expanded bar's own corner so the button doesn't jump
+   position between states) carries over. */
+.toolbar[data-collapsed] {
+	right: auto;
+	width: fit-content;
+	min-height: 0;
+	border-top: none;
+	background: none;
+	box-shadow: none;
 }

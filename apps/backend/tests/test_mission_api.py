@@ -884,6 +884,11 @@ async def test_pause_mission_without_echo_logs_warning_and_skips_cache(
 
 		resp = await client.post(f"/api/missions/{mission_id}/pause")
 		assert resp.status_code == 200
+		# Regression: no /waypoint_list echo ever received (e.g. testing against a rosbag replay
+		# that doesn't include this topic) must not be reported the same as a confirmed-empty
+		# queue -- that previously collapsed to waypoint_count=0, reading as "100% complete" in
+		# the frontend instead of "nothing known to be reached yet."
+		assert resp.json()["waypoint_count"] == 1
 		assert mission_id not in bridge.resume_cache
 
 		severity = await _last_audit_severity(mission_id, "mission.pause.no_resume_point")
@@ -1082,6 +1087,37 @@ async def test_terminate_mission_sets_aborted_and_completed_at_and_logs_warning_
 
 		severity = await _last_audit_severity(mission_id, "mission.terminate")
 		assert severity == "warning"
+	finally:
+		await client.delete(f"/api/missions/{mission_id}")
+
+
+async def test_terminate_mission_without_echo_reports_mission_waypoint_count(
+	client: AsyncClient,
+) -> None:
+	# Regression: terminating a mission with no /waypoint_list echo ever received (e.g. testing
+	# against a rosbag replay that doesn't include this topic, so bridge.latest_waypoint_list is
+	# None and there's no resume-cache snapshot either, since this mission was never paused) must
+	# not report waypoint_count=0 -- that reads as "100% complete" in the frontend instead of
+	# "nothing known to be reached yet."
+	mission_id = await _create_mission(client, name="Terminate no echo test")
+	try:
+		await _add_waypoint(client, mission_id, 59.92, 10.76)
+		await client.post(
+			f"/api/missions/{mission_id}/waypoints",
+			json={"sequence_number": 1, "latitude": 59.93, "longitude": 10.77, "target_speed": 4.0},
+		)
+
+		bridge = app.state.bridge
+		bridge.connected = True
+		bridge.target = "simulation"
+		bridge.publish_and_await_ack.return_value = "acknowledged"
+
+		await client.post(f"/api/missions/{mission_id}/send")
+		await client.post(f"/api/missions/{mission_id}/start")
+
+		resp = await client.post(f"/api/missions/{mission_id}/terminate")
+		assert resp.status_code == 200
+		assert resp.json()["waypoint_count"] == 2
 	finally:
 		await client.delete(f"/api/missions/{mission_id}")
 

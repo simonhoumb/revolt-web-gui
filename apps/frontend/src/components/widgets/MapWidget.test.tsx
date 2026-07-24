@@ -7,8 +7,10 @@ import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useAisTargets } from "../../hooks/useAisTargets.js";
-import { useMission } from "../../context/MissionContext.js";
-import { useLegHazards } from "../../context/LegHazardsContext.js";
+import { useMission } from "../../context/useMission.js";
+import { useLegHazards } from "../../context/useLegHazards.js";
+import { useApps } from "../../context/useApps.js";
+import { APPS } from "./apps.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
 
@@ -21,11 +23,14 @@ vi.mock("../../hooks/useVesselTrack.js", () => ({
 vi.mock("../../hooks/useAisTargets.js", () => ({
 	useAisTargets: vi.fn(),
 }));
-vi.mock("../../context/MissionContext.js", () => ({
+vi.mock("../../context/useMission.js", () => ({
 	useMission: vi.fn(),
 }));
-vi.mock("../../context/LegHazardsContext.js", () => ({
+vi.mock("../../context/useLegHazards.js", () => ({
 	useLegHazards: vi.fn(),
+}));
+vi.mock("../../context/useApps.js", () => ({
+	useApps: vi.fn(),
 }));
 
 const mockUseGnssData = useGnssData as Mock;
@@ -33,6 +38,16 @@ const mockUseVesselTrack = useVesselTrack as Mock;
 const mockUseAisTargets = useAisTargets as Mock;
 const mockUseMission = useMission as Mock;
 const mockUseLegHazards = useLegHazards as Mock;
+const mockUseApps = useApps as Mock;
+
+function setApp(activeAppId: keyof typeof APPS = "custom") {
+	mockUseApps.mockReturnValue({
+		activeAppId,
+		appDef: APPS[activeAppId],
+		isLocked: activeAppId !== "custom",
+		setActiveApp: vi.fn(),
+	});
+}
 
 const baseGnss: GnssData = {
 	latitude: null,
@@ -127,6 +142,7 @@ interface MockMapInstance {
 	jumpTo: ReturnType<typeof vi.fn>;
 	zoomIn: ReturnType<typeof vi.fn>;
 	zoomOut: ReturnType<typeof vi.fn>;
+	isZooming: ReturnType<typeof vi.fn>;
 	dragPan: {
 		enable: ReturnType<typeof vi.fn>;
 		disable: ReturnType<typeof vi.fn>;
@@ -213,6 +229,7 @@ vi.mock("maplibre-gl", () => {
 		// (encValidation.test.ts covers that in isolation), just need queryRenderedFeatures'
 		// layer list to come through unfiltered.
 		getLayer = vi.fn(() => ({}));
+		isZooming = vi.fn(() => false);
 		dragPan = new MockDragPan();
 		touchZoomRotate = new MockTouchZoomRotate();
 		scrollZoom = new MockScrollZoom();
@@ -305,6 +322,7 @@ beforeEach(() => {
 	// AIS targets aren't under test here (see useAisMarkers, which mocked maplibre-gl can't
 	// meaningfully exercise) -- default to none so every test doesn't need its own setup call.
 	mockUseAisTargets.mockReturnValue([]);
+	setApp();
 });
 
 afterEach(() => {
@@ -459,6 +477,72 @@ describe("MapWidget", () => {
 		expect(mapInstances[0]?.zoomOut).toHaveBeenCalled();
 	});
 
+	function clickButton(el: Element) {
+		act(() => {
+			(el as HTMLElement).click();
+		});
+	}
+
+	it("defaults to hidden controls in the Conning app, and shown elsewhere", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container: customContainer } = render(<MapWidget />);
+		expect(customContainer.querySelector('[aria-label="Chart range"]')).not.toBeNull();
+		expect(findByLabel(customContainer, "Hide map controls")).toBeInTheDocument();
+		cleanup();
+
+		setApp("conning");
+		const { container: conningContainer } = render(<MapWidget />);
+		expect(conningContainer.querySelector('[aria-label="Chart range"]')).toBeNull();
+		expect(findByLabel(conningContainer, "Show map controls")).toBeInTheDocument();
+	});
+
+	it("hides the whole toolbar when controls are toggled off, and restores it when toggled back on", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container } = render(<MapWidget />);
+		expect(container.querySelector('[aria-label="Chart range"]')).not.toBeNull();
+		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
+		expect(container.querySelector('[aria-label="AIS targets"]')).not.toBeNull();
+
+		clickButton(findByLabel(container, "Hide map controls"));
+		expect(container.querySelector('[aria-label="Chart range"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Chart orientation"]')).toBeNull();
+		expect(container.querySelector('[aria-label="AIS targets"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Route edit mode"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Camera lock"]')).toBeNull();
+
+		clickButton(findByLabel(container, "Show map controls"));
+		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
+	});
+
+	it("forces edit mode back to pan-only when controls are hidden while adding a waypoint", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container } = render(<MapWidget />);
+		dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+
+		act(() => {
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.5, lng: 10.5 } });
+		});
+		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
+
+		clickButton(findByLabel(container, "Hide map controls"));
+		clickButton(findByLabel(container, "Show map controls"));
+		act(() => {
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.6, lng: 10.6 } });
+		});
+		// Still 1: hiding controls reset edit mode back to "edit" (pan-only), so showing them
+		// again doesn't leave "add" active and this second click doesn't place a waypoint.
+		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
+	});
+
 	it("eases chart bearing to true heading in heading-up mode", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
 		setTrack();
@@ -504,6 +588,25 @@ describe("MapWidget", () => {
 
 		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
 		mapInstances[0]?.dragPan.isActive.mockReturnValue(true);
+		mapInstances[0]?.easeTo.mockClear();
+
+		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");
+
+		expect(mapInstances[0]?.easeTo).not.toHaveBeenCalled();
+	});
+
+	it("does not fight an active scroll-zoom gesture with a bearing update", () => {
+		// Same reasoning as the drag-gesture guard above: a heading/course tick arriving mid-zoom
+		// retargeting the camera's bearing via its own easeTo, while MapLibre's own zoom
+		// interpolation is also actively driving the same camera, is what read as jitter
+		// specifically while zooming.
+		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
+		setTrack();
+		setMission();
+		const { container } = render(<MapWidget />);
+
+		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
+		mapInstances[0]?.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easeTo.mockClear();
 
 		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");

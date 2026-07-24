@@ -76,6 +76,24 @@ RADAR_BIN_WIDTH_RAD = (2 * math.pi) / RADAR_NUM_BINS
 # so a disconnected/stopped radar doesn't leave the last bin's data buffered forever unsent.
 RADAR_ACCUM_MAX_AGE_MS = 3000
 
+# Course over ground is an angle derived from the GNSS receiver's own Doppler velocity vector
+# (see _handle_gnss_velocity) -- atan2 of a vector whose magnitude is comparable to its own
+# measurement noise swings wildly, since the noise is no longer small relative to what it's
+# perturbing. Below this speed, course_deg is published as None instead of a meaningless angle,
+# rather than trying to filter something that isn't actually there yet. ReVolt is a small, slow
+# vessel (normal transit is roughly 0.5-1 kn / 0.25-0.5 m/s per observed rosbag data) -- this sits
+# well below that range on purpose, so the gate only ever suppresses genuine near-zero noise, not
+# real slow-speed operation. A GUI-side placeholder like STALE_MS/EXPIRE_MS in
+# useAisTargets.ts, not a spec'd value; revisit against the VS330's actual noise floor if it
+# still gates out real movement or lets too much noise through.
+MIN_COG_SPEED_MS = 0.1
+# Exponential moving average smoothing applied to the velocity vector (not the angle -- naively
+# averaging angles breaks at the 0/360 wraparound, but averaging the underlying vector components
+# and then taking atan2 of the result is exact) to damp residual Doppler noise once above
+# MIN_COG_SPEED_MS. Higher alpha tracks real course changes faster but smooths less; this is the
+# same kind of "COG damping" real marine chartplotters/AIS units expose as a filter time constant.
+GNSS_VEL_EMA_ALPHA = 0.3
+
 AckStatus = Literal["acknowledged", "timed_out", "not_connected", "mismatched"]
 
 
@@ -152,6 +170,10 @@ class RosBridgeClient:
 		self._radar_accum_intensity: list[int] = []
 		self._radar_accum_meta: dict[str, float | int] | None = None
 		self._radar_accum_started_ms: int = 0
+
+		# EMA-smoothed GNSS velocity components, see _handle_gnss_velocity below.
+		self._gnss_vel_ema_vx: float | None = None
+		self._gnss_vel_ema_vy: float | None = None
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
@@ -764,12 +786,32 @@ class RosBridgeClient:
 		# linear.x = speed*sin(course), linear.y = speed*cos(course).
 		lin = msg["twist"]["linear"]
 		vx, vy = float(lin["x"]), float(lin["y"])
+		speed_ms = math.hypot(vx, vy)
+
+		# EMA on the vector components, not the angle -- see GNSS_VEL_EMA_ALPHA's own comment.
+		alpha = GNSS_VEL_EMA_ALPHA
+		ema_vx = (
+			vx
+			if self._gnss_vel_ema_vx is None
+			else alpha * vx + (1 - alpha) * self._gnss_vel_ema_vx
+		)
+		ema_vy = (
+			vy
+			if self._gnss_vel_ema_vy is None
+			else alpha * vy + (1 - alpha) * self._gnss_vel_ema_vy
+		)
+		self._gnss_vel_ema_vx = ema_vx
+		self._gnss_vel_ema_vy = ema_vy
+
+		course_deg = (
+			math.degrees(math.atan2(ema_vx, ema_vy)) % 360 if speed_ms >= MIN_COG_SPEED_MS else None
+		)
 		return GnssVelocityMsg(
 			v="1",
 			type="gnss_velocity",
 			timestamp_ms=now,
-			speed_ms=math.hypot(vx, vy),
-			course_deg=math.degrees(math.atan2(vx, vy)) % 360,
+			speed_ms=speed_ms,
+			course_deg=course_deg,
 		)
 
 	def _handle_sim_gnss_velocity(self, msg: dict, now: int) -> BridgeMessage | None:
@@ -850,10 +892,18 @@ class RosBridgeClient:
 		self._check_pending_ack(waypoints)
 		self._mission_tracker.record_waypoint_list_echo(waypoints)
 		tracked_mission_id = self._mission_tracker.tracked_mission_id
-		if tracked_mission_id is not None:
+		tracked_state = self._mission_tracker.tracked_state
+		# Only an actively-executing mission's echo reflects genuine waypoint progress. Once
+		# paused/terminated, the queue was intentionally emptied by our own pause/terminate
+		# command (see mission_service.py) to stop the vessel -- its echo of that now-empty list
+		# would otherwise overwrite the real, already-correct progress broadcast at the moment of
+		# pause/terminate with a misleading "0 remaining", which renders identically to a
+		# genuinely completed route (100%, all waypoints reached) in the frontend. Skipping the
+		# rebroadcast here leaves whatever progress was last known standing.
+		if tracked_mission_id is not None and tracked_state in ("starting", "active"):
 			self.broadcast_mission_execution_status(
 				tracked_mission_id,
-				self._mission_tracker.tracked_state,
+				tracked_state,
 				waypoints[0]["id"] if waypoints else None,
 				len(waypoints),
 				self._mission_tracker.tracked_total_count,
@@ -957,13 +1007,28 @@ class RosBridgeClient:
 		heading = int(msg["heading"])
 		sog_kn = None if sog >= 102.25 or sog < 0.001 else sog
 		heading_deg = None if heading == 511 else heading
+
+		# ITU-R M.1371 (the AIS message spec) has its own "position not available" sentinel too:
+		# lat=91, lon=181 -- decoded verbatim by pyais (Hardware/ais/ais/ais_decoder.py) with no
+		# filtering, and genuinely on the wire for reports from a target that hasn't got a fix yet
+		# (e.g. some base station/AtoN messages). Both values sit outside the real geographic
+		# range, which is exactly what crashed the frontend's map marker (maplibre's LngLat
+		# rejects a latitude outside -90..90) -- checked generally rather than against the exact
+		# sentinel so any other corrupted decode off this same unvalidated serial line is caught
+		# too, same posture as _handle_physical_gnss_fix's missing-fields check below.
+		lat = float(msg["lat"])
+		lon = float(msg["lon"])
+		if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+			logger.warning("rosbridge_ais_target_invalid_position", lat=lat, lon=lon)
+			return None
+
 		return AisTargetMsg(
 			v="1",
 			type="ais_target",
 			timestamp_ms=now,
 			mmsi=int(msg["mmsi"]),
-			lat=float(msg["lat"]),
-			lon=float(msg["lon"]),
+			lat=lat,
+			lon=lon,
 			sog_kn=sog_kn,
 			heading_deg=heading_deg,
 		)

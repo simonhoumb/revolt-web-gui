@@ -6,7 +6,7 @@ import { ObiCloseGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-
 import { ObiCommandLocked } from "@oicl/openbridge-webcomponents-react/icons/icon-command-locked.js";
 import { ObiCommandLockedF } from "@oicl/openbridge-webcomponents-react/icons/icon-command-locked-f.js";
 import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
-import { useLayout } from "../../context/LayoutContext.js";
+import { useLayout } from "../../context/useLayout.js";
 import { WIDGET_REGISTRY, ALL_WIDGET_IDS, type WidgetId } from "../widgets/registry.js";
 import styles from "./WidgetPicker.module.css";
 

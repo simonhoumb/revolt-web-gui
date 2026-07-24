@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MissionExecutionStatusMsg } from "@revolt/shared-types";
-import { bridgeDataReducer, initialData } from "./BridgeDataContext.js";
+import { bridgeDataReducer, initialData } from "./bridgeDataReducer.js";
 
 function makeExecutionStatusMsg(
 	overrides: Partial<MissionExecutionStatusMsg> = {},

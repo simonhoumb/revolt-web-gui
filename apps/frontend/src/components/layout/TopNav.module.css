@@ -6,3 +6,32 @@
 	position: relative;
 	display: inline-block;
 }
+
+.statusCluster {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.latencyBadge {
+	font-size: 0.8rem;
+	font-family: var(--font-default, "Noto Sans", sans-serif);
+	color: var(--element-active-color, #eaa75e);
+	white-space: nowrap;
+}
+
+.latencyBadge[data-stale] {
+	color: var(--element-inactive-color, #9c6a34);
+}
+
+.systemButtonAnchor {
+	position: relative;
+}
+
+.systemMenuPanel {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	margin-top: 4px;
+	z-index: 100;
+}

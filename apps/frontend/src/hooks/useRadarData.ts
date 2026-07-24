@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { RadarSpokeMsg } from "@revolt/shared-types";
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 
 // The backend (client.py's RADAR_NUM_BINS) already aggregates the Furuno DRS4D-NXT's raw
 // 8,192-spokes-per-revolution feed (confirmed via Furuno's NavNet API spec: "A frame of image

@@ -579,6 +579,27 @@ def test_waypoint_list_echo_does_not_broadcast_execution_status_when_untracked()
 	client.unsubscribe(q)
 
 
+def test_waypoint_list_echo_does_not_overwrite_progress_once_paused() -> None:
+	# Regression: pausing broadcasts the real remaining count (2 here) *before* the vessel echoes
+	# back the now-empty list that pause itself just published -- that echo used to unconditionally
+	# re-derive remaining_count=0 from it, silently clobbering the correct value a moment later
+	# and making a paused mission look identical to a genuinely completed one (100%, all
+	# waypoints reached) in the frontend.
+	client = RosBridgeClient(DEAD_URL, "simulation")
+	q = client.subscribe()
+	q.get_nowait()
+	client.track_mission("mission-1", 3)
+	client.broadcast_tracked_status("mission-1", "paused", None, 2)
+	q.get_nowait()  # drain the correct "paused, 2 remaining" broadcast above
+
+	client._dispatch(_waypoint_list_frame([]))  # the vessel's echo of pause's own empty publish
+
+	msgs = [q.get_nowait()]  # only the sim_waypoint_list message itself should have landed
+	assert all(m["type"] != "mission_execution_status" for m in msgs)
+	assert client._mission_tracker.tracked_state == "paused"
+	client.unsubscribe(q)
+
+
 def test_broadcast_tracked_status_ignores_wrong_mission_id() -> None:
 	client = RosBridgeClient(DEAD_URL, "simulation")
 	q = client.subscribe()

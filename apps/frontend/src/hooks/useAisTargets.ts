@@ -1,4 +1,4 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 import { useMinuteUpdate } from "./useMinuteUpdate.js";
 
 // AIS has no "target gone" message, so staleness/expiry are computed at read time from each

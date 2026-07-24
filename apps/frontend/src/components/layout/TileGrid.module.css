@@ -5,7 +5,11 @@
 	overflow-y: auto;
 	overflow-x: hidden;
 	min-height: 0;
-	padding: 8px;
+	/* No padding here: react-grid-layout's own containerPadding already defaults to match
+	   GRID_CONFIG.margin (see its own effectiveContainerPadding = containerPadding ?? margin),
+	   so the edge-to-tile spacing is already consistent with the tile-to-tile spacing on its own.
+	   Padding here would stack on top of that and make the edges visibly wider than the gaps
+	   between tiles. */
 	background-color: var(--container-background-color, #000);
 	position: relative;
 }

@@ -2,9 +2,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { CameraWidget } from "./CameraWidget.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
+import { useBridgeData } from "../../context/useBridgeData.js";
 
-vi.mock("../../context/BridgeDataContext.js", () => ({
+vi.mock("../../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
