@@ -8,11 +8,13 @@ import {
 } from "../components/widgets/registry.js";
 import { LayoutContext } from "./useLayout.js";
 
+/** The current tile grid: positions/sizes plus which widgets are hidden. */
 export interface LayoutConfig {
 	tiles: TileLayout[];
 	hiddenWidgets: WidgetId[];
 }
 
+/** A named, saved LayoutConfig snapshot. */
 export interface LayoutTemplate {
 	name: string;
 	tiles: TileLayout[];
@@ -34,8 +36,8 @@ export interface LayoutContextValue {
 	toggleEditMode: () => void;
 	setEditMode: (value: boolean) => void;
 	// Bumped only by structural changes to the tile set (add/remove/reset/load template), never by
-	// updateLayout's ordinary drag/resize commits -- TileGrid uses this to know when it's safe to
-	// re-fit the grid's row height to a *smaller* total row count. See TileGrid.tsx's neededRows
+	// updateLayout's ordinary drag/resize commits; TileGrid uses this to know when it's safe to
+	// re-fit the grid's row height to a smaller total row count. See TileGrid.tsx's neededRows
 	// comment for why that distinction matters.
 	layoutGeneration: number;
 }
@@ -112,7 +114,7 @@ function saveConfig(config: LayoutConfig): void {
 	try {
 		localStorage.setItem(LAYOUT_KEY, JSON.stringify(config));
 	} catch {
-		// localStorage unavailable — silently ignore
+		// localStorage unavailable, silently ignore
 	}
 }
 
@@ -130,7 +132,7 @@ function saveTemplates(templates: LayoutTemplate[]): void {
 	try {
 		localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
 	} catch {
-		// localStorage unavailable — silently ignore
+		// localStorage unavailable, silently ignore
 	}
 }
 
@@ -141,6 +143,7 @@ function nextOpenPosition(tiles: TileLayout[]): { x: number; y: number } {
 	return { x: 0, y: maxY };
 }
 
+/** Owns the dashboard's tile layout and saved templates, persisted to localStorage. */
 export function LayoutProvider({ children }: { children: ReactNode }) {
 	const [config, setConfig] = useState<LayoutConfig>(loadConfig);
 	const [userTemplates, setUserTemplates] = useState<LayoutTemplate[]>(loadTemplates);

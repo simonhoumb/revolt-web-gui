@@ -51,6 +51,7 @@ function updateWaypointsIn(
 	);
 }
 
+/** Mission/waypoint CRUD plus send/start/pause/terminate, backed by missionApi. */
 export function MissionProvider({ children }: { children: ReactNode }) {
 	const [missions, setMissions] = useState<Mission[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -118,7 +119,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	const deleteMission = useCallback(
 		async (id: string) => {
 			// Fall back to another remaining mission (mirroring loadMissions' initial-selection
-			// logic) rather than null -- leaving activeMissionId unset after deleting the active
+			// logic) rather than null; leaving activeMissionId unset after deleting the active
 			// mission stranded the UI: the dropdown still displayed some other mission's label (its
 			// own fallback for an unmatched value) while the context had no real selection, so no
 			// waypoints rendered and the delete button stayed disabled with no way to recover short
@@ -217,7 +218,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 			);
 			try {
 				await missionApi.deleteWaypoint(missionId, waypointId);
-				// The backend renumbers remaining sequence_numbers on delete — reload to pick that up.
+				// The backend renumbers remaining sequence_numbers on delete; reload to pick that up.
 				await loadMissions();
 			} catch {
 				await loadMissions();
@@ -258,7 +259,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	const sendActiveMission = useCallback(async () => {
 		if (!activeMissionId) return null;
 		// The ack status (acknowledged/timed_out/etc) is broadcast over the WebSocket as a
-		// MissionSendStatusMsg so every open tab sees it, not just this one — the widget reads
+		// MissionSendStatusMsg so every open tab sees it, not just this one; the widget reads
 		// that from useBridgeData(). The Phase 2 validation_status/hazards on the response are
 		// NOT broadcast anywhere else, so this call's return value is the only place the sending
 		// tab can learn "the route was allowed through with a warning" and show it.
@@ -268,7 +269,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	// Re-fetches just the one mission that changed and merges it into `missions` so
 	// activeMission.status (button enablement, the fallback status label) reflects the new
 	// state immediately, without needing a full page reload. Only runs after a successful
-	// call -- if missionApi.* throws (e.g. MissionBlockedError), status didn't change, and the
+	// call; if missionApi.* throws (e.g. MissionBlockedError), status didn't change, and the
 	// throw propagates to the caller exactly as before.
 	const refreshMission = useCallback(
 		async (missionId: string) => {
@@ -283,7 +284,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	);
 
 	// Mission Control targets whichever mission is "loaded" (see loadedMission above), not the
-	// planning dropdown's activeMissionId -- so these take an explicit id rather than closing
+	// planning dropdown's activeMissionId, so these take an explicit id rather than closing
 	// over activeMissionId. The widget still owns pending/error UI and reads live execution
 	// state (current waypoint, progress) from useBridgeData().missionExecutionStatus, which is
 	// broadcast to every open tab, not just the one that issued the command.
@@ -315,7 +316,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 	);
 
 	// last_sent_at drives loadedMission, so it must stay fresh in every open tab, not just the
-	// one that issued the send -- mission_send_status is broadcast over the WS to all of them.
+	// one that issued the send; mission_send_status is broadcast over the WS to all of them.
 	useMissionStatusSync(refreshMission);
 
 	const value = useMemo<MissionContextValue>(

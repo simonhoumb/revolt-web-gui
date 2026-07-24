@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { APPS, type AppDefinition, type AppId } from "../components/widgets/apps.js";
 import { AppContext } from "./useApps.js";
 
+/** Which locked/custom app is currently active, and whether the layout is locked to it. */
 export interface AppContextValue {
 	activeAppId: AppId;
 	setActiveApp: (id: AppId) => void;
@@ -32,6 +33,7 @@ function saveActiveAppId(id: AppId): void {
 	}
 }
 
+/** Tracks the active app selection, persisted to localStorage. */
 export function AppProvider({ children }: { children: ReactNode }) {
 	const [activeAppId, setActiveAppId] = useState<AppId>(loadActiveAppId);
 
