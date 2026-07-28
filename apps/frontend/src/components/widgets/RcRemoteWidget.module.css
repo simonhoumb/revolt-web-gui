@@ -1,4 +1,5 @@
 .content {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
@@ -53,4 +54,10 @@
 .gearLabel {
 	font-size: 0.8rem;
 	color: var(--element-active-color, #eaa75e);
+}
+
+/* Last-known reading whose topic has gone quiet -- still shown (maritime convention), just
+   visually marked as no longer live rather than hidden. */
+.stale {
+	opacity: 0.5;
 }

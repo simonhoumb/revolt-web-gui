@@ -60,7 +60,7 @@ const ZOOM_STEPS_NM = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12
 const DEFAULT_ZOOM_IDX = 5; // 1 nm -- tight enough for dock-adjacent operation by default
 
 export function RadarWidget() {
-	const { spokes } = useRadarData();
+	const { spokes, stale } = useRadarData();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const canvasAreaRef = useRef<HTMLDivElement>(null);
 	const drawRef = useRef<() => void>(() => {
@@ -246,6 +246,11 @@ export function RadarWidget() {
 					height={canvasSize}
 					aria-label="Radar PPI view"
 				/>
+				{stale && (
+					<div className={styles.overlay}>
+						<span className={styles.overlayText}>No signal</span>
+					</div>
+				)}
 			</div>
 			<div className={styles.controls}>
 				<ObcStepperBox aria-label="Radar range" onUp={zoomIn} onDown={zoomOut}>

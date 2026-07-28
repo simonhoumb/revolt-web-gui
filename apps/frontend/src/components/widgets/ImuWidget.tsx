@@ -7,15 +7,19 @@ import styles from "./ImuWidget.module.css";
 import { ObcInstrumentField } from "@oicl/openbridge-webcomponents-react/navigation-instruments/instrument-field/instrument-field.js";
 import { InstrumentFieldSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/instrument-field/instrument-field.js";
 import { Priority } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/types.js";
+import { cx } from "../../lib/classNames.js";
+import { StaleBadge } from "./StaleBadge.js";
 
 export function ImuWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewMode }) {
-	const { rollDeg, pitchDeg, yawDeg, accelX, accelY, accelZ } = useImuData();
+	const { rollDeg, pitchDeg, yawDeg, accelX, accelY, accelZ, stale } = useImuData();
 	const hasData = rollDeg !== null;
+	const isLive = hasData && !stale;
 
 	return (
 		<div className={styles.content}>
 			{viewMode === "instrument" && (
-				<div className={styles.instrumentLayout}>
+				<div className={cx(styles.instrumentLayout, stale && styles.stale)}>
+					{stale && <StaleBadge corner />}
 					<div className={styles.readout}>
 						<ObcInstrumentField
 							tag="ACC-X"
@@ -67,19 +71,19 @@ export function ImuWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewMo
 					</div>
 				</div>
 			)}
-			<dl className={styles.dataList}>
+			<dl className={cx(styles.dataList, stale && styles.stale)}>
 				{viewMode === "detailed" && (
 					<>
 						<div className={styles.statusRow}>
 							<ObcStatusIndicator
 								status={
-									hasData
+									isLive
 										? StatusIndicatorStatus.running
 										: StatusIndicatorStatus.inactive
 								}
 							/>
 							<span className={styles.statusLabel}>
-								{hasData ? "Live" : "No data"}
+								{isLive ? "Live" : hasData ? "Stale" : "No data"}
 							</span>
 						</div>
 						<div className={styles.dataRow}>

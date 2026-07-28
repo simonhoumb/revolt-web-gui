@@ -15,10 +15,11 @@ function makeBatteryData(overrides: Partial<BatteryData> = {}): BatteryData {
 		voltageV: 12.5,
 		voltagePercent: 60,
 		voltageStatus: "normal",
+		voltageStale: false,
 		current: {
-			stern_port: { amperes: 1.2, isOn: true },
-			stern_star: { amperes: 0, isOn: false },
-			bow: { amperes: null, isOn: false },
+			stern_port: { amperes: 1.2, isOn: true, stale: false },
+			stern_star: { amperes: 0, isOn: false, stale: false },
+			bow: { amperes: null, isOn: false, stale: false },
 		},
 		...overrides,
 	};
@@ -54,5 +55,25 @@ describe("BatteryWidget", () => {
 		render(<BatteryWidget />);
 		expect(screen.getByText("1.2 A")).toBeInTheDocument();
 		expect(screen.getByText("— A")).toBeInTheDocument();
+	});
+
+	it("shows a Stale badge for a stale voltage reading", () => {
+		mockUseBatteryData.mockReturnValue(makeBatteryData({ voltageStale: true }));
+		render(<BatteryWidget />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
+	});
+
+	it("shows a Stale badge for a stale per-motor current reading", () => {
+		mockUseBatteryData.mockReturnValue(
+			makeBatteryData({
+				current: {
+					stern_port: { amperes: 1.2, isOn: true, stale: true },
+					stern_star: { amperes: 0, isOn: false, stale: false },
+					bow: { amperes: null, isOn: false, stale: false },
+				},
+			}),
+		);
+		render(<BatteryWidget />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
 	});
 });

@@ -11,6 +11,8 @@ import styles from "./GnssWidget.module.css";
 import { InstrumentFieldSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/instrument-field/instrument-field.js";
 import { Priority } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/types.js";
 import { VesselImage } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/watch/vessel.js";
+import { cx } from "../../lib/classNames.js";
+import { StaleBadge } from "./StaleBadge.js";
 
 // Higher precision than mission-planning displays (formatLatLon's default of 5) -- a live GNSS
 // fix benefits from finer resolution for monitoring, not an oversight.
@@ -39,8 +41,17 @@ function formatDegreesMinutes(
 }
 
 export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewMode }) {
-	const { latitude, longitude, altitudeM, fixStatus, fixLabel, speedMs, headingDeg, courseDeg } =
-		useGnssData();
+	const {
+		latitude,
+		longitude,
+		altitudeM,
+		fixStatus,
+		fixLabel,
+		speedMs,
+		headingDeg,
+		courseDeg,
+		stale,
+	} = useGnssData();
 
 	const lat = latitude !== null ? formatDegreesMinutes(latitude, "N", "S") : null;
 	const lon = longitude !== null ? formatDegreesMinutes(longitude, "E", "W") : null;
@@ -48,7 +59,8 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 	return (
 		<div className={styles.content}>
 			{viewMode === "instrument" && (
-				<div className={styles.instrumentLayout}>
+				<div className={cx(styles.instrumentLayout, stale && styles.stale)}>
+					{stale && <StaleBadge corner />}
 					<div className={styles.readout}>
 						<ObcInstrumentField
 							tag="HDG"
@@ -97,10 +109,11 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 				</div>
 			)}
 			{viewMode === "detailed" && (
-				<dl className={styles.dataList}>
+				<dl className={cx(styles.dataList, stale && styles.stale)}>
 					<div className={styles.fixRow}>
 						<ObcStatusIndicator status={fixIndicatorStatus(fixStatus)} />
 						<span className={styles.fixLabel}>{fixLabel}</span>
+						{stale && <StaleBadge />}
 					</div>
 					<div className={styles.dataRow}>
 						<dt>Lat</dt>

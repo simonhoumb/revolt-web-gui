@@ -1,6 +1,8 @@
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
 import { useLightBeaconData } from "../../hooks/useLightBeaconData.js";
+import { cx } from "../../lib/classNames.js";
+import { StaleBadge } from "./StaleBadge.js";
 import styles from "./LightBeaconWidget.module.css";
 
 interface LampRowProps {
@@ -19,10 +21,11 @@ function LampRow({ label, on, status }: LampRowProps) {
 }
 
 export function LightBeaconWidget() {
-	const { red, yellow, green } = useLightBeaconData();
+	const { red, yellow, green, stale } = useLightBeaconData();
 
 	return (
-		<div className={styles.content}>
+		<div className={cx(styles.content, stale && styles.stale)}>
+			{stale && <StaleBadge corner />}
 			<LampRow label="Red" on={red} status={StatusIndicatorStatus.alarm} />
 			<LampRow label="Yellow" on={yellow} status={StatusIndicatorStatus.caution} />
 			<LampRow label="Green" on={green} status={StatusIndicatorStatus.running} />

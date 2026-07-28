@@ -21,6 +21,7 @@ function makeGnssData(overrides: Partial<GnssData> = {}): GnssData {
 		headingDeg: null,
 		courseDeg: null,
 		isSimulation: false,
+		stale: false,
 		...overrides,
 	};
 }
@@ -97,5 +98,20 @@ describe("GnssWidget", () => {
 		expect(screen.getByText("N")).toBeInTheDocument();
 		expect(screen.getByText("6° 11.918'")).toBeInTheDocument();
 		expect(screen.getByText("W")).toBeInTheDocument();
+	});
+
+	it("shows a Stale badge when the fix has gone stale, in both views", () => {
+		mockUseGnssData.mockReturnValue(makeGnssData({ stale: true }));
+		const { rerender } = render(<GnssWidget viewMode="instrument" />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
+
+		rerender(<GnssWidget viewMode="detailed" />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
+	});
+
+	it("does not show a Stale badge for a fresh fix", () => {
+		mockUseGnssData.mockReturnValue(makeGnssData({ stale: false }));
+		render(<GnssWidget viewMode="instrument" />);
+		expect(screen.queryByText("Stale")).not.toBeInTheDocument();
 	});
 });

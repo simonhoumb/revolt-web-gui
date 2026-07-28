@@ -1,6 +1,8 @@
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
 import { useRcRemoteData } from "../../hooks/useRcRemoteData.js";
+import { cx } from "../../lib/classNames.js";
+import { StaleBadge } from "./StaleBadge.js";
 import styles from "./RcRemoteWidget.module.css";
 
 interface StickRowProps {
@@ -30,10 +32,11 @@ function StickRow({ label, percent }: StickRowProps) {
 }
 
 export function RcRemoteWidget() {
-	const { throttlePercent, aileronPercent, rudderPercent, gear } = useRcRemoteData();
+	const { throttlePercent, aileronPercent, rudderPercent, gear, stale } = useRcRemoteData();
 
 	return (
-		<div className={styles.content}>
+		<div className={cx(styles.content, stale && styles.stale)}>
+			{stale && <StaleBadge corner />}
 			<StickRow label="Throttle" percent={throttlePercent} />
 			<StickRow label="Aileron" percent={aileronPercent} />
 			<StickRow label="Rudder" percent={rudderPercent} />

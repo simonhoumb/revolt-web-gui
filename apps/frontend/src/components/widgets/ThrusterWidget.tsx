@@ -5,7 +5,9 @@ import { ObcAzimuthThrusterLabeled } from "@oicl/openbridge-webcomponents-react/
 import { AzimuthThrusterLabeledSize } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/azimuth-thruster-labeled/azimuth-thruster-labeled.js";
 import { CommandStatus } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/badge-command/badge-command.js";
 import { useThrusterData, type ThrusterStatus } from "../../hooks/useThrusterData.js";
+import { cx } from "../../lib/classNames.js";
 import { THRUSTER_MAX_AMPERES } from "../../lib/thresholds.js";
+import { StaleBadge } from "./StaleBadge.js";
 import type { WidgetViewMode } from "./ViewModeToggle.js";
 import styles from "./ThrusterWidget.module.css";
 import { PropellerType } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/thruster/propeller.js";
@@ -61,7 +63,7 @@ function BowActuatorRow({ retracted, compact }: { retracted: boolean | null; com
 
 function ThrusterRow({ label, status, isSimulation, bowExtra }: ThrusterRowProps) {
 	return (
-		<div className={styles.thrusterRow}>
+		<div className={cx(styles.thrusterRow, status.stale && styles.stale)}>
 			<div className={styles.thrusterHeader}>
 				<ObcStatusIndicator
 					status={
@@ -72,6 +74,7 @@ function ThrusterRow({ label, status, isSimulation, bowExtra }: ThrusterRowProps
 				<span className={styles.thrusterCurrent}>
 					{status.amperes !== null ? `${status.amperes.toFixed(1)} A` : "— A"}
 				</span>
+				{status.stale && <StaleBadge />}
 			</div>
 			{(isSimulation || status.angleDeg !== null) && (
 				<div className={styles.simData}>
@@ -94,19 +97,27 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewMode }) {
-	const { stern_port, stern_star, bow, bowRetracted, controlMode, isSimulation } =
-		useThrusterData();
+	const {
+		stern_port,
+		stern_star,
+		bow,
+		bowRetracted,
+		controlMode,
+		controlModeStale,
+		isSimulation,
+	} = useThrusterData();
 
 	const isMiscomm = controlMode === "miscommunication";
 
 	return (
 		<div className={styles.content}>
-			<div className={styles.modeRow}>
+			<div className={cx(styles.modeRow, controlModeStale && styles.stale)}>
 				<span className={styles.modeLabel}>Mode:</span>
 				{isMiscomm && <ObcBadge type="caution" showNumber={false} showIcon={true} />}
 				<span className={styles.modeValue}>
 					{controlMode !== null ? (MODE_LABELS[controlMode] ?? controlMode) : "—"}
 				</span>
+				{controlModeStale && <StaleBadge />}
 			</div>
 			{viewMode === "detailed" ? (
 				<div className={styles.thrusterList}>
@@ -139,37 +150,52 @@ export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetV
 					    actuator retracted/deployed status has no equivalent field either, so it's
 					    kept as a compact addendum below the gauge. */}
 					<div className={styles.bowRow}>
-						<ObcAzimuthThrusterLabeled
-							className={styles.sternLabeled}
-							label="Bow"
-							angle={0}
-							thrust={thrustPercent(bow)}
-							commandStatus={thrusterCommandStatus(bow.isOn && !bowRetracted)}
-							size={AzimuthThrusterLabeledSize.large}
-						/>
+						<div className={styles.gaugeWrap}>
+							<ObcAzimuthThrusterLabeled
+								className={cx(styles.sternLabeled, bow.stale && styles.stale)}
+								label="Bow"
+								angle={0}
+								thrust={thrustPercent(bow)}
+								commandStatus={thrusterCommandStatus(bow.isOn && !bowRetracted)}
+								size={AzimuthThrusterLabeledSize.large}
+							/>
+							{bow.stale && <StaleBadge corner />}
+						</div>
 						<BowActuatorRow retracted={bowRetracted} compact />
 					</div>
 					<div className={styles.sternRow}>
-						<ObcAzimuthThrusterLabeled
-							className={styles.sternLabeled}
-							label="Port"
-							angle={stern_port.angleDeg ?? 0}
-							thrust={thrustPercent(stern_port)}
-							commandStatus={thrusterCommandStatus(stern_port.isOn)}
-							size={AzimuthThrusterLabeledSize.large}
-							topPropeller={PropellerType.cap}
-							bottomPropeller={PropellerType.single}
-						/>
-						<ObcAzimuthThrusterLabeled
-							className={styles.sternLabeled}
-							label="Starboard"
-							angle={stern_star.angleDeg ?? 0}
-							thrust={thrustPercent(stern_star)}
-							commandStatus={thrusterCommandStatus(stern_star.isOn)}
-							size={AzimuthThrusterLabeledSize.large}
-							topPropeller={PropellerType.cap}
-							bottomPropeller={PropellerType.single}
-						/>
+						<div className={styles.gaugeWrap}>
+							<ObcAzimuthThrusterLabeled
+								className={cx(
+									styles.sternLabeled,
+									stern_port.stale && styles.stale,
+								)}
+								label="Port"
+								angle={stern_port.angleDeg ?? 0}
+								thrust={thrustPercent(stern_port)}
+								commandStatus={thrusterCommandStatus(stern_port.isOn)}
+								size={AzimuthThrusterLabeledSize.large}
+								topPropeller={PropellerType.cap}
+								bottomPropeller={PropellerType.single}
+							/>
+							{stern_port.stale && <StaleBadge corner />}
+						</div>
+						<div className={styles.gaugeWrap}>
+							<ObcAzimuthThrusterLabeled
+								className={cx(
+									styles.sternLabeled,
+									stern_star.stale && styles.stale,
+								)}
+								label="Starboard"
+								angle={stern_star.angleDeg ?? 0}
+								thrust={thrustPercent(stern_star)}
+								commandStatus={thrusterCommandStatus(stern_star.isOn)}
+								size={AzimuthThrusterLabeledSize.large}
+								topPropeller={PropellerType.cap}
+								bottomPropeller={PropellerType.single}
+							/>
+							{stern_star.stale && <StaleBadge corner />}
+						</div>
 					</div>
 				</div>
 			)}

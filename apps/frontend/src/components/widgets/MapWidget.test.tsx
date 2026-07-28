@@ -59,6 +59,7 @@ const baseGnss: GnssData = {
 	headingDeg: null,
 	courseDeg: null,
 	isSimulation: false,
+	stale: false,
 };
 
 const mockAddWaypoint = vi.fn();
