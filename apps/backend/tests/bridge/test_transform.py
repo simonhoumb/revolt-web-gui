@@ -653,6 +653,119 @@ def test_lidar_scan_replaces_inf_with_range_max(client: RosBridgeClient) -> None
 	assert result["ranges"][2] == pytest.approx(25.0)
 
 
+def _make_pointcloud2_msg(
+	points: list[tuple[float, float, float]],
+	*,
+	fields_in_order: list[str] | None = None,
+	is_bigendian: bool = False,
+) -> dict:
+	"""Build a synthetic PointCloud2-shaped wire dict.
+
+	fields_in_order controls the on-wire field layout (default x,y,z first) so tests can prove
+	the parser reads offsets from `fields` rather than assuming x,y,z start at offset 0.
+	"""
+	import struct
+
+	fields_in_order = fields_in_order or ["x", "y", "z"]
+	endian = ">" if is_bigendian else "<"
+	field_specs = []
+	offset = 0
+	for name in fields_in_order:
+		field_specs.append({"name": name, "offset": offset, "datatype": 7, "count": 1})
+		offset += 4
+	point_step = offset
+
+	packed = bytearray()
+	for x, y, z in points:
+		values = {"x": x, "y": y, "z": z}
+		row = bytearray(point_step)
+		for spec in field_specs:
+			struct.pack_into(f"{endian}f", row, spec["offset"], values.get(spec["name"], 0.0))
+		packed += row
+
+	return {
+		"point_step": point_step,
+		"is_bigendian": is_bigendian,
+		"fields": field_specs,
+		"data": base64.b64encode(bytes(packed)).decode(),
+	}
+
+
+def test_velodyne_points_basic(client: RosBridgeClient) -> None:
+	points = [(1.0, 2.0, 0.5), (3.0, -1.0, 1.5)]
+	result = client._transform("/velodyne_points", _make_pointcloud2_msg(points))
+	assert result is not None
+	assert result["type"] == "point_cloud"
+	assert result["v"] == "1"
+	assert result["point_count"] == 2
+	assert result["points"] == pytest.approx([1.0, 2.0, 0.5, 3.0, -1.0, 1.5])
+
+
+def test_velodyne_points_field_order_independent(client: RosBridgeClient) -> None:
+	# intensity placed before x/y/z shifts their offsets; the parser must read `fields` rather
+	# than assume x,y,z start at offset 0.
+	msg = _make_pointcloud2_msg([(2.0, 4.0, -0.5)], fields_in_order=["intensity", "x", "y", "z"])
+	result = client._transform("/velodyne_points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([2.0, 4.0, -0.5])
+
+
+def test_velodyne_points_filters_nan(client: RosBridgeClient) -> None:
+	points = [(1.0, 1.0, 1.0), (float("nan"), 2.0, 2.0)]
+	result = client._transform("/velodyne_points", _make_pointcloud2_msg(points))
+	assert result is not None
+	assert result["point_count"] == 1
+	assert result["points"] == pytest.approx([1.0, 1.0, 1.0])
+
+
+def test_velodyne_points_all_invalid_returns_none(client: RosBridgeClient) -> None:
+	points = [(float("nan"), float("nan"), float("nan"))]
+	result = client._transform("/velodyne_points", _make_pointcloud2_msg(points))
+	assert result is None
+
+
+def test_velodyne_points_bigendian(client: RosBridgeClient) -> None:
+	msg = _make_pointcloud2_msg([(5.0, -2.5, 0.0)], is_bigendian=True)
+	result = client._transform("/velodyne_points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([5.0, -2.5, 0.0])
+
+
+def test_velodyne_points_missing_xyz_field_returns_none(client: RosBridgeClient) -> None:
+	msg = _make_pointcloud2_msg([(1.0, 2.0, 3.0)], fields_in_order=["x", "y"])  # no z field
+	result = client._transform("/velodyne_points", msg)
+	assert result is None
+
+
+def test_voxel_decimate_reduces_dense_cluster_but_preserves_z_spread() -> None:
+	import numpy as np
+
+	from revolt_api.bridge.client import _voxel_decimate
+
+	# Two dense clusters of near-duplicate points at different heights, within a single voxel
+	# cell of each other -- proves multi-ring height info survives decimation, not just that
+	# point count goes down.
+	low = np.array([[0.0, 0.0, 0.0], [0.01, 0.0, 0.0], [0.0, 0.01, 0.0]])
+	high = np.array([[0.0, 0.0, 2.0], [0.01, 0.0, 2.0], [0.0, 0.01, 2.0]])
+	xyz = np.vstack([low, high])
+	result = _voxel_decimate(xyz, voxel_size=0.15, max_points=100)
+	assert result.shape[0] == 2
+	z_values = sorted(result[:, 2])
+	assert z_values[0] == pytest.approx(0.0)
+	assert z_values[1] == pytest.approx(2.0)
+
+
+def test_voxel_decimate_caps_at_max_points() -> None:
+	import numpy as np
+
+	from revolt_api.bridge.client import _voxel_decimate
+
+	rng = np.random.default_rng(42)
+	xyz = rng.uniform(-50, 50, size=(1000, 3))  # spread out, most land in distinct voxel cells
+	result = _voxel_decimate(xyz, voxel_size=0.15, max_points=100)
+	assert result.shape[0] <= 100
+
+
 def test_camera_frame_stores_bytes_and_returns_none(client: RosBridgeClient) -> None:
 	import base64
 

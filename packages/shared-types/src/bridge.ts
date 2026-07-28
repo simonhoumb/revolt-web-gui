@@ -305,6 +305,22 @@ export interface LidarScanMsg {
 }
 
 /**
+ * Decimated 3D point cloud from the Velodyne VLP-16's full 16-ring sweep, complementing
+ * LidarScanMsg's single-ring slice. Backend voxel-decimates before forwarding (see client.py's
+ * _handle_velodyne_points), same frame as LidarScanMsg's ranges.
+ */
+export interface PointCloudMsg {
+	v: "1";
+	type: "point_cloud";
+	timestamp_ms: number;
+	// Flat, interleaved [x0,y0,z0, x1,y1,z1, ...] in metres, ROS convention (x=forward, y=left,
+	// z=up). One flat array rather than per-point objects to keep the JSON payload down at this
+	// point count.
+	points: number[];
+	point_count: number; // points.length / 3
+}
+
+/**
  * One aggregated radar azimuth bin, forwarded after backend-side binning (see client.py's
  * RADAR_NUM_BINS comment); never a raw 1:1 spoke.
  */
@@ -361,4 +377,5 @@ export type BridgeMessage =
 	| SimWaypointListMsg
 	| MissionSendStatusMsg
 	| MissionExecutionStatusMsg
-	| LidarScanMsg;
+	| LidarScanMsg
+	| PointCloudMsg;

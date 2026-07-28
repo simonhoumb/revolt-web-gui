@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+import numpy as np
 import structlog
 from websockets.asyncio.client import connect
 
@@ -43,6 +44,7 @@ from revolt_api.bridge.contracts import (
 	MissionExecutionStatusMsg,
 	MissionSendStatus,
 	MissionSendStatusMsg,
+	PointCloudMsg,
 	RadarSpokeMsg,
 	RcRemoteMsg,
 	SimGnssVelocityMsg,
@@ -77,6 +79,15 @@ RADAR_BIN_WIDTH_RAD = (2 * math.pi) / RADAR_NUM_BINS
 # Safety flush if the antenna stalls on one bin for longer than a real rotation would ever take,
 # so a disconnected/stopped radar doesn't leave the last bin's data buffered forever unsent.
 RADAR_ACCUM_MAX_AGE_MS = 3000
+
+# A full VLP-16 sweep is ~28,800 points/frame -- too much to forward 1:1 over the WebSocket at any
+# useful rate. Voxel-grid decimation gives spatially-uniform coverage (dense near returns don't
+# waste budget, sparse far returns aren't over-thinned) and, unlike stride sampling, doesn't
+# collapse the 16 rings together: points from different rings hitting the same wall at different
+# heights land in different z-buckets and both survive, which is what lets the flattened 2D view
+# and the 3D view show more than /scan's single ring.
+VELODYNE_VOXEL_SIZE_M = 0.15
+VELODYNE_MAX_POINTS = 5000
 
 # Course over ground comes from atan2 of the GNSS Doppler velocity vector (see
 # _handle_gnss_velocity); near zero speed the noise dominates the signal and the angle swings
@@ -133,6 +144,27 @@ class LatestRawMessage:
 
 	msg: dict[str, Any]
 	timestamp_ms: int
+
+
+def _voxel_decimate(xyz: np.ndarray, voxel_size: float, max_points: int) -> np.ndarray:
+	"""Downsample an (N, 3) point array to at most one point per voxel cell, capped at max_points.
+
+	Args:
+		xyz: (N, 3) array of x, y, z coordinates in metres.
+		voxel_size: edge length of each cubic voxel cell, in metres.
+		max_points: hard cap on the number of points returned; a random subset is kept if the
+			voxelized result still exceeds this (rare in practice, a safety net).
+
+	Returns:
+		(M, 3) array, M <= max_points.
+	"""
+	voxel_idx = np.floor(xyz / voxel_size).astype(np.int64)
+	_, unique_idx = np.unique(voxel_idx, axis=0, return_index=True)
+	decimated = xyz[unique_idx]
+	if decimated.shape[0] > max_points:
+		keep = np.random.default_rng().choice(decimated.shape[0], max_points, replace=False)
+		decimated = decimated[keep]
+	return decimated
 
 
 class RosBridgeClient:
@@ -222,6 +254,7 @@ class RosBridgeClient:
 			"/waypoint_list": self._handle_waypoint_list,
 			"/camera/camera/color/image_raw/compressed": self._handle_camera_frame,
 			"/scan": self._handle_lidar_scan,
+			"/velodyne_points": self._handle_velodyne_points,
 			"/radar/spoke": self._handle_radar_spoke,
 			"/ais/decoded_message": self._handle_ais_target,
 			"/imu/data": self._handle_imu,
@@ -962,6 +995,43 @@ class RosBridgeClient:
 			range_min=float(msg.get("range_min", 0.1)),
 			range_max=range_max,
 			ranges=ranges,
+		)
+
+	def _handle_velodyne_points(self, msg: dict, now: int) -> BridgeMessage | None:
+		# Field offsets/point_step/endianness are read from the wire message rather than
+		# hardcoded, so this doesn't silently break if velodyne_pointcloud's field layout ever
+		# changes (e.g. a firmware/driver upgrade, or a different Velodyne model). rosbridge_suite
+		# JSON-encodes PointCloud2.data (a uint8[]) as base64, same convention as
+		# _handle_camera_frame/_handle_radar_spoke already rely on.
+		point_step = int(msg["point_step"])
+		endian = ">" if msg.get("is_bigendian", False) else "<"
+		field_offsets = {f["name"]: int(f["offset"]) for f in msg["fields"]}
+		if not all(k in field_offsets for k in ("x", "y", "z")):
+			logger.warning("velodyne_points_missing_xyz_field")
+			return None
+
+		raw = base64.b64decode(msg["data"])
+		dtype = np.dtype(
+			{
+				"names": ["x", "y", "z"],
+				"formats": [f"{endian}f4"] * 3,
+				"offsets": [field_offsets["x"], field_offsets["y"], field_offsets["z"]],
+				"itemsize": point_step,
+			}
+		)
+		points = np.frombuffer(raw, dtype=dtype)
+		xyz = np.stack([points["x"], points["y"], points["z"]], axis=1)
+		xyz = xyz[np.isfinite(xyz).all(axis=1)]  # organized cloud marks invalid returns as NaN
+		if xyz.shape[0] == 0:
+			return None
+
+		decimated = _voxel_decimate(xyz, VELODYNE_VOXEL_SIZE_M, VELODYNE_MAX_POINTS)
+		return PointCloudMsg(
+			v="1",
+			type="point_cloud",
+			timestamp_ms=now,
+			points=[round(float(v), 2) for v in decimated.flatten()],
+			point_count=decimated.shape[0],
 		)
 
 	def _finalize_radar_bin(self, now: int) -> BridgeMessage | None:
