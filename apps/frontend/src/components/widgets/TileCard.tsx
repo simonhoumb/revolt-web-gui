@@ -5,10 +5,19 @@ import { ObiCloseGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-
 import { ObiTable } from "@oicl/openbridge-webcomponents-react/icons/icon-table.js";
 import { ObiSpeed } from "@oicl/openbridge-webcomponents-react/icons/icon-speed.js";
 import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
-import type { WidgetId } from "./registry.js";
+import { WIDGET_REGISTRY, type ViewModeToggleConfig, type WidgetId } from "./registry.js";
 import type { WidgetViewMode } from "./ViewModeToggle.js";
 import styles from "./TileCard.module.css";
 import { Tooltip } from "./Tooltip.js";
+
+// Used by every widget with supportsViewModeToggle that doesn't supply its own
+// viewModeToggle override -- this is the toggle's original detail-level meaning.
+const DEFAULT_VIEW_MODE_TOGGLE: ViewModeToggleConfig = {
+	detailedLabel: "detailed",
+	instrumentLabel: "instrument",
+	DetailedIcon: ObiTable,
+	InstrumentIcon: ObiSpeed,
+};
 
 interface TileCardProps {
 	title: string;
@@ -31,34 +40,29 @@ export function TileCard({
 	onViewModeChange,
 	children,
 }: TileCardProps) {
+	const toggleConfig = WIDGET_REGISTRY[widgetId].viewModeToggle ?? DEFAULT_VIEW_MODE_TOGGLE;
+	const targetLabel =
+		viewMode === "instrument" ? toggleConfig.detailedLabel : toggleConfig.instrumentLabel;
+	const ToggleIcon =
+		viewMode === "instrument" ? toggleConfig.DetailedIcon : toggleConfig.InstrumentIcon;
+
 	return (
 		<ObcCard className={styles.tile} data-edit-mode={editMode || undefined}>
 			<span slot="title" className={styles.titleText}>
 				{title}
 			</span>
 			{viewMode !== undefined && onViewModeChange !== undefined && (
-				<Tooltip
-					label={
-						viewMode === "instrument"
-							? "Switch to detailed view"
-							: "Switch to instrument view"
-					}
-					asChild
-				>
+				<Tooltip label={`Switch to ${targetLabel} view`} asChild>
 					<ObcIconButton
 						slot="title"
 						className={styles.viewModeButton}
 						variant={IconButtonVariant.flat}
-						aria-label={
-							viewMode === "instrument"
-								? "Switch to detailed view"
-								: "Switch to instrument view"
-						}
+						aria-label={`Switch to ${targetLabel} view`}
 						onClick={() => {
 							onViewModeChange(viewMode === "instrument" ? "detailed" : "instrument");
 						}}
 					>
-						{viewMode === "instrument" ? <ObiTable /> : <ObiSpeed />}
+						<ToggleIcon />
 					</ObcIconButton>
 				</Tooltip>
 			)}

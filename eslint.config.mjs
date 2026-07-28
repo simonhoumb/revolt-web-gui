@@ -24,10 +24,7 @@ export default tseslint.config(
 	// TypeScript with type checking, scoped to .ts/.tsx only
 	{
 		files: ["**/*.{ts,tsx}"],
-		extends: [
-			...tseslint.configs.strictTypeChecked,
-			...tseslint.configs.stylisticTypeChecked,
-		],
+		extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
 		plugins: {
 			tsdoc: tsdocPlugin,
 		},
@@ -78,6 +75,17 @@ export default tseslint.config(
 			// app until a manual reload. See ErrorBoundary.tsx and the context/useXxx.ts split for
 			// the fix this caught across the whole app.
 			"react-refresh/only-export-components": ["error", { allowConstantExport: true }],
+		},
+	},
+
+	// react-three-fiber JSX intrinsics (mesh, points, bufferGeometry, ...) aren't real DOM
+	// elements, so react/no-unknown-property's DOM-attribute allowlist doesn't apply to their
+	// props (args, attach, intensity, rotation, ...). Scoped narrowly since this is currently the
+	// only file using r3f.
+	{
+		files: ["apps/frontend/src/components/widgets/Lidar3DScene.tsx"],
+		rules: {
+			"react/no-unknown-property": "off",
 		},
 	},
 
