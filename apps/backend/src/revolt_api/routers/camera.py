@@ -31,4 +31,5 @@ async def camera_stream(camera_id: str, bridge: RosBridgeClient = Depends(get_br
 	return StreamingResponse(
 		frame_generator(),
 		media_type="multipart/x-mixed-replace; boundary=frame",
+		headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
 	)
