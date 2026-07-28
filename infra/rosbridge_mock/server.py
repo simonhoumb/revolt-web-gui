@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import random
+import struct
 import time
 
 from websockets.asyncio.server import ServerConnection, serve
@@ -87,6 +88,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/heading": 0.5,
     "/camera/camera/color/image_raw/compressed": 0.2,  # 5 fps
     "/scan": 0.1,  # 10 Hz
+    "/velodyne_points": 0.25,  # 4 Hz, matching client.py's frontend_throttle_ms for this topic
     "/radar/spoke": 0.01,  # ~= 20s-rotation / 2048 fine steps, so each tick advances one step
     "/ais/decoded_message": 3.0,  # one target report per tick, round-robin (see _make_msg)
     "/imu/data": 0.1,  # sent at the already-throttled 10Hz rate, same as /scan below
@@ -134,6 +136,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/heading": "geometry_msgs/QuaternionStamped",
     "/camera/camera/color/image_raw/compressed": "sensor_msgs/CompressedImage",
     "/scan": "sensor_msgs/LaserScan",
+    "/velodyne_points": "sensor_msgs/PointCloud2",
     "/radar/spoke": "custom_msgs/RadarSpoke",
     "/ais/decoded_message": "custom_msgs/SimpleAISdata",
     "/imu/data": "sensor_msgs/Imu",
@@ -224,6 +227,63 @@ MOCK_AUTO_POP = os.environ.get("MOCK_AUTO_POP", "") == "1"
 CRAB_ANGLE_RAD = math.radians(
     15
 )  # simulated cross-current/wind drift: COG diverges from heading
+
+
+# VLP-16 firing order elevations, -15..+15 degrees in 2-degree steps.
+_VELODYNE_RING_ELEVATIONS_DEG = [-15 + i * 2 for i in range(16)]
+# Coarser than a real sweep's ~1800 points/ring -- keeps this mock's per-tick loop fast.
+_VELODYNE_AZIMUTH_STEPS = 200
+
+
+def _make_velodyne_points_msg(t: float) -> dict:
+    """Synthetic PointCloud2 (all 16 rings), same obstacle-ring pattern as /scan but in 3D.
+
+    Field layout (x,y,z,intensity,ring,time) matches the real velodyne_pointcloud driver's
+    unpadded layout, though the backend's parser reads offsets from `fields` regardless.
+    """
+    field_specs = [
+        {"name": "x", "offset": 0, "datatype": 7, "count": 1},
+        {"name": "y", "offset": 4, "datatype": 7, "count": 1},
+        {"name": "z", "offset": 8, "datatype": 7, "count": 1},
+        {"name": "intensity", "offset": 12, "datatype": 7, "count": 1},
+        {"name": "ring", "offset": 16, "datatype": 4, "count": 1},
+        {"name": "time", "offset": 18, "datatype": 7, "count": 1},
+    ]
+    point_step = 22
+    angle_inc = (2 * math.pi) / _VELODYNE_AZIMUTH_STEPS
+
+    packed = bytearray()
+    for ring_idx, elevation_deg in enumerate(_VELODYNE_RING_ELEVATIONS_DEG):
+        elevation = math.radians(elevation_deg)
+        for i in range(_VELODYNE_AZIMUTH_STEPS):
+            azimuth = i * angle_inc
+            # Same obstacle-ring-with-gaps pattern as /scan's case below, so the 3D view shows
+            # a recognizable shape rather than pure noise.
+            if (azimuth % (math.pi / 2)) < 0.2:
+                r = 125.0 + random.gauss(0, 0.5)
+            else:
+                r = 40.0 + 20.0 * math.sin(azimuth * 3 + t) + random.gauss(0, 0.5)
+            r = max(0.9, min(r, 129.9))
+            x = r * math.cos(elevation) * math.cos(azimuth)
+            y = r * math.cos(elevation) * math.sin(azimuth)
+            z = r * math.sin(elevation)
+
+            row = bytearray(point_step)
+            struct.pack_into("<f", row, 0, x)
+            struct.pack_into("<f", row, 4, y)
+            struct.pack_into("<f", row, 8, z)
+            struct.pack_into("<f", row, 12, 100.0)  # intensity, unused by the backend
+            struct.pack_into("<H", row, 16, ring_idx)
+            struct.pack_into("<f", row, 18, 0.0)  # time offset, unused by the backend
+            packed += row
+
+    return {
+        "point_step": point_step,
+        "is_bigendian": False,
+        "fields": field_specs,
+        "data": base64.b64encode(bytes(packed)).decode(),
+        "header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "velodyne"},
+    }
 
 
 def _mock_heading_rad(t: float) -> float:
@@ -475,6 +535,8 @@ def _make_msg(topic: str) -> dict:
                     "frame_id": "velodyne",
                 },
             }
+        case "/velodyne_points":
+            return _make_velodyne_points_msg(t)
         case "/radar/spoke":
             # Simulated Furuno DRS4D-NXT. The real unit emits 8,192 raw spokes/revolution
             # (confirmed via Furuno's own NavNet API spec, bundled in Hardware/radar/RadarSDK/),

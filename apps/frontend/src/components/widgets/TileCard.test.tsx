@@ -120,4 +120,21 @@ describe("TileCard", () => {
 		screen.getByLabelText("Switch to instrument view").click();
 		expect(onViewModeChange).toHaveBeenCalledExactlyOnceWith("instrument");
 	});
+
+	it("uses a widget's own viewModeToggle wording instead of the generic detailed/instrument labels", () => {
+		render(
+			<TileCard
+				title="LiDAR"
+				widgetId="lidar"
+				editMode={false}
+				onRemove={vi.fn()}
+				viewMode="detailed"
+				onViewModeChange={vi.fn()}
+			>
+				<div>content</div>
+			</TileCard>,
+		);
+		expect(screen.getByLabelText("Switch to 3D view")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Switch to instrument view")).not.toBeInTheDocument();
+	});
 });

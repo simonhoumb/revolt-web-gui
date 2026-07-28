@@ -35,6 +35,7 @@ vi.mock("../../context/useBridgeData.js", () => ({
 		cameraStatus: null,
 		thrusterFeedback: { bow: null, port: null, starboard: null },
 		lidarScan: null,
+		pointCloud: null,
 		activeWaypointList: null,
 		missionSendStatus: null,
 		missionExecutionStatus: null,
@@ -143,6 +144,20 @@ describe("TileGrid", () => {
 		// present -- obc-compass is GnssWidget's instrument-view content instead.
 		expect(screen.getByText("Port")).toBeInTheDocument();
 		expect(document.querySelector("obc-compass")).not.toBeNull();
+	});
+
+	it("uses a widget's own defaultViewMode instead of the shared DEFAULT_VIEW_MODE when set", () => {
+		// lidar's registry entry sets defaultViewMode: "detailed" (2D) specifically because 3D is
+		// heavier to render and less useful for a first look -- unlike gnss/battery above, which
+		// have no override and fall through to the shared "instrument" default.
+		setLayout({
+			config: {
+				tiles: [{ i: "lidar", x: 0, y: 0, w: 2, h: 5 }],
+				hiddenWidgets: [],
+			},
+		});
+		render(<TileGrid />);
+		expect(screen.getByLabelText("2D lidar scan view")).toBeInTheDocument();
 	});
 
 	it("maps each configured tile's position/size into the GridLayout layout prop", () => {

@@ -27,6 +27,8 @@ import { ObiMonitoring } from "@oicl/openbridge-webcomponents-react/icons/icon-m
 import { ObiJoystick } from "@oicl/openbridge-webcomponents-react/icons/icon-joystick.js";
 import { ObiSensorGyro } from "@oicl/openbridge-webcomponents-react/icons/icon-sensor-gyro.js";
 import { ObiLightAlarm } from "@oicl/openbridge-webcomponents-react/icons/icon-light-alarm.js";
+import { ObiChartLayers } from "@oicl/openbridge-webcomponents-react/icons/icon-chart-layers.js";
+import { ObiTransformRotate } from "@oicl/openbridge-webcomponents-react/icons/icon-transform-rotate.js";
 
 export type WidgetId =
 	| "battery"
@@ -55,6 +57,16 @@ export interface TilePosition {
 	h: number;
 }
 
+// Overrides TileCard's default "detailed"/"instrument" icon+wording on the view-mode toggle
+// button for widgets where that pair of states means something other than a detail-level split
+// (e.g. lidar's 2D/3D views).
+export interface ViewModeToggleConfig {
+	detailedLabel: string; // used in "Switch to {label} view" tooltip/aria-label wording
+	instrumentLabel: string;
+	DetailedIcon: ComponentType; // rendered when current mode is "instrument" (switching TO detailed)
+	InstrumentIcon: ComponentType; // rendered when current mode is "detailed" (switching TO instrument)
+}
+
 export interface WidgetDefinition {
 	id: WidgetId;
 	label: string;
@@ -73,6 +85,14 @@ export interface WidgetDefinition {
 	// itself -- TileCard's title bar is where the button lives, so the state has to live at least
 	// as high as TileGrid to reach both TileCard and the widget.
 	supportsViewModeToggle?: boolean;
+	// Only meaningful when supportsViewModeToggle is true. Omit to use TileCard's default
+	// detailed/instrument icon+wording.
+	viewModeToggle?: ViewModeToggleConfig;
+	// Only meaningful when supportsViewModeToggle is true. Omit to use TileGrid's shared
+	// DEFAULT_VIEW_MODE ("instrument") -- override when a widget's two states aren't equally
+	// good starting points (e.g. lidar defaults to "detailed"/2D, since 3D is heavier to render
+	// and less useful for an at-a-glance first look).
+	defaultViewMode?: WidgetViewMode;
 	// This widget's tile in the built-in "Default" dashboard layout (LayoutContext.tsx's
 	// DEFAULT_TILES is derived from these). Curated by hand, and not always the same size as
 	// defaultW/defaultH above -- that's the size a widget gets when freshly re-added via the
@@ -135,6 +155,18 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		minH: 2,
 		defaultPosition: { x: 0, y: 5, w: 2, h: 5 },
 		instrumentsOnlyPosition: { x: 2, y: 5, w: 2, h: 5 },
+		// Reuses the instrument/detailed toggle mechanism for a 2D/3D view switch instead --
+		// "detailed" means the 2D top-down canvas, "instrument" means the 3D point cloud scene.
+		supportsViewModeToggle: true,
+		viewModeToggle: {
+			detailedLabel: "2D",
+			instrumentLabel: "3D",
+			DetailedIcon: ObiChartLayers,
+			InstrumentIcon: ObiTransformRotate,
+		},
+		// 2D by default -- lighter to render and more useful for an at-a-glance first look than
+		// starting in the 3D scene.
+		defaultViewMode: "detailed",
 	},
 	camera: {
 		id: "camera",

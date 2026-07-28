@@ -32,6 +32,7 @@ function withImu(imu: ImuMsg | null): BridgeData {
 		cameraStatus: null,
 		thrusterFeedback: { bow: null, port: null, starboard: null },
 		lidarScan: null,
+		pointCloud: null,
 		radarSpoke: null,
 		aisTargets: {},
 		imu,

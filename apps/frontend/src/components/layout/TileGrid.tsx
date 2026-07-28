@@ -182,7 +182,7 @@ export function TileGrid() {
 						const def = WIDGET_REGISTRY[tile.i];
 						const W = def.component;
 						const viewMode = def.supportsViewModeToggle
-							? (viewModes[tile.i] ?? DEFAULT_VIEW_MODE)
+							? (viewModes[tile.i] ?? def.defaultViewMode ?? DEFAULT_VIEW_MODE)
 							: undefined;
 						const handleViewModeChange = def.supportsViewModeToggle
 							? (mode: WidgetViewMode) => {

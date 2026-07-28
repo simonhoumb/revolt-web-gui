@@ -163,6 +163,18 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		),
 	),
 	TopicSpec(
+		"/velodyne_points",
+		"sensor_msgs/PointCloud2",
+		throttle_rate_ms=250,
+		frontend_throttle_ms=250,
+		description=(
+			"Full 3D Velodyne VLP-16 point cloud (all 16 rings), from velodyne_pointcloud's "
+			"velodyne_transform_node -- the same source /scan's single ring is derived from. "
+			"Backend voxel-decimates before forwarding (see client.py's _handle_velodyne_points); "
+			"throttled slower than /scan since each frame carries far more data."
+		),
+	),
+	TopicSpec(
 		"/radar/spoke",
 		"custom_msgs/RadarSpoke",
 		description=(

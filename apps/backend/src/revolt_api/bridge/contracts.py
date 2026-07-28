@@ -347,6 +347,23 @@ class LidarScanMsg(TypedDict):
 	ranges: list[float]  # metres per step; inf/NaN replaced with range_max
 
 
+class PointCloudMsg(TypedDict):
+	"""Decimated 3D point cloud from the Velodyne VLP-16's full 16-ring sweep.
+
+	Backend voxel-decimates before forwarding (see client.py's _handle_velodyne_points); the same
+	frame LidarScanMsg's ranges are computed in.
+	"""
+
+	v: Literal["1"]
+	type: Literal["point_cloud"]
+	timestamp_ms: int
+	# Flat, interleaved [x0,y0,z0, x1,y1,z1, ...] in metres, ROS convention (x=forward, y=left,
+	# z=up). One flat list rather than a list of per-point dicts to keep the JSON payload down
+	# at this point count.
+	points: list[float]
+	point_count: int  # len(points) // 3
+
+
 class RadarSpokeMsg(TypedDict):
 	"""One aggregated radar azimuth bin.
 
@@ -408,6 +425,7 @@ BridgeMessage = (
 	| MissionSendStatusMsg
 	| MissionExecutionStatusMsg
 	| LidarScanMsg
+	| PointCloudMsg
 )
 
 _CONTROL_MODE_MAP: dict[int, str] = {
