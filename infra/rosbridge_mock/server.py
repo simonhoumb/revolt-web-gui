@@ -559,17 +559,54 @@ def _make_msg(topic: str) -> dict:
             num_samples = 480
             range_start = 0.0
             range_increment = (8 * 1852.0) / num_samples
-            target_azimuth = 1.2
-            # ~740 m (~0.4 nm) out -- visible at the widget's default 1 nm zoom (dock-adjacent
-            # testing needs the tight end of the range ladder, not an offshore-transit range).
-            target_sample_idx = 24
-            angle_diff = abs(((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi)
             intensity_bytes = bytearray(num_samples)
+
+            # Sea clutter: real returns fade rapidly with range near own-ship (wave/spray
+            # scatter), not a flat noise floor -- exponential falloff from a peak close in, so
+            # the scope gets a faint textured glow near the center instead of mostly-black with
+            # one isolated blip.
             for i in range(num_samples):
-                level = 10 + random.gauss(0, 3)
-                if angle_diff < 0.1 and abs(i - target_sample_idx) < 4:
-                    level += 200
-                intensity_bytes[i] = max(0, min(255, int(level)))
+                r = range_start + i * range_increment
+                clutter = 25.0 * math.exp(-r / 300.0)
+                intensity_bytes[i] = max(0, min(255, int(clutter + random.gauss(0, 4))))
+
+            # Shoreline: a fixed azimuth window rendered as a solid, persistent arc of strong
+            # returns rather than a point target, since real land is a continuous coastline, not
+            # an isolated echo. The bearing/range here are picked for visual variety only, not
+            # calibrated against the real Bekkelaget shoreline.
+            land_az_min, land_az_max = math.radians(200), math.radians(260)
+            land_range_m = 1400.0
+            if land_az_min <= azimuth <= land_az_max:
+                # Per-spoke range jitter so the leading edge looks organically irregular
+                # instead of a perfect arc.
+                land_r = land_range_m + 60.0 * math.sin(azimuth * 9) + random.gauss(0, 15)
+                land_idx = int((land_r - range_start) / range_increment)
+                for i in range(max(0, land_idx - 2), min(num_samples, land_idx + 30)):
+                    intensity_bytes[i] = max(intensity_bytes[i], 180 + random.randint(-10, 10))
+
+            # Other traffic: a few point targets at different ranges/bearings, each drifting in
+            # azimuth over time so they read as independent moving contacts rather than fixed
+            # clutter. The first matches the original mock's single close-in target.
+            targets = [
+                (1.2, 740.0, 4),  # ~0.4 nm, dead ahead-ish
+                (3.6 + t * 0.01, 2600.0, 3),  # slow contact off to port
+                (5.0 - t * 0.006, 5200.0, 5),  # larger/slower contact further out
+            ]
+            for target_azimuth, target_range_m, blob_halfwidth in targets:
+                target_azimuth %= 2 * math.pi
+                angle_diff = abs(
+                    ((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi
+                )
+                if angle_diff >= 0.06:
+                    continue
+                target_idx = int((target_range_m - range_start) / range_increment)
+                for i in range(
+                    max(0, target_idx - blob_halfwidth),
+                    min(num_samples, target_idx + blob_halfwidth),
+                ):
+                    level = 200 + random.gauss(0, 20)
+                    intensity_bytes[i] = max(intensity_bytes[i], max(0, min(255, int(level))))
+
             return {
                 "azimuth": round(azimuth, 5),
                 "range_start": range_start,
