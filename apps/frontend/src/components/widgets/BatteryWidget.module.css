@@ -76,3 +76,10 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--element-active-color, #eaa75e);
 }
+
+/* Last-known reading whose topic has gone quiet -- still shown (maritime convention), just
+   visually marked as no longer live rather than hidden. Applied per-child, not to .readingRow
+   itself -- that wrapper is display: contents, which never paints a box for opacity to apply to. */
+.stale {
+	opacity: 0.5;
+}

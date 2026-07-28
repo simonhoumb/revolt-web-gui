@@ -66,7 +66,7 @@ function makeSpoke(overrides: Partial<RadarSpokeMsg> = {}): RadarSpokeMsg {
 }
 
 function makeRadarData(overrides: Partial<RadarData> = {}): RadarData {
-	return { spokes: [], ...overrides };
+	return { spokes: [], stale: false, ...overrides };
 }
 
 // Unlike LidarWidget (which draws synchronously in its effect), RadarWidget batches the draw via
@@ -169,5 +169,17 @@ describe("RadarWidget", () => {
 			fireEvent.wheel(canvasArea, { deltaY: 100 });
 		});
 		expect(screen.getByText("1")).toBeInTheDocument();
+	});
+
+	it("shows a 'No signal' overlay when the sweep has gone stale", () => {
+		mockUseRadarData.mockReturnValue(makeRadarData({ spokes: [makeSpoke()], stale: true }));
+		render(<RadarWidget />);
+		expect(screen.getByText("No signal")).toBeInTheDocument();
+	});
+
+	it("hides the 'No signal' overlay when the sweep is fresh", () => {
+		mockUseRadarData.mockReturnValue(makeRadarData({ spokes: [makeSpoke()], stale: false }));
+		render(<RadarWidget />);
+		expect(screen.queryByText("No signal")).not.toBeInTheDocument();
 	});
 });

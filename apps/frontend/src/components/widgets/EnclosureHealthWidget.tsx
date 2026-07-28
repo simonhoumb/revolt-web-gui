@@ -8,7 +8,9 @@ import {
 	useEnclosureHealthData,
 	type EnclosureReading,
 } from "../../hooks/useEnclosureHealthData.js";
+import { cx } from "../../lib/classNames.js";
 import styles from "./EnclosureHealthWidget.module.css";
+import { StaleBadge } from "./StaleBadge.js";
 import type { WidgetViewMode } from "./ViewModeToggle.js";
 import { ObiTemperatureAir } from "@oicl/openbridge-webcomponents-react/icons/icon-temperature-air.js";
 import { ObiSensorWaterDropGoogle } from "@oicl/openbridge-webcomponents-react/icons/icon-sensor-water-drop-google.js";
@@ -24,7 +26,7 @@ interface EnvRowProps {
 function EnvRow({ label, reading, unit }: EnvRowProps) {
 	const value = reading.valueC ?? reading.valuePct;
 	return (
-		<div className={styles.envRow}>
+		<div className={cx(styles.envRow, reading.stale && styles.stale)}>
 			<span className={styles.envLabel}>{label}</span>
 			<span className={styles.envValue}>
 				{value !== undefined ? `${value.toFixed(1)}${unit}` : "—"}
@@ -35,6 +37,7 @@ function EnvRow({ label, reading, unit }: EnvRowProps) {
 			{reading.status === "warning" && (
 				<ObcBadge type="warning" showNumber={false} showIcon={true} />
 			)}
+			{reading.stale && <StaleBadge />}
 		</div>
 	);
 }
@@ -56,7 +59,7 @@ function EnvField({
 }) {
 	const value = reading.valueC ?? reading.valuePct;
 	return (
-		<div className={styles.envField}>
+		<div className={cx(styles.envField, reading.stale && styles.stale)}>
 			<span className={styles.envIcon}>{icon}</span>
 			<ObcInstrumentField
 				unit={unit}
@@ -70,12 +73,14 @@ function EnvField({
 			{reading.status === "warning" && (
 				<ObcBadge type="warning" showNumber={false} showIcon={true} />
 			)}
+			{reading.stale && <StaleBadge />}
 		</div>
 	);
 }
 
 export function EnclosureHealthWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewMode }) {
-	const { temperature, humidity, emergencyStopActive } = useEnclosureHealthData();
+	const { temperature, humidity, emergencyStopActive, emergencyStopStale } =
+		useEnclosureHealthData();
 
 	return (
 		<div className={styles.content}>
@@ -123,7 +128,7 @@ export function EnclosureHealthWidget({ viewMode = "instrument" }: { viewMode?: 
 				</>
 			)}
 			<div className={styles.statusList}>
-				<div className={styles.statusRow}>
+				<div className={cx(styles.statusRow, emergencyStopStale && styles.stale)}>
 					<ObcStatusIndicator
 						status={
 							emergencyStopActive
@@ -134,6 +139,7 @@ export function EnclosureHealthWidget({ viewMode = "instrument" }: { viewMode?: 
 					<span className={styles.statusLabel}>
 						{emergencyStopActive ? "E-Stop active" : "E-Stop clear"}
 					</span>
+					{emergencyStopStale && <StaleBadge />}
 				</div>
 			</div>
 		</div>

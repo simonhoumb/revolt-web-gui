@@ -14,6 +14,7 @@
    instrument's column to whatever space remains after both readouts claim their own natural
    (auto) width, so the readouts stay put and the instrument is what shrinks instead. */
 .instrumentLayout {
+	position: relative;
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr) auto;
 	align-items: center;
@@ -77,4 +78,10 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--element-active-color, #eaa75e);
 	margin: 0;
+}
+
+/* Last-known reading whose topic has gone quiet -- still shown (maritime convention), just
+   visually marked as no longer live rather than hidden. */
+.stale {
+	opacity: 0.5;
 }

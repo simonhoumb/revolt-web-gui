@@ -1,4 +1,6 @@
 import { useBridgeData } from "../context/useBridgeData.js";
+import { useLiveTick } from "./useLiveTick.js";
+import { isStale } from "../lib/staleness.js";
 import { ON_CURRENT_THRESHOLD_A } from "../lib/thresholds.js";
 
 const BATTERY_FULL_V = 14.4; // Trad/Gel charge voltage (charger spec)
@@ -12,12 +14,14 @@ export type VoltageStatus = "normal" | "warning" | "alarm" | "overvolt" | "unkno
 export interface CurrentReadingData {
 	amperes: number | null;
 	isOn: boolean;
+	stale: boolean;
 }
 
 export interface BatteryData {
 	voltageV: number | null;
 	voltagePercent: number | null;
 	voltageStatus: VoltageStatus;
+	voltageStale: boolean;
 	current: {
 		stern_port: CurrentReadingData;
 		stern_star: CurrentReadingData;
@@ -37,15 +41,22 @@ export function voltageStatus(v: number | null): VoltageStatus {
 	return "normal";
 }
 
-function toCurrentData(amperes: number | null): CurrentReadingData {
+function toCurrentData(
+	amperes: number | null,
+	timestampMs: number | null | undefined,
+	now: number,
+): CurrentReadingData {
 	return {
 		amperes,
 		isOn: amperes !== null && amperes > ON_CURRENT_THRESHOLD_A,
+		stale: isStale(timestampMs, now),
 	};
 }
 
 /** Battery voltage/percent/status plus per-motor current draw and on/off state. */
 export function useBatteryData(): BatteryData {
+	useLiveTick();
+	const now = Date.now();
 	const { battery, current } = useBridgeData();
 
 	const voltageV = battery?.voltage_v ?? null;
@@ -62,10 +73,19 @@ export function useBatteryData(): BatteryData {
 		voltageV,
 		voltagePercent,
 		voltageStatus: voltageStatus(voltageV),
+		voltageStale: isStale(battery?.timestamp_ms, now),
 		current: {
-			stern_port: toCurrentData(current.stern_port?.amperes ?? null),
-			stern_star: toCurrentData(current.stern_star?.amperes ?? null),
-			bow: toCurrentData(current.bow?.amperes ?? null),
+			stern_port: toCurrentData(
+				current.stern_port?.amperes ?? null,
+				current.stern_port?.timestamp_ms,
+				now,
+			),
+			stern_star: toCurrentData(
+				current.stern_star?.amperes ?? null,
+				current.stern_star?.timestamp_ms,
+				now,
+			),
+			bow: toCurrentData(current.bow?.amperes ?? null, current.bow?.timestamp_ms, now),
 		},
 	};
 }

@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useLightBeaconData } from "./useLightBeaconData.js";
 import { useBridgeData } from "../context/useBridgeData.js";
 import type { BridgeData } from "../context/bridgeDataReducer.js";
 import type { LightBeaconMsg } from "@revolt/shared-types";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
 vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
@@ -58,21 +59,37 @@ function beacon(overrides: Partial<LightBeaconMsg> = {}): LightBeaconMsg {
 }
 
 describe("useLightBeaconData", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("defaults all lamps off when no message has arrived", () => {
 		mockUseBridgeData.mockReturnValue(withLightBeacon(null));
 		const { result } = renderHook(() => useLightBeaconData());
-		expect(result.current).toEqual({ red: false, yellow: false, green: false });
+		expect(result.current).toEqual({ red: false, yellow: false, green: false, stale: true });
 	});
 
 	it("passes through a steady-green state", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
 		mockUseBridgeData.mockReturnValue(withLightBeacon(beacon({ green: true })));
 		const { result } = renderHook(() => useLightBeaconData());
-		expect(result.current).toEqual({ red: false, yellow: false, green: true });
+		expect(result.current).toEqual({ red: false, yellow: false, green: true, stale: false });
 	});
 
 	it("passes through multiple lamps on at once", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
 		mockUseBridgeData.mockReturnValue(withLightBeacon(beacon({ red: true, yellow: true })));
 		const { result } = renderHook(() => useLightBeaconData());
-		expect(result.current).toEqual({ red: true, yellow: true, green: false });
+		expect(result.current).toEqual({ red: true, yellow: true, green: false, stale: false });
+	});
+
+	it("marks the reading stale once the staleness window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		mockUseBridgeData.mockReturnValue(withLightBeacon(beacon({ green: true })));
+		const { result } = renderHook(() => useLightBeaconData());
+		expect(result.current.stale).toBe(true);
 	});
 });

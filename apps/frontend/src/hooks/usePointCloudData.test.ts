@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { usePointCloudData } from "./usePointCloudData.js";
 import { useBridgeData } from "../context/useBridgeData.js";
 import type { BridgeData } from "../context/bridgeDataReducer.js";
 import type { PointCloudMsg } from "@revolt/shared-types";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
 vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
@@ -75,5 +76,30 @@ describe("usePointCloudData", () => {
 		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: cloud });
 		const { result } = renderHook(() => usePointCloudData());
 		expect(result.current.cloud).toBe(cloud);
+	});
+});
+
+describe("usePointCloudData — staleness", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("is stale when no cloud has ever arrived", () => {
+		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: null });
+		const { result } = renderHook(() => usePointCloudData());
+		expect(result.current.stale).toBe(true);
+	});
+
+	it("is not stale for a fresh cloud, and becomes stale once the window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const cloud = makeCloud();
+		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: cloud });
+		const { result, rerender } = renderHook(() => usePointCloudData());
+		expect(result.current.stale).toBe(false);
+
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		rerender();
+		expect(result.current.stale).toBe(true);
 	});
 });

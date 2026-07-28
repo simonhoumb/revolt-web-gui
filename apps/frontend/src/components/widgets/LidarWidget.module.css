@@ -7,14 +7,37 @@
 	gap: 4px;
 }
 
-/* Fills all space above the controls; observed for canvas sizing */
+/* Fills all space above the controls; observed for canvas sizing. position: relative so the
+   no-signal overlay below can absolutely position itself over just this area. */
 .canvasArea {
+	position: relative;
 	flex: 1;
 	min-height: 0;
 	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
+
+/* Same "last known frame, clearly marked as no longer live" convention as CameraWidget -- a
+   frozen lidar scan looks identical to a live one, so this needs an explicit signal rather than
+   an opacity dim. */
+.overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: var(--overlay-container-background-color, rgba(0, 0, 0, 0.75));
+	z-index: 1;
+	pointer-events: none;
+}
+
+.overlayText {
+	font-size: 0.9rem;
+	color: var(--overlay-element-neutral-color, rgba(255, 255, 255, 0.64));
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
 }
 
 /* canvasSize (the width/height attributes, drawing-buffer resolution) is set async via

@@ -21,6 +21,7 @@ function makeImuData(overrides: Partial<ImuData> = {}): ImuData {
 		angVelX: null,
 		angVelY: null,
 		angVelZ: null,
+		stale: false,
 		...overrides,
 	};
 }
@@ -39,6 +40,12 @@ describe("ImuWidget", () => {
 		mockUseImuData.mockReturnValue(makeImuData({ rollDeg: 1.2 }));
 		rerender(<ImuWidget viewMode="detailed" />);
 		expect(screen.getByText("Live")).toBeInTheDocument();
+	});
+
+	it("shows 'Stale' when there is a reading but its topic has gone quiet, in detailed view", () => {
+		mockUseImuData.mockReturnValue(makeImuData({ rollDeg: 1.2, stale: true }));
+		render(<ImuWidget viewMode="detailed" />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
 	});
 
 	it("shows roll/pitch/yaw and accel values to their expected precision in detailed view", () => {
@@ -79,5 +86,11 @@ describe("ImuWidget", () => {
 		expect(pitchRoll.pitch).toBe(-6);
 		expect(pitchRoll.roll).toBe(12);
 		expect(screen.queryByText("12.0°")).not.toBeInTheDocument();
+	});
+
+	it("shows a Stale badge over the instrument layout when the reading has gone stale", () => {
+		mockUseImuData.mockReturnValue(makeImuData({ rollDeg: 1.2, stale: true }));
+		render(<ImuWidget viewMode="instrument" />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
 	});
 });

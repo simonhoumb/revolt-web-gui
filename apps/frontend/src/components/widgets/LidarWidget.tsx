@@ -17,13 +17,19 @@ interface LidarWidgetProps {
 export function LidarWidget({ viewMode }: LidarWidgetProps) {
 	const is3D = viewMode === "instrument";
 
-	const { points: scanPoints } = useLidarData();
-	const { points: cloudPoints } = usePointCloudData();
+	const { points: scanPoints, stale: scanStale } = useLidarData();
+	const { points: cloudPoints, stale: cloudStale } = usePointCloudData();
 	// Prefer the full multi-ring point cloud; fall back to the single-ring /scan points if the
 	// point cloud topic hasn't arrived yet, so a problem in the new pipeline doesn't blank the
 	// whole 2D view. The 3D scene has no such fallback -- /scan carries no height info, so there's
 	// nothing meaningful to render in 3D from it.
 	const points2D = cloudPoints.length > 0 ? cloudPoints : scanPoints;
+	// A frozen full scan looks identical to a live one, unlike radar's incrementally-aging spokes
+	// -- so a stale source shows a "no signal" overlay instead, same convention as CameraWidget.
+	const usingCloudFor2D = cloudPoints.length > 0;
+	const noSignal2D = points2D.length === 0 || (usingCloudFor2D ? cloudStale : scanStale);
+	const noSignal3D = cloudPoints.length === 0 || cloudStale;
+	const noSignal = is3D ? noSignal3D : noSignal2D;
 
 	const canvasAreaRef = useRef<HTMLDivElement>(null);
 	const [canvasSize, setCanvasSize] = useState(260);
@@ -89,6 +95,11 @@ export function LidarWidget({ viewMode }: LidarWidgetProps) {
 						canvasSize={canvasSize}
 						displayRange={displayRange}
 					/>
+				)}
+				{noSignal && (
+					<div className={styles.overlay}>
+						<span className={styles.overlayText}>No signal</span>
+					</div>
 				)}
 			</div>
 			{!is3D && (

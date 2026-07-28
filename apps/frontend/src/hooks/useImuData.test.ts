@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useImuData } from "./useImuData.js";
 import { useBridgeData } from "../context/useBridgeData.js";
 import type { BridgeData } from "../context/bridgeDataReducer.js";
 import type { ImuMsg } from "@revolt/shared-types";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
 vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
@@ -46,6 +47,10 @@ function withImu(imu: ImuMsg | null): BridgeData {
 }
 
 describe("useImuData", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("returns all nulls when no imu message has arrived", () => {
 		mockUseBridgeData.mockReturnValue(withImu(null));
 		const { result } = renderHook(() => useImuData());
@@ -59,10 +64,13 @@ describe("useImuData", () => {
 			angVelX: null,
 			angVelY: null,
 			angVelZ: null,
+			stale: true,
 		});
 	});
 
 	it("passes through fields from the latest imu message", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
 		mockUseBridgeData.mockReturnValue(
 			withImu({
 				v: "1",
@@ -90,6 +98,30 @@ describe("useImuData", () => {
 			angVelX: 0.01,
 			angVelY: 0.02,
 			angVelZ: 0.03,
+			stale: false,
 		});
+	});
+
+	it("marks the reading stale once the staleness window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		mockUseBridgeData.mockReturnValue(
+			withImu({
+				v: "1",
+				type: "imu_data",
+				timestamp_ms: 0,
+				roll_deg: 5.5,
+				pitch_deg: -2.1,
+				yaw_deg: 180.0,
+				accel_x: 0.1,
+				accel_y: 0.2,
+				accel_z: 9.81,
+				ang_vel_x: 0.01,
+				ang_vel_y: 0.02,
+				ang_vel_z: 0.03,
+			}),
+		);
+		const { result } = renderHook(() => useImuData());
+		expect(result.current.stale).toBe(true);
 	});
 });

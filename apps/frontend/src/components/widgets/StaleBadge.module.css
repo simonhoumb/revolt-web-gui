@@ -1,0 +1,21 @@
+.badge {
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--overlay-element-neutral-color, rgba(255, 255, 255, 0.75));
+	background-color: var(--overlay-container-background-color, rgba(0, 0, 0, 0.6));
+	border-radius: 3px;
+	padding: 1px 4px;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+/* Absolutely positioned in a corner of the nearest position: relative ancestor -- used over
+   gauge-style instruments (OBC custom elements) that have no room for an inline sibling. */
+.corner {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	z-index: 1;
+}

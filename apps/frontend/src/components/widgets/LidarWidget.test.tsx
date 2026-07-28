@@ -80,7 +80,7 @@ function makeScan(overrides: Partial<LidarScanMsg> = {}): LidarScanMsg {
 }
 
 function makeLidarData(overrides: Partial<LidarData> = {}): LidarData {
-	return { scan: null, points: [], ...overrides };
+	return { scan: null, points: [], stale: false, ...overrides };
 }
 
 function makeCloud(overrides: Partial<PointCloudMsg> = {}): PointCloudMsg {
@@ -95,7 +95,7 @@ function makeCloud(overrides: Partial<PointCloudMsg> = {}): PointCloudMsg {
 }
 
 function makePointCloudData(overrides: Partial<PointCloudData> = {}): PointCloudData {
-	return { cloud: null, points: [], ...overrides };
+	return { cloud: null, points: [], stale: false, ...overrides };
 }
 
 // ObcStepperBox's own up/down buttons live in its shadow DOM, not reachable via RTL's usual
@@ -255,5 +255,30 @@ describe("LidarWidget", () => {
 		mockUseLidarData.mockReturnValue(makeLidarData());
 		render(<LidarWidget viewMode="instrument" />);
 		expect(screen.queryByLabelText("Lidar range")).not.toBeInTheDocument();
+	});
+
+	it("shows a 'No signal' overlay when the active 2D source has gone stale", () => {
+		mockUseLidarData.mockReturnValue(
+			makeLidarData({ scan: makeScan(), points: [{ x: 1, y: 2 }], stale: true }),
+		);
+		render(<LidarWidget viewMode="detailed" />);
+		expect(screen.getByText("No signal")).toBeInTheDocument();
+	});
+
+	it("hides the 'No signal' overlay when the active 2D source is fresh", () => {
+		mockUseLidarData.mockReturnValue(
+			makeLidarData({ scan: makeScan(), points: [{ x: 1, y: 2 }], stale: false }),
+		);
+		render(<LidarWidget viewMode="detailed" />);
+		expect(screen.queryByText("No signal")).not.toBeInTheDocument();
+	});
+
+	it("shows a 'No signal' overlay in 3D mode when the point cloud has gone stale", () => {
+		mockUseLidarData.mockReturnValue(makeLidarData());
+		mockUsePointCloudData.mockReturnValue(
+			makePointCloudData({ points: [{ x: 1, y: 2, z: 3 }], stale: true }),
+		);
+		render(<LidarWidget viewMode="instrument" />);
+		expect(screen.getByText("No signal")).toBeInTheDocument();
 	});
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import {
@@ -8,6 +8,7 @@ import {
 } from "./useEnclosureHealthData.js";
 import { useBridgeData } from "../context/useBridgeData.js";
 import type { BridgeData } from "../context/bridgeDataReducer.js";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
 vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
@@ -127,5 +128,44 @@ describe("useEnclosureHealthData", () => {
 		const { result } = renderHook(() => useEnclosureHealthData());
 		expect(result.current.temperature.stern.status).toBe("normal");
 		expect(result.current.temperature.bow.status).toBe("warning");
+	});
+});
+
+describe("useEnclosureHealthData — staleness", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("is stale when no reading has ever arrived", () => {
+		mockUseBridgeData.mockReturnValue(base);
+		const { result } = renderHook(() => useEnclosureHealthData());
+		expect(result.current.temperature.bow.stale).toBe(true);
+		expect(result.current.emergencyStopStale).toBe(true);
+		expect(result.current.actuatorStale).toBe(true);
+	});
+
+	it("is not stale for a fresh reading, and becomes stale once the window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		mockUseBridgeData.mockReturnValue({
+			...base,
+			temperature: {
+				stern: null,
+				bow: { v: "1", type: "temperature", timestamp_ms: 0, location: "bow", value_c: 30 },
+			},
+			emergencyStop: { v: "1", type: "emergency_stop", timestamp_ms: 0, active: false },
+			linearActuator: { v: "1", type: "linear_actuator", timestamp_ms: 0, retracted: true },
+		});
+
+		const { result, rerender } = renderHook(() => useEnclosureHealthData());
+		expect(result.current.temperature.bow.stale).toBe(false);
+		expect(result.current.emergencyStopStale).toBe(false);
+		expect(result.current.actuatorStale).toBe(false);
+
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		rerender();
+		expect(result.current.temperature.bow.stale).toBe(true);
+		expect(result.current.emergencyStopStale).toBe(true);
+		expect(result.current.actuatorStale).toBe(true);
 	});
 });

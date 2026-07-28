@@ -14,14 +14,16 @@ vi.mock("../../hooks/useEnclosureHealthData.js", () => ({
 
 const mockUseEnclosureHealthData = useEnclosureHealthData as Mock;
 
-const UNKNOWN: EnclosureReading = { status: "unknown" };
+const UNKNOWN: EnclosureReading = { status: "unknown", stale: false };
 
 function makeData(overrides: Partial<EnclosureHealthData> = {}): EnclosureHealthData {
 	return {
 		temperature: { bow: UNKNOWN, stern: UNKNOWN },
 		humidity: { bow: UNKNOWN, stern: UNKNOWN },
 		emergencyStopActive: false,
+		emergencyStopStale: false,
 		actuatorRetracted: null,
+		actuatorStale: false,
 		...overrides,
 	};
 }
@@ -36,12 +38,12 @@ describe("EnclosureHealthWidget", () => {
 		mockUseEnclosureHealthData.mockReturnValue(
 			makeData({
 				temperature: {
-					bow: { valueC: 23.4, status: "normal" },
-					stern: { valueC: 25.1, status: "normal" },
+					bow: { valueC: 23.4, status: "normal", stale: false },
+					stern: { valueC: 25.1, status: "normal", stale: false },
 				},
 				humidity: {
-					bow: { valuePct: 40.2, status: "normal" },
-					stern: { valuePct: 41.7, status: "normal" },
+					bow: { valuePct: 40.2, status: "normal", stale: false },
+					stern: { valuePct: 41.7, status: "normal", stale: false },
 				},
 			}),
 		);
@@ -60,8 +62,14 @@ describe("EnclosureHealthWidget", () => {
 	it("shows the plain-text env rows with labels but no icons in detailed view", () => {
 		mockUseEnclosureHealthData.mockReturnValue(
 			makeData({
-				temperature: { bow: { valueC: 23.4, status: "normal" }, stern: UNKNOWN },
-				humidity: { bow: { valuePct: 40.2, status: "normal" }, stern: UNKNOWN },
+				temperature: {
+					bow: { valueC: 23.4, status: "normal", stale: false },
+					stern: UNKNOWN,
+				},
+				humidity: {
+					bow: { valuePct: 40.2, status: "normal", stale: false },
+					stern: UNKNOWN,
+				},
 			}),
 		);
 		render(<EnclosureHealthWidget viewMode="detailed" />);
@@ -79,8 +87,8 @@ describe("EnclosureHealthWidget", () => {
 		mockUseEnclosureHealthData.mockReturnValue(
 			makeData({
 				temperature: {
-					bow: { valueC: 105, status: "alarm" },
-					stern: { valueC: 65, status: "warning" },
+					bow: { valueC: 105, status: "alarm", stale: false },
+					stern: { valueC: 65, status: "warning", stale: false },
 				},
 			}),
 		);
@@ -104,5 +112,27 @@ describe("EnclosureHealthWidget", () => {
 		mockUseEnclosureHealthData.mockReturnValue(makeData({ emergencyStopActive: false }));
 		render(<EnclosureHealthWidget />);
 		expect(screen.getByText("E-Stop clear")).toBeInTheDocument();
+	});
+
+	it("shows a Stale badge for a stale reading in both views", () => {
+		mockUseEnclosureHealthData.mockReturnValue(
+			makeData({
+				temperature: {
+					bow: { valueC: 23.4, status: "normal", stale: true },
+					stern: UNKNOWN,
+				},
+			}),
+		);
+		const { rerender } = render(<EnclosureHealthWidget viewMode="instrument" />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
+
+		rerender(<EnclosureHealthWidget viewMode="detailed" />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
+	});
+
+	it("shows a Stale badge on the E-Stop row when it has gone stale", () => {
+		mockUseEnclosureHealthData.mockReturnValue(makeData({ emergencyStopStale: true }));
+		render(<EnclosureHealthWidget />);
+		expect(screen.getByText("Stale")).toBeInTheDocument();
 	});
 });
