@@ -904,6 +904,11 @@ class RosBridgeClient:
 		w, x, y, z = float(q["w"]), float(q["x"]), float(q["y"]), float(q["z"])
 		# Standard quaternion-to-Euler (ZYX order) extraction. The yaw term is the same formula
 		# already validated in _handle_gnss_heading; roll/pitch extend it to the other two axes.
+		# The raw formula's sign, taken at face value, showed the vessel rolling/pitching the
+		# wrong way on ImuWidget's pitch-roll gauge -- confirmed by comparing a rosbag's playback
+		# against that same rosbag's camera feed, not just guessed -- so both are negated here to
+		# match the vessel's actual visible motion (and the maritime convention the gauge assumes:
+		# positive roll = starboard down, positive pitch = bow down).
 		roll_rad = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
 		pitch_rad = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
 		yaw_rad = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
@@ -913,8 +918,8 @@ class RosBridgeClient:
 			v="1",
 			type="imu_data",
 			timestamp_ms=now,
-			roll_deg=math.degrees(roll_rad),
-			pitch_deg=math.degrees(pitch_rad),
+			roll_deg=-math.degrees(roll_rad),
+			pitch_deg=-math.degrees(pitch_rad),
 			yaw_deg=math.degrees(yaw_rad) % 360,
 			accel_x=float(accel["x"]),
 			accel_y=float(accel["y"]),

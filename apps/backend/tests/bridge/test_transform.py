@@ -545,10 +545,11 @@ def test_imu_identity_quaternion(client: RosBridgeClient) -> None:
 
 
 def test_imu_pure_roll(client: RosBridgeClient) -> None:
-	# 30 degree rotation about x: q = (sin(15deg), 0, 0, cos(15deg))
+	# 30 degree rotation about x: q = (sin(15deg), 0, 0, cos(15deg)). Negated relative to the raw
+	# formula (see _handle_imu's comment) to match the vessel's actual visible roll direction.
 	result = client._transform("/imu/data", _imu_msg(0.258819, 0.0, 0.0, 0.965926))
 	assert result is not None
-	assert result["roll_deg"] == pytest.approx(30.0, abs=1e-3)
+	assert result["roll_deg"] == pytest.approx(-30.0, abs=1e-3)
 	assert result["pitch_deg"] == pytest.approx(0.0, abs=1e-3)
 	assert result["yaw_deg"] == pytest.approx(0.0, abs=1e-3)
 
