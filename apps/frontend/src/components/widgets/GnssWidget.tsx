@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
 import { ObcCompass } from "@oicl/openbridge-webcomponents-react/navigation-instruments/compass/compass.js";
@@ -17,6 +18,15 @@ import { StaleBadge } from "./StaleBadge.js";
 // Higher precision than mission-planning displays (formatLatLon's default of 5) -- a live GNSS
 // fix benefits from finer resolution for monitoring, not an oversight.
 const GNSS_COORDINATE_PRECISION = 6;
+
+// Matches .instrumentLayout's column-gap in GnssWidget.module.css.
+const GNSS_GRID_GAP_PX = 4;
+
+// The readout column (3 instrument fields + divider + position block) needs this much height to
+// render without clipping at InstrumentFieldSize.enhanced -- measured directly (not guessed), so
+// below it the fields switch down to .regular instead of overflowing past the row the same way
+// the compass used to overflow past the tile's width.
+const GNSS_READOUT_HEIGHT_ENHANCED_PX = 221;
 
 function fixIndicatorStatus(fixStatus: number | null): StatusIndicatorStatus {
 	if (fixStatus === null) return StatusIndicatorStatus.inactive;
@@ -56,25 +66,78 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 	const lat = latitude !== null ? formatDegreesMinutes(latitude, "N", "S") : null;
 	const lon = longitude !== null ? formatDegreesMinutes(longitude, "E", "W") : null;
 
+	const rowRef = useRef<HTMLDivElement>(null);
+	const readoutRef = useRef<HTMLDivElement>(null);
+	const [compassSize, setCompassSize] = useState(200);
+	const [fieldSize, setFieldSize] = useState(InstrumentFieldSize.enhanced);
+
+	// The compass previously sized itself purely off the row's height (CSS height: 100% +
+	// aspect-ratio: 1), which never accounted for available width -- a tile tall enough but not
+	// wide enough let the resulting square overflow past the tile's right edge. Measuring both
+	// axes here and taking the smaller one guarantees the compass never exceeds either. The
+	// readout's width is subtracted twice (not once) to mirror .instrumentLayout's symmetric
+	// 1fr auto 1fr columns: the empty third column reserves the same width as the readout so the
+	// compass stays centered, so both must come out of the row's available width.
+	useEffect(() => {
+		if (viewMode !== "instrument") return;
+		const row = rowRef.current;
+		const readout = readoutRef.current;
+		if (!row || !readout) return;
+
+		let rowSize = { width: row.clientWidth, height: row.clientHeight };
+		let readoutWidth = readout.clientWidth;
+
+		const recompute = () => {
+			const availableWidth = rowSize.width - 2 * readoutWidth - 2 * GNSS_GRID_GAP_PX;
+			const size = Math.max(0, Math.floor(Math.min(rowSize.height, availableWidth)));
+			setCompassSize(size);
+			setFieldSize(
+				rowSize.height < GNSS_READOUT_HEIGHT_ENHANCED_PX
+					? InstrumentFieldSize.regular
+					: InstrumentFieldSize.enhanced,
+			);
+		};
+
+		const rowObserver = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (entry)
+				rowSize = { width: entry.contentRect.width, height: entry.contentRect.height };
+			recompute();
+		});
+		const readoutObserver = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (entry) readoutWidth = entry.contentRect.width;
+			recompute();
+		});
+		rowObserver.observe(row);
+		readoutObserver.observe(readout);
+		recompute();
+
+		return () => {
+			rowObserver.disconnect();
+			readoutObserver.disconnect();
+		};
+	}, [viewMode]);
+
 	return (
 		<div className={styles.content}>
 			{viewMode === "instrument" && (
-				<div className={cx(styles.instrumentLayout, stale && styles.stale)}>
+				<div ref={rowRef} className={cx(styles.instrumentLayout, stale && styles.stale)}>
 					{stale && <StaleBadge corner />}
-					<div className={styles.readout}>
+					<div ref={readoutRef} className={styles.readout}>
 						<ObcInstrumentField
 							tag="HDG"
 							unit="DEG"
 							fractionDigits={1}
 							value={headingDeg ?? undefined}
-							size={InstrumentFieldSize.enhanced}
+							size={fieldSize}
 						/>
 						<ObcInstrumentField
 							tag="COG"
 							unit="DEG"
 							fractionDigits={1}
 							value={courseDeg ?? undefined}
-							size={InstrumentFieldSize.enhanced}
+							size={fieldSize}
 						/>
 						<ObcInstrumentField
 							tag="SPD"
@@ -83,7 +146,7 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 							value={
 								speedMs !== null ? speedMs * METERS_PER_SECOND_TO_KNOTS : undefined
 							}
-							size={InstrumentFieldSize.enhanced}
+							size={fieldSize}
 						/>
 						<div className={styles.divider} />
 						<div className={styles.position}>
@@ -99,6 +162,7 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 					</div>
 					<ObcCompass
 						className={styles.instrument}
+						style={{ width: compassSize, height: compassSize }}
 						heading={headingDeg ?? 0}
 						courseOverGround={courseDeg ?? headingDeg ?? 0}
 						direction={CompassDirection.NorthUp}
