@@ -239,7 +239,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultW: 2,
 		defaultH: 5,
 		minW: 1,
-		minH: 3,
+		minH: 1,
 		defaultPosition: { x: 0, y: 28, w: 3, h: 5 },
 		supportsViewModeToggle: true,
 	},
