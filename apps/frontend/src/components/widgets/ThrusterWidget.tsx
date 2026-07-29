@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { ObcStatusIndicator } from "@oicl/openbridge-webcomponents-react/components/status-indicator/status-indicator.js";
 import { ObcBadge } from "@oicl/openbridge-webcomponents-react/components/badge/badge.js";
 import { StatusIndicatorStatus } from "@oicl/openbridge-webcomponents/dist/components/status-indicator/status-indicator.js";
@@ -30,6 +31,17 @@ interface ThrusterRowProps {
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
 }
+
+// obc-azimuth-thruster-labeled's natural height comes from its internal grid's min-content rows,
+// not from whatever box it's given -- measured directly (not guessed), ~206px at
+// AzimuthThrusterLabeledSize.large, ~182px at .medium, regardless of width. Below the large
+// figure there isn't room for all three gauges at large, so drop to medium to claw back some
+// height (ThrusterWidget.module.css's .gaugeWrap floors at the medium figure so a gauge is never
+// asked to be smaller than it can actually render).
+const THRUSTER_GAUGE_HEIGHT_LARGE_PX = 206;
+
+// Matches .propulsionLayout's gap in ThrusterWidget.module.css.
+const THRUSTER_ROW_GAP_PX = 8;
 
 // obc-thruster/obc-azimuth-thruster's thrust prop is a percent (-100..100); this app only has
 // current draw (and, in simulation, force) to work with, so THRUSTER_MAX_AMPERES is a placeholder
@@ -109,6 +121,30 @@ export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetV
 
 	const isMiscomm = controlMode === "miscommunication";
 
+	const propulsionRef = useRef<HTMLDivElement>(null);
+	const [gaugeSize, setGaugeSize] = useState(AzimuthThrusterLabeledSize.large);
+
+	useEffect(() => {
+		if (viewMode !== "instrument") return;
+		const el = propulsionRef.current;
+		if (!el) return;
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (!entry) return;
+			// Two rows (bow, stern) share this height equally, with one gap between them.
+			const perRowHeight = (entry.contentRect.height - THRUSTER_ROW_GAP_PX) / 2;
+			setGaugeSize(
+				perRowHeight < THRUSTER_GAUGE_HEIGHT_LARGE_PX
+					? AzimuthThrusterLabeledSize.medium
+					: AzimuthThrusterLabeledSize.large,
+			);
+		});
+		observer.observe(el);
+		return () => {
+			observer.disconnect();
+		};
+	}, [viewMode]);
+
 	return (
 		<div className={styles.content}>
 			<div className={cx(styles.modeRow, controlModeStale && styles.stale)}>
@@ -135,7 +171,7 @@ export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetV
 					/>
 				</div>
 			) : (
-				<div className={styles.propulsionLayout}>
+				<div className={styles.propulsionLayout} ref={propulsionRef}>
 					{/* obc-azimuth-thruster-labeled bundles a label, Angle/Power(%) fields, and the
 					    gauge itself into one component (matching the OpenBridge demo's own azimuth
 					    readout), used uniformly for all three thrusters -- including the bow, which
@@ -152,12 +188,12 @@ export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetV
 					<div className={styles.bowRow}>
 						<div className={styles.gaugeWrap}>
 							<ObcAzimuthThrusterLabeled
-								className={cx(styles.sternLabeled, bow.stale && styles.stale)}
+								className={cx(styles.thrusterGauge, bow.stale && styles.stale)}
 								label="Bow"
 								angle={0}
 								thrust={thrustPercent(bow)}
 								commandStatus={thrusterCommandStatus(bow.isOn && !bowRetracted)}
-								size={AzimuthThrusterLabeledSize.large}
+								size={gaugeSize}
 							/>
 							{bow.stale && <StaleBadge corner />}
 						</div>
@@ -167,14 +203,14 @@ export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetV
 						<div className={styles.gaugeWrap}>
 							<ObcAzimuthThrusterLabeled
 								className={cx(
-									styles.sternLabeled,
+									styles.thrusterGauge,
 									stern_port.stale && styles.stale,
 								)}
 								label="Port"
 								angle={stern_port.angleDeg ?? 0}
 								thrust={thrustPercent(stern_port)}
 								commandStatus={thrusterCommandStatus(stern_port.isOn)}
-								size={AzimuthThrusterLabeledSize.large}
+								size={gaugeSize}
 								topPropeller={PropellerType.cap}
 								bottomPropeller={PropellerType.single}
 							/>
@@ -183,14 +219,14 @@ export function ThrusterWidget({ viewMode = "instrument" }: { viewMode?: WidgetV
 						<div className={styles.gaugeWrap}>
 							<ObcAzimuthThrusterLabeled
 								className={cx(
-									styles.sternLabeled,
+									styles.thrusterGauge,
 									stern_star.stale && styles.stale,
 								)}
 								label="Starboard"
 								angle={stern_star.angleDeg ?? 0}
 								thrust={thrustPercent(stern_star)}
 								commandStatus={thrusterCommandStatus(stern_star.isOn)}
-								size={AzimuthThrusterLabeledSize.large}
+								size={gaugeSize}
 								topPropeller={PropellerType.cap}
 								bottomPropeller={PropellerType.single}
 							/>

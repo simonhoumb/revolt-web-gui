@@ -1,9 +1,14 @@
+/* overflow-y: auto is a fallback, not the primary layout -- .gaugeWrap's min-height below floors
+   each gauge at the size it actually needs to render (rather than letting it collapse and bleed
+   its content past a squashed box), so a tile short enough that even one row of gauges doesn't
+   fit needs somewhere for the rest to go. */
 .content {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	height: 100%;
 	min-height: 0;
+	overflow-y: auto;
 }
 
 .propulsionLayout {
@@ -34,18 +39,24 @@
 }
 
 /* Wraps each gauge so a corner StaleBadge has a position: relative ancestor to anchor to,
-   without needing to touch obc-azimuth-thruster-labeled's own sizing below. */
+   without needing to touch obc-azimuth-thruster-labeled's own sizing below.
+   min-height is a real floor, not 0: the gauge's own height comes from its internal grid's
+   min-content rows, not from whatever box it's given (measured directly, ~182px at
+   AzimuthThrusterLabeledSize.medium). Below that floor it used to shrink to 0 while its content
+   still rendered at full height regardless, bleeding down into whatever sat below it -- the stern
+   row, for the bow gauge. .content's overflow-y: auto picks up the slack once the tile is shorter
+   than this floor. */
 .gaugeWrap {
 	position: relative;
 	flex: 1;
 	min-width: 0;
-	min-height: 0;
+	min-height: 182px;
 	display: flex;
 }
 
 /* obc-azimuth-thruster-labeled has no default :host size (its own internal .wrapper is
-   width: 100%; height: 100%, unsized until the host itself is). */
-.sternLabeled {
+   width: 100%; height: 100%, unsized until the host itself is). Shared by all three gauges. */
+.thrusterGauge {
 	flex: 1;
 	min-width: 0;
 	min-height: 0;

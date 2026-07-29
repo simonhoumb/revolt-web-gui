@@ -139,7 +139,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultW: 2,
 		defaultH: 7,
 		minW: 1,
-		minH: 4,
+		minH: 3,
 		defaultPosition: { x: 4, y: 0, w: 2, h: 7 },
 		instrumentsOnlyPosition: { x: 0, y: 5, w: 2, h: 7 },
 		supportsViewModeToggle: true,
