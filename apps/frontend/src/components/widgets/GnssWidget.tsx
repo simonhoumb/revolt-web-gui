@@ -5,6 +5,7 @@ import { ObcCompass } from "@oicl/openbridge-webcomponents-react/navigation-inst
 import { ObcInstrumentField } from "@oicl/openbridge-webcomponents-react/navigation-instruments/instrument-field/instrument-field.js";
 import { CompassDirection } from "@oicl/openbridge-webcomponents/dist/navigation-instruments/compass/compass.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
+import { useImuData } from "../../hooks/useImuData.js";
 import { formatCoordinate } from "../../lib/format.js";
 import { METERS_PER_SECOND_TO_KNOTS } from "../../lib/geo.js";
 import type { WidgetViewMode } from "./ViewModeToggle.js";
@@ -27,6 +28,17 @@ const GNSS_GRID_GAP_PX = 4;
 // below it the fields switch down to .regular instead of overflowing past the row the same way
 // the compass used to overflow past the tile's width.
 const GNSS_READOUT_HEIGHT_ENHANCED_PX = 221;
+
+// obc-compass's rotationsPerMinute prop isn't the dial's own spin speed -- it drives the
+// Rate-of-Turn indicator (the spinning-dots overlay), a real bridge instrument showing how fast
+// heading is currently changing. Despite reading like the conventional ROT unit (deg/min), it's
+// literally revolutions per minute of the dot animation (RateOfTurnController: one full 360° loop
+// every 60000/rotationsPerMinute ms) -- feeding it degrees/min here made the indicator spin 360x
+// too fast. IMU angular_velocity is in rad/s around the sensor's own z axis; ang_vel_z's sign is
+// assumed to match yaw_deg's already (both come from the same IMU message/frame, and yaw_deg is
+// confirmed to increase clockwise like compass heading -- see bridge/client.py's _handle_imu),
+// and this part (direction) has been confirmed correct against a real rosbag.
+const RAD_PER_SEC_TO_REV_PER_MIN = 60 / (2 * Math.PI);
 
 function fixIndicatorStatus(fixStatus: number | null): StatusIndicatorStatus {
 	if (fixStatus === null) return StatusIndicatorStatus.inactive;
@@ -62,9 +74,11 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 		courseDeg,
 		stale,
 	} = useGnssData();
+	const { angVelZ } = useImuData();
 
 	const lat = latitude !== null ? formatDegreesMinutes(latitude, "N", "S") : null;
 	const lon = longitude !== null ? formatDegreesMinutes(longitude, "E", "W") : null;
+	const rotationsPerMinute = angVelZ !== null ? angVelZ * RAD_PER_SEC_TO_REV_PER_MIN : 0;
 
 	const rowRef = useRef<HTMLDivElement>(null);
 	const readoutRef = useRef<HTMLDivElement>(null);
@@ -165,6 +179,7 @@ export function GnssWidget({ viewMode = "instrument" }: { viewMode?: WidgetViewM
 						style={{ width: compassSize, height: compassSize }}
 						heading={headingDeg ?? 0}
 						courseOverGround={courseDeg ?? headingDeg ?? 0}
+						rotationsPerMinute={rotationsPerMinute}
 						direction={CompassDirection.NorthUp}
 						priority={Priority.enhanced}
 						showLabels
