@@ -225,8 +225,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		icon: ObiCodeGoogle,
 		defaultW: 2,
 		defaultH: 8,
-		minW: 2,
-		minH: 5,
+		minW: 1,
+		minH: 3,
 		defaultPosition: { x: 0, y: 20, w: 2, h: 8 },
 		// No instrumentsOnlyPosition -- an operator/debug tool, not an at-a-glance instrument,
 		// same as map/mission/mission_control.

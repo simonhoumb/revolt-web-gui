@@ -58,4 +58,11 @@
 	padding-left: 8px;
 	padding-bottom: 8px;
 	box-sizing: border-box;
+	/* obc-card's shadow DOM sets user-select: none on everything in its content slot (a `* {}`
+	   reset), which is inherited here since this is that slot's content. user-select: auto would
+	   NOT undo that -- per spec, auto resolves to none when the parent's used value is none, so
+	   every widget's text (command output, coordinates, etc.) is otherwise stuck unselectable.
+	   Dragging tiles is unaffected: TileGrid restricts that to a dedicated drag handle, not this
+	   content area. */
+	user-select: text;
 }
