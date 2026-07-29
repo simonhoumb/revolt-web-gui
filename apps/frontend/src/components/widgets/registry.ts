@@ -251,7 +251,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultW: 2,
 		defaultH: 4,
 		minW: 1,
-		minH: 3,
+		minH: 1,
 		defaultPosition: { x: 3, y: 28, w: 3, h: 4 },
 	},
 	radar: {
@@ -273,7 +273,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultW: 2,
 		defaultH: 4,
 		minW: 1,
-		minH: 3,
+		minH: 1,
 		defaultPosition: { x: 3, y: 33, w: 3, h: 4 },
 		supportsViewModeToggle: true,
 	},
@@ -285,7 +285,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		defaultW: 2,
 		defaultH: 4,
 		minW: 1,
-		minH: 3,
+		minH: 1,
 		// enclosure_health/rc_remote (row at y:28) and radar/imu (row at y:33) above each pair
 		// off at half-width (w:3) instead of the old 4-across quarter-width row. A 6-column
 		// grid can't fit 4 tiles side by side at a readable width, so this splits them into two
