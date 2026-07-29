@@ -200,8 +200,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		icon: ObiNavigationRoute,
 		defaultW: 2,
 		defaultH: 8,
-		minW: 2,
-		minH: 4,
+		minW: 1,
+		minH: 3,
 		// Narrower here (w:2) than in the dedicated Mission app, where it gets a full column
 		// (w:3, see apps.ts's MISSION_TILES) since it's sharing the customizable dashboard with
 		// other widgets rather than being the primary focus of the view.
@@ -214,8 +214,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
 		icon: ObiMonitoringRoute,
 		defaultW: 2,
 		defaultH: 6,
-		minW: 2,
-		minH: 4,
+		minW: 1,
+		minH: 2,
 		defaultPosition: { x: 3, y: 20, w: 2, h: 6 },
 	},
 	ros_commands: {
