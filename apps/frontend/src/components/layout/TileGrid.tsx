@@ -16,10 +16,16 @@ const GRID_CONFIG = {
 	margin: [6, 6] as [number, number],
 };
 
-// Rows never shrink past this, however short the window gets -- past this point
-// the grid container scrolls (see TileGrid.module.css) instead of squishing tiles
-// into an unusable size.
-const MIN_ROW_HEIGHT = 48;
+// A degenerate-case guard only, not a usability floor: rowHeight is meant to always equal
+// height / neededRows so the grid fits any container without scrolling (see TileGrid.module.css),
+// regardless of resolution or OS/browser display scaling. A real usability floor here would be a
+// fixed pixel guess about how short a row can get before it looks bad, and that guess silently
+// goes stale the moment a locked app's tile layout (see apps.ts) grows taller -- exactly what
+// happened when Conning's tallest column went from 14 to 22 rows while this constant stayed put,
+// so a 1920x1200 window that used to fit no longer did. Individual widgets are responsible for
+// degrading their own content as their tile shrinks (e.g. ThrusterWidget's gaugeSize switch);
+// this constant only stops a row from being asked to render at literally 0px.
+const MIN_ROW_HEIGHT = 8;
 
 // mounted only flips true from inside the ResizeObserver callback, once a real measurement has
 // arrived -- not right after ro.observe() registers, which runs synchronously while the callback
