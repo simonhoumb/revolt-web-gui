@@ -716,26 +716,40 @@ def _make_msg(topic: str) -> dict:
             # so the map ends up with several live markers after a few ticks, same as it would
             # from a real receiver.
             targets = [
-                {  # underway, full nav data
+                {  # underway, full nav data, gently oscillating turn rate so "Turn" cycles
+                    # between turning right/left rather than sitting at a fixed value
                     "mmsi": 257123456,
                     "lat": round(59.3783 + 0.006 * math.sin(t / 40), 6),
                     "lon": round(10.6030 + 0.004 * math.cos(t / 40), 6),
                     "sog": round(8.0 + random.gauss(0, 0.2), 1),
                     "heading": int((t * 3) % 360),
+                    # Offset from heading, not equal to it -- cog is the vessel's actual
+                    # direction of travel, heading is which way the bow points; real conditions
+                    # (current/leeway) mean the two rarely coincide exactly.
+                    "cog": round((t * 3 + 8) % 360, 1),
+                    "turn": round(6 * math.sin(t / 20), 1),
+                    "status": 0,  # under way using engine
                 },
-                {  # slower vessel, opposite side of own-ship
+                {  # slower vessel, opposite side of own-ship, steady course (no turn)
                     "mmsi": 257654321,
                     "lat": round(59.3733 - 0.003 * math.cos(t / 60), 6),
                     "lon": round(10.5850 - 0.003 * math.sin(t / 60), 6),
                     "sog": round(4.0 + random.gauss(0, 0.1), 1),
                     "heading": int((200 + t * 1.5) % 360),
+                    "cog": round((200 + t * 1.5 - 4) % 360, 1),
+                    "turn": 0.0,
+                    "status": 8,  # under way sailing
                 },
-                {  # base station: no sog/heading, matches SimpleAISdata.msg's sentinels
+                {  # base station: no sog/heading/cog/turn/status, matches SimpleAISdata.msg's
+                    # sentinels for a report type that doesn't carry any of them
                     "mmsi": 2571234,
                     "lat": 59.3820,
                     "lon": 10.6010,
                     "sog": 102.3,
                     "heading": 511,
+                    "cog": 360.0,
+                    "turn": -128.0,
+                    "status": 15,
                 },
             ]
             return targets[int(t / 3) % len(targets)]
