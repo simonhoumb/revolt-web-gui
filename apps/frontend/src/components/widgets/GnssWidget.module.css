@@ -69,14 +69,16 @@
 }
 
 /* obc-compass has no default :host size (it renders its inner SVG at 100% of the host box, which
-   is itself unsized without this). Sized off the row's own height (not flex: 1, which stretched
-   it unevenly to fill whatever space was left of the readout column) and square, since a compass
-   only reads correctly at 1:1. justify-self: center (not the grid default of stretch) keeps it
-   from being pulled wider than its own aspect-ratio-derived width by its auto-sized column. */
+   is itself unsized without this). Sizing it off height alone (height: 100% + aspect-ratio: 1)
+   let it overflow past the tile's right edge whenever the tile was tall but not wide enough --
+   neither CSS property accounts for the other axis. GnssWidget.tsx measures both the row's height
+   and the readout's width via ResizeObserver instead and sets width/height explicitly as the
+   larger of the two constraints; max-width/max-height here are just a one-frame safety net for
+   the gap between a resize and that measurement, same convention as RadarWidget's/LidarWidget's
+   canvas. justify-self: center keeps the compass centered in its auto-sized grid column. */
 .instrument {
-	height: 100%;
-	aspect-ratio: 1;
-	min-height: 0;
+	max-width: 100%;
+	max-height: 100%;
 	justify-self: center;
 }
 

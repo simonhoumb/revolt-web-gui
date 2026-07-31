@@ -236,7 +236,10 @@ describe("RosCommandWidget", () => {
 		expect(document.querySelector('obc-text-input-field[label="Topic"]')).toBeNull();
 	});
 
-	it("disables Run until a required param is filled, then enables it", async () => {
+	it("a required dropdown param is pre-filled with its first allowed value, so Run is enabled immediately", async () => {
+		// ObcDropdownButton displays options[0] as selected by default without firing
+		// dropdown-change -- Run used to stay disabled until the operator picked a different
+		// option first, even though the default was already shown and would have been sent as-is.
 		await renderWidget();
 		typePrompt("echo");
 		clickSuggestion("echo_topic", "Echo topic");
@@ -244,15 +247,40 @@ describe("RosCommandWidget", () => {
 		const runButton = document.querySelector("obc-progress-button") as HTMLElement & {
 			disabled: boolean;
 		};
-		expect(runButton.disabled).toBe(true);
+		expect(runButton.disabled).toBe(false);
+
+		const dropdown = document.querySelector("obc-dropdown-button") as HTMLElement & {
+			value: string | undefined;
+		};
+		expect(dropdown.value).toBe("/fix");
+	});
+
+	it("changing the dropdown away from its default still updates the param sent on Run", async () => {
+		mockExecute.mockResolvedValue({
+			command_id: "echo_topic",
+			ok: true,
+			error: null,
+			result: {},
+			executed_at: "2026-07-15T00:00:00Z",
+		} satisfies RosCommandResult);
+		await renderWidget();
+		typePrompt("echo");
+		clickSuggestion("echo_topic", "Echo topic");
 
 		const dropdown = document.querySelector("obc-dropdown-button") as HTMLElement;
 		act(() => {
 			dropdown.dispatchEvent(
-				new CustomEvent("dropdown-change", { detail: { value: "/fix" } }),
+				new CustomEvent("dropdown-change", { detail: { value: "/heading" } }),
 			);
 		});
-		expect(runButton.disabled).toBe(false);
+
+		const runButton = document.querySelector("obc-progress-button") as HTMLElement;
+		await act(async () => {
+			runButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		expect(mockExecute).toHaveBeenCalledExactlyOnceWith("echo_topic", { topic: "/heading" });
 	});
 
 	it("Run calls rosCommandApi.execute with the selected command and params, and appends a success entry", async () => {

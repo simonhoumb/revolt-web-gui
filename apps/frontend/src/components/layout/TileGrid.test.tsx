@@ -122,8 +122,30 @@ function setApp(overrides: Partial<ReturnType<typeof useApps>> = {}) {
 	});
 }
 
+// The global ResizeObserver stub (test/setup.ts) never actually invokes its callback -- fine for
+// widgets that just refine an already-sane default size, but TileGrid now only renders GridLayout
+// once a real measurement arrives (see TileGrid.tsx's useContainerSize comment), so these tests
+// need that callback to actually fire. Overriding it here, not in the shared setup file, keeps
+// every other test's existing "callback never fires" behavior intact.
+const originalResizeObserver = global.ResizeObserver;
+
 beforeEach(() => {
 	setApp();
+	global.ResizeObserver = class {
+		private callback: ResizeObserverCallback;
+		constructor(callback: ResizeObserverCallback) {
+			this.callback = callback;
+		}
+		observe(el: Element) {
+			this.callback([{ contentRect: el.getBoundingClientRect() } as ResizeObserverEntry], this);
+		}
+		unobserve() {
+			return undefined;
+		}
+		disconnect() {
+			return undefined;
+		}
+	};
 });
 
 afterEach(() => {
@@ -131,6 +153,7 @@ afterEach(() => {
 	vi.clearAllMocks();
 	lastGridLayoutProps = null;
 	gridLayoutMountCount = 0;
+	global.ResizeObserver = originalResizeObserver;
 });
 
 describe("TileGrid", () => {

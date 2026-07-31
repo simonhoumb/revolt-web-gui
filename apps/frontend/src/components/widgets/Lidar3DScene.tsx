@@ -40,11 +40,11 @@ export function Lidar3DScene({ points }: Lidar3DSceneProps) {
 						<bufferGeometry key={points.length}>
 							<bufferAttribute attach="attributes-position" args={[positions, 3]} />
 						</bufferGeometry>
-						<pointsMaterial size={0.3} color="#4fd1ff" sizeAttenuation />
+						<pointsMaterial size={0.2} color="#4fd1ff" sizeAttenuation />
 					</points>
 					{/* Vessel bow marker, tip pointing toward +X (forward) once yaw-rotated. */}
 					<mesh rotation={[0, 0, -Math.PI / 2]}>
-						<coneGeometry args={[0.8, 2, 8]} />
+						<coneGeometry args={[0.8, 1.5, 8]} />
 						<meshBasicMaterial color="orange" />
 					</mesh>
 				</group>

@@ -1,14 +1,20 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { GnssWidget } from "./GnssWidget.js";
 import { useGnssData, type GnssData } from "../../hooks/useGnssData.js";
+import { useImuData, type ImuData } from "../../hooks/useImuData.js";
 
 vi.mock("../../hooks/useGnssData.js", () => ({
 	useGnssData: vi.fn(),
 }));
 
+vi.mock("../../hooks/useImuData.js", () => ({
+	useImuData: vi.fn(),
+}));
+
 const mockUseGnssData = useGnssData as Mock;
+const mockUseImuData = useImuData as Mock;
 
 function makeGnssData(overrides: Partial<GnssData> = {}): GnssData {
 	return {
@@ -25,6 +31,26 @@ function makeGnssData(overrides: Partial<GnssData> = {}): GnssData {
 		...overrides,
 	};
 }
+
+function makeImuData(overrides: Partial<ImuData> = {}): ImuData {
+	return {
+		rollDeg: null,
+		pitchDeg: null,
+		yawDeg: null,
+		accelX: null,
+		accelY: null,
+		accelZ: null,
+		angVelX: null,
+		angVelY: null,
+		angVelZ: null,
+		stale: false,
+		...overrides,
+	};
+}
+
+beforeEach(() => {
+	mockUseImuData.mockReturnValue(makeImuData());
+});
 
 afterEach(() => {
 	cleanup();
@@ -87,6 +113,28 @@ describe("GnssWidget", () => {
 		expect(byTag.get("HDG")).toBe(45);
 		expect(byTag.get("COG")).toBe(50);
 		expect(byTag.get("SPD")).toBeCloseTo(2 * 1.94384, 5);
+	});
+
+	it("converts the IMU's yaw angular velocity (rad/s) into the compass's rotationsPerMinute (rev/min, not deg/min)", () => {
+		mockUseGnssData.mockReturnValue(makeGnssData());
+		mockUseImuData.mockReturnValue(makeImuData({ angVelZ: 2 * Math.PI })); // one full turn/sec
+		render(<GnssWidget viewMode="instrument" />);
+
+		const compass = document.querySelector("obc-compass") as HTMLElement & {
+			rotationsPerMinute: number;
+		};
+		expect(compass.rotationsPerMinute).toBeCloseTo(60, 5); // 1 rev/s * 60
+	});
+
+	it("defaults rotationsPerMinute to 0 when there is no IMU reading yet", () => {
+		mockUseGnssData.mockReturnValue(makeGnssData());
+		mockUseImuData.mockReturnValue(makeImuData({ angVelZ: null }));
+		render(<GnssWidget viewMode="instrument" />);
+
+		const compass = document.querySelector("obc-compass") as HTMLElement & {
+			rotationsPerMinute: number;
+		};
+		expect(compass.rotationsPerMinute).toBe(0);
 	});
 
 	it("shows the position in degrees and decimal minutes with a hemisphere letter in instrument view", () => {

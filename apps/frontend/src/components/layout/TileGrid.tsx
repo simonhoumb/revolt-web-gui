@@ -16,14 +16,29 @@ const GRID_CONFIG = {
 	margin: [6, 6] as [number, number],
 };
 
-// Rows never shrink past this, however short the window gets -- past this point
-// the grid container scrolls (see TileGrid.module.css) instead of squishing tiles
-// into an unusable size.
-const MIN_ROW_HEIGHT = 48;
+// A degenerate-case guard only, not a usability floor: rowHeight is meant to always equal
+// height / neededRows so the grid fits any container without scrolling (see TileGrid.module.css),
+// regardless of resolution or OS/browser display scaling. A real usability floor here would be a
+// fixed pixel guess about how short a row can get before it looks bad, and that guess silently
+// goes stale the moment a locked app's tile layout (see apps.ts) grows taller -- exactly what
+// happened when Conning's tallest column went from 14 to 22 rows while this constant stayed put,
+// so a 1920x1200 window that used to fit no longer did. Individual widgets are responsible for
+// degrading their own content as their tile shrinks (e.g. ThrusterWidget's gaugeSize switch);
+// this constant only stops a row from being asked to render at literally 0px.
+const MIN_ROW_HEIGHT = 8;
 
-function useContainerSize(initialWidth: number) {
+// mounted only flips true from inside the ResizeObserver callback, once a real measurement has
+// arrived -- not right after ro.observe() registers, which runs synchronously while the callback
+// itself is always asynchronous (ResizeObserver never calls back in the same task as observe()).
+// Flipping it early let GridLayout render once with an arbitrary placeholder width, computing
+// column widths from that instead of the container's real size; the follow-up render with the
+// correct width normally arrives within a frame, but this widget renders full-size WebGL/canvas
+// content (MapWidget) that bakes its own resolution in at construction time, so that first wrong
+// frame could stick in a way a plain gauge or list resizing to the same eventual width wouldn't --
+// most visible across the repeated remounts a hot reload causes.
+function useContainerSize() {
 	const containerRef = useRef<HTMLDivElement | null>(null);
-	const [width, setWidth] = useState(initialWidth);
+	const [width, setWidth] = useState(0);
 	const [height, setHeight] = useState(0);
 	const [mounted, setMounted] = useState(false);
 
@@ -34,9 +49,9 @@ function useContainerSize(initialWidth: number) {
 			if (!entry) return;
 			setWidth(Math.floor(entry.contentRect.width));
 			setHeight(entry.contentRect.height);
+			setMounted(true);
 		});
 		ro.observe(el);
-		setMounted(true);
 		return () => {
 			ro.disconnect();
 		};
@@ -46,7 +61,7 @@ function useContainerSize(initialWidth: number) {
 }
 
 export function TileGrid() {
-	const { containerRef, width, height, mounted } = useContainerSize(1280);
+	const { containerRef, width, height, mounted } = useContainerSize();
 	const { config, updateLayout, editMode, removeWidget, layoutGeneration } = useLayout();
 	const { activeAppId, appDef, isLocked } = useApps();
 	// A locked app's tiles are static data, never LayoutContext.config -- routing them through

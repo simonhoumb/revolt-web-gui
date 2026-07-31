@@ -170,7 +170,18 @@ export function RosCommandWidget() {
 		setSelectedCommand(command);
 		setPromptValue("");
 		setPromptFocused(false);
-		setParamValues({});
+		// ObcDropdownButton displays options[0] as selected by default whenever its value prop is
+		// unset, but only fires dropdown-change (which is what updates paramValues) once the user
+		// picks a different option -- same as a native <select>, choosing the option that's
+		// already shown doesn't fire a change event. Without seeding paramValues here, that first
+		// option is never sent, either.
+		const defaults: Record<string, string> = {};
+		for (const param of command.params) {
+			const defaultValue = param.allowed_values?.[0];
+			if (param.kind === "text" || defaultValue === undefined) continue;
+			defaults[param.name] = defaultValue;
+		}
+		setParamValues(defaults);
 	}
 
 	function clearSelection() {
