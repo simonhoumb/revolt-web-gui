@@ -738,6 +738,107 @@ def test_velodyne_points_missing_xyz_field_returns_none(client: RosBridgeClient)
 	assert result is None
 
 
+def _make_radar_pointcloud2_msg(
+	points: list[tuple[float, float, float, float]],
+	*,
+	fields_in_order: list[str] | None = None,
+	is_bigendian: bool = False,
+) -> dict:
+	"""Build a synthetic radar PointCloud2-shaped wire dict (x, y, z, intensity per point)."""
+	import struct
+
+	fields_in_order = fields_in_order or ["x", "y", "z", "intensity"]
+	endian = ">" if is_bigendian else "<"
+	field_specs = []
+	offset = 0
+	for name in fields_in_order:
+		field_specs.append({"name": name, "offset": offset, "datatype": 7, "count": 1})
+		offset += 4
+	point_step = offset
+
+	packed = bytearray()
+	for x, y, z, intensity in points:
+		values = {"x": x, "y": y, "z": z, "intensity": intensity}
+		row = bytearray(point_step)
+		for spec in field_specs:
+			struct.pack_into(f"{endian}f", row, spec["offset"], values.get(spec["name"], 0.0))
+		packed += row
+
+	return {
+		"point_step": point_step,
+		"is_bigendian": is_bigendian,
+		"fields": field_specs,
+		"data": base64.b64encode(bytes(packed)).decode(),
+	}
+
+
+def test_radar_points_basic(client: RosBridgeClient) -> None:
+	points = [(1.0, 2.0, 0.0, 100.0), (3.0, -1.0, 0.0, 50.0)]
+	result = client._transform("/radar/points", _make_radar_pointcloud2_msg(points))
+	assert result is not None
+	assert result["type"] == "radar_point_cloud"
+	assert result["v"] == "1"
+	assert result["point_count"] == 2
+	assert result["points"] == pytest.approx([1.0, 2.0, 0.0, 100.0, 3.0, -1.0, 0.0, 50.0])
+
+
+def test_radar_points_field_order_independent(client: RosBridgeClient) -> None:
+	# intensity placed before x/y/z shifts their offsets; the parser must read `fields` rather
+	# than assume a fixed layout.
+	msg = _make_radar_pointcloud2_msg(
+		[(2.0, 4.0, -0.5, 75.0)], fields_in_order=["intensity", "x", "y", "z"]
+	)
+	result = client._transform("/radar/points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([2.0, 4.0, -0.5, 75.0])
+
+
+def test_radar_points_filters_nan(client: RosBridgeClient) -> None:
+	points = [(1.0, 1.0, 0.0, 10.0), (float("nan"), 2.0, 0.0, 10.0)]
+	result = client._transform("/radar/points", _make_radar_pointcloud2_msg(points))
+	assert result is not None
+	assert result["point_count"] == 1
+	assert result["points"] == pytest.approx([1.0, 1.0, 0.0, 10.0])
+
+
+def test_radar_points_all_invalid_returns_none(client: RosBridgeClient) -> None:
+	points = [(float("nan"), float("nan"), float("nan"), float("nan"))]
+	result = client._transform("/radar/points", _make_radar_pointcloud2_msg(points))
+	assert result is None
+
+
+def test_radar_points_bigendian(client: RosBridgeClient) -> None:
+	msg = _make_radar_pointcloud2_msg([(5.0, -2.5, 0.0, 200.0)], is_bigendian=True)
+	result = client._transform("/radar/points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([5.0, -2.5, 0.0, 200.0])
+
+
+def test_radar_points_missing_intensity_field_returns_none(client: RosBridgeClient) -> None:
+	msg = _make_radar_pointcloud2_msg([(1.0, 2.0, 3.0, 0.0)], fields_in_order=["x", "y", "z"])
+	result = client._transform("/radar/points", msg)
+	assert result is None
+
+
+def test_voxel_decimate_carries_extra_columns_through() -> None:
+	import numpy as np
+
+	from revolt_api.bridge.client import _voxel_decimate
+
+	# 4-column (x,y,z,intensity) input -- voxel bucketing must only look at the first 3 columns,
+	# not fold intensity into the spatial bucket.
+	points = np.array(
+		[
+			[0.0, 0.0, 0.0, 10.0],
+			[0.01, 0.0, 0.0, 20.0],  # same voxel cell as the point above
+			[5.0, 5.0, 5.0, 30.0],  # different cell
+		]
+	)
+	result = _voxel_decimate(points, voxel_size=0.15, max_points=100)
+	assert result.shape == (2, 4)
+	assert sorted(result[:, 3].tolist()) == [10.0, 30.0]
+
+
 def test_voxel_decimate_reduces_dense_cluster_but_preserves_z_spread() -> None:
 	import numpy as np
 

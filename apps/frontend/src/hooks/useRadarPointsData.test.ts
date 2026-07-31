@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { usePointCloudData } from "./usePointCloudData.js";
+import { useRadarPointsData } from "./useRadarPointsData.js";
 import { useBridgeData } from "../context/useBridgeData.js";
 import type { BridgeData } from "../context/bridgeDataReducer.js";
-import type { PointCloudMsg } from "@revolt/shared-types";
+import type { RadarPointCloudMsg } from "@revolt/shared-types";
 import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
 vi.mock("../context/useBridgeData.js", () => ({
@@ -45,49 +45,49 @@ const base: BridgeData = {
 	latencyMs: null,
 };
 
-const makeCloud = (overrides: Partial<PointCloudMsg> = {}): PointCloudMsg => ({
+const makeCloud = (overrides: Partial<RadarPointCloudMsg> = {}): RadarPointCloudMsg => ({
 	v: "1",
-	type: "point_cloud",
+	type: "radar_point_cloud",
 	timestamp_ms: 0,
-	points: [1, 2, 3, -4, 5, -6],
+	points: [1, 2, 3, 100, -4, 5, -6, 200],
 	point_count: 2,
 	...overrides,
 });
 
-describe("usePointCloudData", () => {
-	it("returns empty points when pointCloud is null", () => {
-		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: null });
-		const { result } = renderHook(() => usePointCloudData());
+describe("useRadarPointsData", () => {
+	it("returns empty points when radarPointCloud is null", () => {
+		mockUseBridgeData.mockReturnValue({ ...base, radarPointCloud: null });
+		const { result } = renderHook(() => useRadarPointsData());
 		expect(result.current.cloud).toBeNull();
 		expect(result.current.points).toEqual([]);
 	});
 
-	it("unpacks the flat interleaved array into one point per triple", () => {
+	it("unpacks the flat interleaved array into one point per quadruple", () => {
 		const cloud = makeCloud();
-		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: cloud });
-		const { result } = renderHook(() => usePointCloudData());
+		mockUseBridgeData.mockReturnValue({ ...base, radarPointCloud: cloud });
+		const { result } = renderHook(() => useRadarPointsData());
 		expect(result.current.points).toEqual([
-			{ x: 1, y: 2, z: 3 },
-			{ x: -4, y: 5, z: -6 },
+			{ x: 1, y: 2, z: 3, intensity: 100 },
+			{ x: -4, y: 5, z: -6, intensity: 200 },
 		]);
 	});
 
 	it("exposes the raw cloud message", () => {
 		const cloud = makeCloud();
-		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: cloud });
-		const { result } = renderHook(() => usePointCloudData());
+		mockUseBridgeData.mockReturnValue({ ...base, radarPointCloud: cloud });
+		const { result } = renderHook(() => useRadarPointsData());
 		expect(result.current.cloud).toBe(cloud);
 	});
 });
 
-describe("usePointCloudData — staleness", () => {
+describe("useRadarPointsData — staleness", () => {
 	afterEach(() => {
 		vi.useRealTimers();
 	});
 
 	it("is stale when no cloud has ever arrived", () => {
-		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: null });
-		const { result } = renderHook(() => usePointCloudData());
+		mockUseBridgeData.mockReturnValue({ ...base, radarPointCloud: null });
+		const { result } = renderHook(() => useRadarPointsData());
 		expect(result.current.stale).toBe(true);
 	});
 
@@ -95,8 +95,8 @@ describe("usePointCloudData — staleness", () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
 		const cloud = makeCloud();
-		mockUseBridgeData.mockReturnValue({ ...base, pointCloud: cloud });
-		const { result, rerender } = renderHook(() => usePointCloudData());
+		mockUseBridgeData.mockReturnValue({ ...base, radarPointCloud: cloud });
+		const { result, rerender } = renderHook(() => useRadarPointsData());
 		expect(result.current.stale).toBe(false);
 
 		vi.setSystemTime(SENSOR_STALE_MS + 1);

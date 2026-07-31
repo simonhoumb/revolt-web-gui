@@ -19,6 +19,7 @@ import type {
 	MissionExecutionStatusMsg,
 	MissionSendStatusMsg,
 	PointCloudMsg,
+	RadarPointCloudMsg,
 	RadarSpokeMsg,
 	RcRemoteMsg,
 	SimGnssVelocityMsg,
@@ -76,6 +77,7 @@ export interface BridgeData {
 	lidarScan: LidarScanMsg | null;
 	pointCloud: PointCloudMsg | null;
 	radarSpoke: RadarSpokeMsg | null;
+	radarPointCloud: RadarPointCloudMsg | null;
 	aisTargets: Record<number, AisTargetMsg>;
 	imu: ImuMsg | null;
 	activeWaypointList: SimWaypointListMsg | null;
@@ -113,6 +115,7 @@ export const initialData: BridgeData = {
 	lidarScan: null,
 	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,
@@ -179,6 +182,8 @@ export function bridgeDataReducer(state: BridgeData, msg: BridgeMessage): Bridge
 			return { ...state, pointCloud: msg };
 		case "radar_spoke":
 			return { ...state, radarSpoke: msg };
+		case "radar_point_cloud":
+			return { ...state, radarPointCloud: msg };
 		case "ais_target":
 			return {
 				...state,

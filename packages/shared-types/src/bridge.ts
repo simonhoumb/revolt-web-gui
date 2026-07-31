@@ -337,6 +337,23 @@ export interface RadarSpokeMsg {
 	intensity: number[]; // one 0-255 value per sample
 }
 
+/**
+ * Cartesian radar returns, an alternative representation to RadarSpokeMsg's polar bins. Kept
+ * alongside RadarSpokeMsg while the two are evaluated against each other (see client.py's
+ * _handle_radar_points); not the widget's actual data source yet.
+ */
+export interface RadarPointCloudMsg {
+	v: "1";
+	type: "radar_point_cloud";
+	timestamp_ms: number;
+	// Flat, interleaved [x0,y0,z0,i0, x1,y1,z1,i1, ...] in metres / 0-255 intensity. Same flat-array
+	// convention as PointCloudMsg, extended with a per-point intensity value -- radar echo
+	// strength drives the widget's brightness, unlike lidar's flattened 2D view, which doesn't
+	// use one.
+	points: number[];
+	point_count: number; // points.length / 4
+}
+
 /** Decoded AIS target report, keyed by MMSI. */
 export interface AisTargetMsg {
 	v: "1";
@@ -358,6 +375,7 @@ export type BridgeMessage =
 	| RcRemoteMsg
 	| LightBeaconMsg
 	| RadarSpokeMsg
+	| RadarPointCloudMsg
 	| AisTargetMsg
 	| ControlModeMsg
 	| EmergencyStopMsg

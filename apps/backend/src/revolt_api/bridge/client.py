@@ -45,6 +45,7 @@ from revolt_api.bridge.contracts import (
 	MissionSendStatus,
 	MissionSendStatusMsg,
 	PointCloudMsg,
+	RadarPointCloudMsg,
 	RadarSpokeMsg,
 	RcRemoteMsg,
 	SimGnssVelocityMsg,
@@ -88,6 +89,14 @@ RADAR_ACCUM_MAX_AGE_MS = 3000
 # and the 3D view show more than /scan's single ring.
 VELODYNE_VOXEL_SIZE_M = 0.15
 VELODYNE_MAX_POINTS = 5000
+
+# /radar/points is being evaluated alongside the existing /radar/spoke feed, not replacing it yet
+# (see protocol.py's TopicSpec description) -- decimation here is mostly a safety-net cap, not a
+# load-bearing rate reduction the way it is for Velodyne: a radar sweep's point count is far lower
+# than the VLP-16's ~28,800/frame, and returns are naturally sparser at range. Voxel size is a
+# starting point, not yet tuned against real radar data.
+RADAR_POINTS_VOXEL_SIZE_M = 1.0
+RADAR_POINTS_MAX_POINTS = 5000
 
 # Course over ground comes from atan2 of the GNSS Doppler velocity vector (see
 # _handle_gnss_velocity); near zero speed the noise dominates the signal and the angle swings
@@ -146,21 +155,22 @@ class LatestRawMessage:
 	timestamp_ms: int
 
 
-def _voxel_decimate(xyz: np.ndarray, voxel_size: float, max_points: int) -> np.ndarray:
-	"""Downsample an (N, 3) point array to at most one point per voxel cell, capped at max_points.
+def _voxel_decimate(points: np.ndarray, voxel_size: float, max_points: int) -> np.ndarray:
+	"""Downsample points to at most one point per voxel cell, capped at max_points.
 
 	Args:
-		xyz: (N, 3) array of x, y, z coordinates in metres.
+		points: (N, D) array, D >= 3. Voxel bucketing uses only the first 3 columns (x, y, z);
+			any additional columns (e.g. intensity) are carried through unchanged.
 		voxel_size: edge length of each cubic voxel cell, in metres.
 		max_points: hard cap on the number of points returned; a random subset is kept if the
 			voxelized result still exceeds this (rare in practice, a safety net).
 
 	Returns:
-		(M, 3) array, M <= max_points.
+		(M, D) array, M <= max_points.
 	"""
-	voxel_idx = np.floor(xyz / voxel_size).astype(np.int64)
+	voxel_idx = np.floor(points[:, :3] / voxel_size).astype(np.int64)
 	_, unique_idx = np.unique(voxel_idx, axis=0, return_index=True)
-	decimated = xyz[unique_idx]
+	decimated = points[unique_idx]
 	if decimated.shape[0] > max_points:
 		keep = np.random.default_rng().choice(decimated.shape[0], max_points, replace=False)
 		decimated = decimated[keep]
@@ -256,6 +266,7 @@ class RosBridgeClient:
 			"/scan": self._handle_lidar_scan,
 			"/velodyne_points": self._handle_velodyne_points,
 			"/radar/spoke": self._handle_radar_spoke,
+			"/radar/points": self._handle_radar_points,
 			"/ais/decoded_message": self._handle_ais_target,
 			"/imu/data": self._handle_imu,
 		}
@@ -1034,6 +1045,46 @@ class RosBridgeClient:
 		return PointCloudMsg(
 			v="1",
 			type="point_cloud",
+			timestamp_ms=now,
+			points=[round(float(v), 2) for v in decimated.flatten()],
+			point_count=decimated.shape[0],
+		)
+
+	def _handle_radar_points(self, msg: dict, now: int) -> BridgeMessage | None:
+		# Same generic field-offset parsing as _handle_velodyne_points, extended to also read
+		# intensity: radar echo strength drives the widget's brightness, unlike lidar's flattened
+		# 2D view, which doesn't use one.
+		point_step = int(msg["point_step"])
+		endian = ">" if msg.get("is_bigendian", False) else "<"
+		field_offsets = {f["name"]: int(f["offset"]) for f in msg["fields"]}
+		if not all(k in field_offsets for k in ("x", "y", "z", "intensity")):
+			logger.warning("radar_points_missing_field")
+			return None
+
+		raw = base64.b64decode(msg["data"])
+		dtype = np.dtype(
+			{
+				"names": ["x", "y", "z", "intensity"],
+				"formats": [f"{endian}f4"] * 4,
+				"offsets": [
+					field_offsets["x"],
+					field_offsets["y"],
+					field_offsets["z"],
+					field_offsets["intensity"],
+				],
+				"itemsize": point_step,
+			}
+		)
+		points = np.frombuffer(raw, dtype=dtype)
+		xyzi = np.stack([points["x"], points["y"], points["z"], points["intensity"]], axis=1)
+		xyzi = xyzi[np.isfinite(xyzi).all(axis=1)]
+		if xyzi.shape[0] == 0:
+			return None
+
+		decimated = _voxel_decimate(xyzi, RADAR_POINTS_VOXEL_SIZE_M, RADAR_POINTS_MAX_POINTS)
+		return RadarPointCloudMsg(
+			v="1",
+			type="radar_point_cloud",
 			timestamp_ms=now,
 			points=[round(float(v), 2) for v in decimated.flatten()],
 			point_count=decimated.shape[0],
