@@ -53,6 +53,24 @@
 	height: 22px;
 	color: var(--element-active-color, #d0d0d0);
 	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+	cursor: pointer;
+}
+
+/* Strips MapLibre's own default popup chrome (background/padding/shadow, and its own triangle
+   tip) so only obc-toggletip's own box and bottom-arrow show, not a double-boxed look. Needs
+   :global() since maplibregl's own classnames aren't module-scoped like .aisPopup itself. anchor
+   is fixed to "bottom" in useAisMarkers.ts (popup always opens above the target, tip pointing
+   down) specifically to match obc-toggletip's own bottom-arrow, which has no equivalent for the
+   other three sides. */
+.aisPopup :global(.maplibregl-popup-content) {
+	background: transparent;
+	padding: 0;
+	box-shadow: none;
+	border-radius: 0;
+}
+
+.aisPopup :global(.maplibregl-popup-tip) {
+	display: none;
 }
 
 .waypointLabel {

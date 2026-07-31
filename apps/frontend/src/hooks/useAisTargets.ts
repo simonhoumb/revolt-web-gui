@@ -15,6 +15,9 @@ export interface AisTarget {
 	lon: number;
 	sogKn: number | null;
 	headingDeg: number | null;
+	cogDeg: number | null;
+	turnDegPerMin: number | null;
+	navStatus: number;
 	stale: boolean;
 }
 
@@ -36,6 +39,9 @@ export function useAisTargets(): AisTarget[] {
 			lon: msg.lon,
 			sogKn: msg.sog_kn,
 			headingDeg: msg.heading_deg,
+			cogDeg: msg.cog_deg,
+			turnDegPerMin: msg.turn_deg_per_min,
+			navStatus: msg.nav_status,
 			stale: age > STALE_MS,
 		});
 	}

@@ -3,6 +3,7 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, Waypoint } from "@revolt/shared-types";
+import type { AisTarget } from "../../hooks/useAisTargets.js";
 import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
@@ -172,6 +173,17 @@ interface MockMarkerInstance {
 	emit: (event: string, e?: unknown) => void;
 }
 
+interface MockPopupInstance {
+	lngLat: { lat: number; lng: number } | null;
+	content: HTMLElement | null;
+	options: Record<string, unknown>;
+	setLngLat: ReturnType<typeof vi.fn>;
+	setDOMContent: ReturnType<typeof vi.fn>;
+	addTo: ReturnType<typeof vi.fn>;
+	remove: ReturnType<typeof vi.fn>;
+	emit: (event: string, e?: unknown) => void;
+}
+
 // Plain arrays, not classes -- referenced from inside the vi.mock factory
 // below, which the vitest transform hoists above this file's other
 // top-level code, so any class it needs must be declared inside the
@@ -179,6 +191,7 @@ interface MockMarkerInstance {
 // note).
 const mapInstances: MockMapInstance[] = [];
 const markerInstances: MockMarkerInstance[] = [];
+const popupInstances: MockPopupInstance[] = [];
 
 vi.mock("maplibre-gl", () => {
 	class MockDragPan {
@@ -316,12 +329,55 @@ vi.mock("maplibre-gl", () => {
 		}
 	}
 
-	return { default: { Map: MockMap, NavigationControl: vi.fn(), Marker: MockMarker } };
+	class MockPopup {
+		lngLat: { lat: number; lng: number } | null = null;
+		content: HTMLElement | null = null;
+		options: Record<string, unknown>;
+		handlers: Record<string, Handler[]> = {};
+
+		addTo = vi.fn().mockReturnThis();
+		remove = vi.fn();
+
+		setLngLat = vi.fn((coords: [number, number]) => {
+			this.lngLat = { lng: coords[0], lat: coords[1] };
+			return this;
+		});
+
+		setDOMContent = vi.fn((el: HTMLElement) => {
+			this.content = el;
+			return this;
+		});
+
+		on = vi.fn((event: string, handler: Handler) => {
+			(this.handlers[event] ??= []).push(handler);
+			return this;
+		});
+
+		off = vi.fn((event: string, handler: Handler) => {
+			this.handlers[event] = (this.handlers[event] ?? []).filter((h) => h !== handler);
+			return this;
+		});
+
+		emit(event: string, e: unknown = {}) {
+			this.handlers[event]?.forEach((h) => {
+				h(e as never);
+			});
+		}
+
+		constructor(options: Record<string, unknown> = {}) {
+			this.options = options;
+			popupInstances.push(this);
+		}
+	}
+
+	return {
+		default: { Map: MockMap, NavigationControl: vi.fn(), Marker: MockMarker, Popup: MockPopup },
+	};
 });
 
 beforeEach(() => {
-	// AIS targets aren't under test here (see useAisMarkers, which mocked maplibre-gl can't
-	// meaningfully exercise) -- default to none so every test doesn't need its own setup call.
+	// Most tests don't care about AIS targets; default to none so they don't each need their own
+	// setup call. The "AIS targets" describe block below overrides this per test.
 	mockUseAisTargets.mockReturnValue([]);
 	setApp();
 });
@@ -330,6 +386,7 @@ afterEach(() => {
 	cleanup();
 	mapInstances.length = 0;
 	markerInstances.length = 0;
+	popupInstances.length = 0;
 	mockAddWaypoint.mockClear();
 	mockUpdateWaypointPosition.mockClear();
 	mockSetLegValidation.mockClear();
@@ -932,6 +989,131 @@ describe("MapWidget", () => {
 				| Record<string, { status: string }>
 				| undefined;
 			expect(afterIdle?.["wp-2"]?.status).toBe("safe");
+		});
+	});
+
+	describe("AIS target details", () => {
+		function makeAisTarget(overrides: Partial<AisTarget> = {}): AisTarget {
+			return {
+				mmsi: 123456789,
+				lat: 59.9,
+				lon: 10.7,
+				sogKn: 12.3,
+				headingDeg: 90,
+				cogDeg: 95,
+				turnDegPerMin: 2,
+				navStatus: 0,
+				stale: false,
+				...overrides,
+			};
+		}
+
+		it("opens a popup with the target's details when its marker is clicked", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			expect(popupInstances).toHaveLength(1);
+			expect(popupInstances[0]?.lngLat).toEqual({ lng: 10.7, lat: 59.9 });
+			const content = popupInstances[0]?.content;
+			// MMSI is set as the obc-toggletip's own "title" property (rendered in its shadow root,
+			// so not part of textContent below), not a light-DOM row like the other fields.
+			expect(content?.tagName.toLowerCase()).toBe("obc-toggletip");
+			expect((content as unknown as { title?: string } | undefined)?.title).toBe(
+				"MMSI 123456789",
+			);
+			expect(content?.textContent).toContain("12.3 kn");
+		});
+
+		it("does not fall through to the map's own click handler (e.g. placing a waypoint)", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			const { container } = render(<MapWidget />);
+			dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			expect(mockAddWaypoint).not.toHaveBeenCalled();
+			expect(popupInstances).toHaveLength(1);
+		});
+
+		it("moves and refreshes the open popup as the target updates", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			const { rerender } = render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			mockUseAisTargets.mockReturnValue([
+				makeAisTarget({ lat: 59.95, lon: 10.75, sogKn: 5 }),
+			]);
+			act(() => {
+				rerender(<MapWidget />);
+			});
+
+			expect(popupInstances[0]?.setLngLat).toHaveBeenCalledWith([10.75, 59.95]);
+			expect(popupInstances[0]?.content?.textContent).toContain("5.0 kn");
+		});
+
+		it("clears the selection and removes the popup when it fires its own close event", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+			expect(popupInstances).toHaveLength(1);
+
+			// The popup's own closeOnClick/close-button dismissal fires "close"; the hook listens
+			// for that to clear selectedMmsi, which in turn tears the popup down on the next effect
+			// pass -- exactly what this simulates.
+			act(() => {
+				popupInstances[0]?.emit("close");
+			});
+
+			expect(popupInstances[0]?.remove).toHaveBeenCalled();
+		});
+
+		it("closes the popup when the selected target expires", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			const { rerender } = render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+			expect(popupInstances).toHaveLength(1);
+
+			mockUseAisTargets.mockReturnValue([]);
+			act(() => {
+				rerender(<MapWidget />);
+			});
+
+			expect(popupInstances[0]?.remove).toHaveBeenCalled();
 		});
 	});
 });

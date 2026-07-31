@@ -411,6 +411,12 @@ class AisTargetMsg(TypedDict):
 	lon: float
 	sog_kn: float | None  # None when the source report has no valid speed
 	heading_deg: int | None  # None when the source report has no valid heading
+	cog_deg: float | None  # course over ground, distinct from heading_deg; None when unavailable
+	turn_deg_per_min: float | None  # rate of turn, +right/-left; None when unavailable
+	# Raw AIS navigational status code (0-15, e.g. 0=under way using engine, 1=at anchor,
+	# 5=moored); 15 ("undefined") is itself a real status, not absence of data, so this is never
+	# null the way the other AIS-derived fields above are.
+	nav_status: int
 
 
 BridgeMessage = (
