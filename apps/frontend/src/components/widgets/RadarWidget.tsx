@@ -45,9 +45,10 @@ function fmtNm(nm: number): string {
 
 // Mounting yaw correction, same technique as LidarWidget.tsx's MOUNTING_YAW_DEG: measure by
 // placing an object dead ahead of the bow and noting how many degrees clockwise it appears from
-// the top of the widget. Left at 0 -- no radar hardware has been available to calibrate this
-// against yet.
-const MOUNTING_YAW_DEG = 0;
+// the top of the widget. Starting from Lidar2DCanvas.tsx's own calibrated value (-90) as a first
+// guess, not an independently confirmed radar measurement -- the two sensors could be mounted at
+// different orientations; verify against real radar hardware and adjust if it's still off.
+const MOUNTING_YAW_DEG = -90;
 
 // The vessel's radar is a Furuno DRS4D-NXT (20 m - 48 nm range). Marine radar range rings are
 // always read in nautical miles, not metres -- this is the unit's own full selectable range-scale
