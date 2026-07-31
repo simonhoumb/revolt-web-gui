@@ -35,6 +35,7 @@ function withImu(imu: ImuMsg | null): BridgeData {
 		lidarScan: null,
 		pointCloud: null,
 		radarSpoke: null,
+		radarPointCloud: null,
 		aisTargets: {},
 		imu,
 		activeWaypointList: null,

@@ -33,6 +33,7 @@ const base: BridgeData = {
 	lidarScan: null,
 	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,

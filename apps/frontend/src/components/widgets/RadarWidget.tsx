@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/stepper-box/stepper-box.js";
-import { useRadarData } from "../../hooks/useRadarData.js";
+import { useRadarPointsData } from "../../hooks/useRadarPointsData.js";
 import { METERS_PER_NM } from "../../lib/geo.js";
 import styles from "./RadarWidget.module.css";
 
@@ -60,7 +60,7 @@ const ZOOM_STEPS_NM = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12
 const DEFAULT_ZOOM_IDX = 5; // 1 nm -- tight enough for dock-adjacent operation by default
 
 export function RadarWidget() {
-	const { spokes, stale } = useRadarData();
+	const { points, stale } = useRadarPointsData();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const canvasAreaRef = useRef<HTMLDivElement>(null);
 	const drawRef = useRef<() => void>(() => {
@@ -115,9 +115,9 @@ export function RadarWidget() {
 		};
 	}, []);
 
-	// Spoke messages can arrive far faster than Lidar's ~10 Hz full-scan rate, so the draw itself
-	// is batched via requestAnimationFrame instead of running synchronously on every message --
-	// if several spokes land within one frame, only the last scheduled draw actually paints.
+	// rAF-batched draw, carried over from when this consumed /radar/spoke (which could arrive far
+	// faster than one frame) -- harmless and still correct now that each message is already a full
+	// point cloud snapshot, just no longer load-bearing the way it was for a per-spoke feed.
 	useEffect(() => {
 		drawRef.current = () => {
 			const canvas = canvasRef.current;
@@ -139,7 +139,7 @@ export function RadarWidget() {
 			ctx.lineWidth = 1.5;
 			ctx.stroke();
 
-			if (spokes.length === 0) {
+			if (points.length === 0) {
 				ctx.fillStyle = cssVar("--element-inactive-color");
 				ctx.font = "12px monospace";
 				ctx.textAlign = "center";
@@ -183,23 +183,20 @@ export function RadarWidget() {
 			ctx.rotate(MOUNTING_YAW_DEG * (Math.PI / 180));
 			ctx.translate(-center, -center);
 
+			// Unlike spokes (which carried their own per-spoke min/max), a raw point cloud has no
+			// per-message intensity range to normalize against -- the contract documents intensity
+			// as already 0-255, so that's used as a fixed ceiling instead.
 			const echoColor = cssVar("--instrument-enhanced-primary-color");
-			for (const spoke of spokes) {
-				const maxIntensity = spoke.max_intensity > 0 ? spoke.max_intensity : 255;
-				for (let i = 0; i < spoke.num_samples; i++) {
-					const intensity = spoke.intensity[i] ?? 0;
-					if (intensity <= spoke.min_intensity) continue;
-					const range = spoke.range_start + i * spoke.range_increment;
-					if (range <= 0 || range > displayRangeM) continue;
-					const x = range * Math.cos(spoke.azimuth);
-					const y = range * Math.sin(spoke.azimuth);
-					const px = center + x * scale;
-					const py = center - y * scale;
-					const alpha = Math.min(1, intensity / maxIntensity);
-					ctx.globalAlpha = alpha;
-					ctx.fillStyle = echoColor;
-					ctx.fillRect(px - 1, py - 1, 2, 2);
-				}
+			const MAX_INTENSITY = 255;
+			for (const point of points) {
+				const range = Math.hypot(point.x, point.y);
+				if (range <= 0 || range > displayRangeM) continue;
+				const px = center + point.x * scale;
+				const py = center - point.y * scale;
+				const alpha = Math.min(1, point.intensity / MAX_INTENSITY);
+				ctx.globalAlpha = alpha;
+				ctx.fillStyle = echoColor;
+				ctx.fillRect(px - 1, py - 1, 2, 2);
 			}
 			ctx.globalAlpha = 1;
 
@@ -221,7 +218,7 @@ export function RadarWidget() {
 		return () => {
 			if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
 		};
-	}, [spokes, canvasSize, displayRangeM, displayRangeNm]);
+	}, [points, canvasSize, displayRangeM, displayRangeNm]);
 
 	useEffect(() => {
 		const observer = new MutationObserver(() => {
