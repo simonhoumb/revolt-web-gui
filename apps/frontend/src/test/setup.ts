@@ -101,5 +101,16 @@ vi.mock("maplibre-gl", () => {
 		getElement = vi.fn(() => document.createElement("div"));
 	}
 
-	return { default: { Map: NoopMap, NavigationControl: vi.fn(), Marker: NoopMarker } };
+	class NoopPopup {
+		setLngLat = vi.fn().mockReturnThis();
+		setDOMContent = vi.fn().mockReturnThis();
+		addTo = vi.fn().mockReturnThis();
+		remove = vi.fn();
+		on = vi.fn();
+		off = vi.fn();
+	}
+
+	return {
+		default: { Map: NoopMap, NavigationControl: vi.fn(), Marker: NoopMarker, Popup: NoopPopup },
+	};
 });
