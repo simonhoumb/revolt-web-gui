@@ -185,6 +185,18 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		),
 	),
 	TopicSpec(
+		"/radar/points",
+		"sensor_msgs/PointCloud2",
+		throttle_rate_ms=250,
+		frontend_throttle_ms=250,
+		description=(
+			"Cartesian radar returns (x, y, z, intensity per point) as an alternative to the "
+			"polar /radar/spoke feed. Kept alongside /radar/spoke -- not a replacement yet -- "
+			"while the two are evaluated against each other; see client.py's "
+			"_handle_radar_points."
+		),
+	),
+	TopicSpec(
 		"/ais/decoded_message",
 		"custom_msgs/SimpleAISdata",
 		description=(

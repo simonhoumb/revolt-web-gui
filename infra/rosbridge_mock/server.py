@@ -90,6 +90,7 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/scan": 0.1,  # 10 Hz
     "/velodyne_points": 0.25,  # 4 Hz, matching client.py's frontend_throttle_ms for this topic
     "/radar/spoke": 0.01,  # ~= 20s-rotation / 2048 fine steps, so each tick advances one step
+    "/radar/points": 0.25,  # 4 Hz, matching client.py's frontend_throttle_ms for this topic
     "/ais/decoded_message": 3.0,  # one target report per tick, round-robin (see _make_msg)
     "/imu/data": 0.1,  # sent at the already-throttled 10Hz rate, same as /scan below
 }
@@ -138,6 +139,7 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/scan": "sensor_msgs/LaserScan",
     "/velodyne_points": "sensor_msgs/PointCloud2",
     "/radar/spoke": "custom_msgs/RadarSpoke",
+    "/radar/points": "sensor_msgs/PointCloud2",
     "/ais/decoded_message": "custom_msgs/SimpleAISdata",
     "/imu/data": "sensor_msgs/Imu",
 }
@@ -283,6 +285,96 @@ def _make_velodyne_points_msg(t: float) -> dict:
         "fields": field_specs,
         "data": base64.b64encode(bytes(packed)).decode(),
         "header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "velodyne"},
+    }
+
+
+# 0.5-degree resolution -- a full-circle pass generating discrete returns, not a per-sample
+# array like /radar/spoke, so this only needs enough azimuth steps to make the shoreline arc and
+# target blobs look continuous.
+_RADAR_POINTS_AZIMUTH_STEPS = 720
+
+
+def _make_radar_points_msg(t: float) -> dict:
+    """Synthetic radar PointCloud2 (Cartesian x, y, z, intensity per point).
+
+    An alternative representation to /radar/spoke's polar bins, being evaluated alongside it --
+    self-contained (no shared code with /radar/spoke) so tuning one doesn't risk changing the
+    other. Points are generated directly per return (clutter/shoreline/target) rather than off a
+    fixed range/azimuth grid, so the shoreline arc and target blobs read as continuous/solid the
+    way a real point-cloud driver's output would, not a dotted grid intersection.
+    """
+    # Same scene as /radar/spoke's mock (sea clutter near own-ship, a shoreline arc, a few moving
+    # targets), picked for visual variety only, not calibrated against the real Bekkelaget
+    # shoreline -- see that case's own comments for the reasoning behind each element.
+    land_az_min, land_az_max = math.radians(200), math.radians(260)
+    land_range_m = 1400.0
+    targets = [
+        (1.2, 740.0, 120.0),  # ~0.4 nm, dead ahead-ish
+        (3.6 + t * 0.01, 2600.0, 90.0),  # slow contact off to port
+        (5.0 - t * 0.006, 5200.0, 150.0),  # larger/slower contact further out
+    ]
+
+    point_step = 16
+    field_specs = [
+        {"name": "x", "offset": 0, "datatype": 7, "count": 1},
+        {"name": "y", "offset": 4, "datatype": 7, "count": 1},
+        {"name": "z", "offset": 8, "datatype": 7, "count": 1},
+        {"name": "intensity", "offset": 12, "datatype": 7, "count": 1},
+    ]
+
+    def pack_point(azimuth: float, r: float, intensity: float) -> bytes:
+        row = bytearray(point_step)
+        struct.pack_into("<f", row, 0, r * math.cos(azimuth))
+        struct.pack_into("<f", row, 4, r * math.sin(azimuth))
+        struct.pack_into("<f", row, 8, 0.0)
+        struct.pack_into("<f", row, 12, max(0.0, min(255.0, intensity)))
+        return bytes(row)
+
+    rows: list[bytes] = []
+    for az_i in range(_RADAR_POINTS_AZIMUTH_STEPS):
+        azimuth = az_i * (2 * math.pi / _RADAR_POINTS_AZIMUTH_STEPS)
+
+        # Sea clutter: a few faint near-range returns per azimuth, exponentially less likely
+        # further out -- discrete points instead of /radar/spoke's per-sample intensity array,
+        # but the same falloff shape.
+        for _ in range(3):
+            r = random.expovariate(1 / 150.0)
+            if r > 400.0:
+                continue
+            intensity = 20.0 + random.gauss(0, 5)
+            if intensity < 5:
+                continue
+            rows.append(pack_point(azimuth, r, intensity))
+
+        # Shoreline: one point per azimuth in the land window, so the arc reads as a continuous
+        # coastline rather than an isolated echo.
+        if land_az_min <= azimuth <= land_az_max:
+            land_r = land_range_m + 60.0 * math.sin(azimuth * 9) + random.gauss(0, 15)
+            rows.append(pack_point(azimuth, land_r, 180 + random.randint(-10, 10)))
+
+        # Other traffic: a handful of points per target, scattered within its blob radius, when
+        # this azimuth passes near the target's bearing.
+        for target_azimuth, target_range_m, radius_m in targets:
+            target_azimuth %= 2 * math.pi
+            angle_diff = abs(((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi)
+            if angle_diff >= 0.06:
+                continue
+            for _ in range(3):
+                r = target_range_m + random.uniform(-radius_m, radius_m)
+                rows.append(pack_point(azimuth, r, 200 + random.gauss(0, 20)))
+
+    data = b"".join(rows)
+    width = len(rows)
+    return {
+        "header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "radar"},
+        "height": 1,
+        "width": width,
+        "fields": field_specs,
+        "is_bigendian": False,
+        "point_step": point_step,
+        "row_step": point_step * width,
+        "data": base64.b64encode(data).decode(),
+        "is_dense": True,
     }
 
 
@@ -616,6 +708,8 @@ def _make_msg(topic: str) -> dict:
                 "max_intensity": 255,
                 "intensity": base64.b64encode(bytes(intensity_bytes)).decode(),
             }
+        case "/radar/points":
+            return _make_radar_points_msg(t)
         case "/ais/decoded_message":
             # Real AIS is a shared broadcast channel: targets take turns reporting, not one
             # message carrying every target at once. Round-robin through a few synthetic targets

@@ -383,6 +383,23 @@ class RadarSpokeMsg(TypedDict):
 	intensity: list[int]  # one 0-255 value per sample
 
 
+class RadarPointCloudMsg(TypedDict):
+	"""Cartesian radar returns, an alternative representation to RadarSpokeMsg's polar bins.
+
+	Kept alongside RadarSpokeMsg while the two are evaluated against each other (see client.py's
+	_handle_radar_points); not the widget's actual data source yet.
+	"""
+
+	v: Literal["1"]
+	type: Literal["radar_point_cloud"]
+	timestamp_ms: int
+	# Flat, interleaved [x0,y0,z0,i0, x1,y1,z1,i1, ...] in metres / 0-255 intensity. Same flat-array
+	# convention as PointCloudMsg, extended with a per-point intensity value -- radar echo strength
+	# drives the widget's brightness, unlike lidar's flattened 2D view, which doesn't use one.
+	points: list[float]
+	point_count: int  # len(points) // 4
+
+
 class AisTargetMsg(TypedDict):
 	"""Decoded AIS target report, keyed by MMSI on the frontend."""
 
@@ -405,6 +422,7 @@ BridgeMessage = (
 	| RcRemoteMsg
 	| LightBeaconMsg
 	| RadarSpokeMsg
+	| RadarPointCloudMsg
 	| AisTargetMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
