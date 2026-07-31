@@ -1156,6 +1156,23 @@ class RosBridgeClient:
 		sog_kn = None if sog >= 102.25 or sog < 0.001 else sog
 		heading_deg = None if heading == 511 else heading
 
+		# .get() with the same sentinel ais_decoder.py itself defaults to, not msg[...]: cog/turn/
+		# status are newer fields than sog/heading, so a not-yet-updated vessel (or an older
+		# recorded rosbag) may still publish SimpleAISdata messages without them at all.
+		# 360.0 is the AIS "course not available" sentinel (and ais_decoder.py's own fallback when
+		# a message type has no course field); genuine courses are always < 360.
+		cog = float(msg.get("cog", 360.0))
+		cog_deg = None if cog >= 359.95 else cog
+
+		# -128 is the AIS "no turn information available" sentinel (and ais_decoder.py's own
+		# fallback when a message type has no turn field). +-127 mean "turning right/left faster
+		# than 5deg/30s, precise rate unavailable" -- still meaningful, passed through as-is
+		# rather than nulled.
+		turn = float(msg.get("turn", -128))
+		turn_deg_per_min = None if turn == -128.0 else turn
+
+		nav_status = int(msg.get("status", 15))
+
 		# ITU-R M.1371 also sentinels missing position as lat=91/lon=181, decoded verbatim by
 		# pyais and genuinely on the wire for targets without a fix yet. This crashed the
 		# frontend's map marker before (maplibre rejects latitude outside -90..90), so it's
@@ -1176,6 +1193,9 @@ class RosBridgeClient:
 			lon=lon,
 			sog_kn=sog_kn,
 			heading_deg=heading_deg,
+			cog_deg=cog_deg,
+			turn_deg_per_min=turn_deg_per_min,
+			nav_status=nav_status,
 		)
 
 	def _cartesian_to_latlon(self, x_m: float, y_m: float) -> tuple[float, float]:

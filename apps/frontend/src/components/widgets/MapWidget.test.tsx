@@ -1000,6 +1000,9 @@ describe("MapWidget", () => {
 				lon: 10.7,
 				sogKn: 12.3,
 				headingDeg: 90,
+				cogDeg: 95,
+				turnDegPerMin: 2,
+				navStatus: 0,
 				stale: false,
 				...overrides,
 			};

@@ -364,6 +364,12 @@ export interface AisTargetMsg {
 	lon: number;
 	sog_kn: number | null; // null when the source report has no valid speed
 	heading_deg: number | null; // null when the source report has no valid heading
+	cog_deg: number | null; // course over ground, distinct from heading_deg; null when unavailable
+	turn_deg_per_min: number | null; // rate of turn, +right/-left; null when unavailable
+	/** Raw AIS navigational status code (0-15, e.g. 0=under way using engine, 1=at anchor,
+	 * 5=moored); 15 ("undefined") is itself a real status, not absence of data, so this is never
+	 * null the way the other AIS-derived fields above are. */
+	nav_status: number;
 }
 
 export type BridgeMessage =

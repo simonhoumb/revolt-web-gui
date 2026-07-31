@@ -21,7 +21,7 @@ import "@oicl/openbridge-webcomponents/dist/components/toggletip/toggletip.js";
 import "@oicl/openbridge-webcomponents/dist/icons/icon-close-google.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { AisTarget } from "./useAisTargets.js";
-import { formatLatLon } from "../lib/format.js";
+import { formatLatLon, formatNavStatus } from "../lib/format.js";
 import styles from "../components/widgets/MapWidget.module.css";
 
 function iconTagFor(stale: boolean, hasHeading: boolean, selected: boolean): string {
@@ -52,10 +52,11 @@ function createAisElement(target: AisTarget): HTMLDivElement {
 	return el;
 }
 
-// Only the fields SimpleAISdata carries today (mmsi/position/sog/heading/staleness); cog, rate of
-// turn, and navigational status are decoded by the AIS receiver already but not yet forwarded onto
-// the ROS message, a separate Hardware-repo change. Extending this once they land is just adding
-// rows here, not a redesign.
+// Vessel name/callsign/ship type/dimensions/destination/ETA come from a separate AIS static/
+// voyage report (message type 5), broadcast roughly every 6 minutes rather than bundled with the
+// position report this popup's other fields come from -- a distinct, larger follow-up (new
+// decoder message type, caching by mmsi on a much longer timescale, merging two sources), not an
+// extension of this function.
 // obc-toggletip's own .wrapper is a hard-coded 400px wide unless overridden via customWidth;
 // narrowed to fit this popup's few short rows. Set alongside the Popup's own maxWidth: "none"
 // (see below) so the two don't fight over the box's actual width, which also throws off where
@@ -67,6 +68,15 @@ const POPUP_WIDTH_PX = 220;
 // (.aisTargetMarker); negative Y moves the popup up and away from the point, per MapLibre's own
 // offset convention for a "bottom" anchor.
 const POPUP_OFFSET: [number, number] = [0, -20];
+
+// AIS reports turn rate as signed degrees/minute (+right/-left), already resolved to null for
+// "not available" by the time this runs (see useAisTargets.ts); this is purely presentation, so
+// it stays local to the popup rather than a shared formatter.
+function formatTurnRate(turnDegPerMin: number): string {
+	if (turnDegPerMin === 0) return "Not turning";
+	const direction = turnDegPerMin > 0 ? "right" : "left";
+	return `${Math.abs(turnDegPerMin).toFixed(0)}°/min ${direction}`;
+}
 
 function buildAisPopupContent(target: AisTarget, onClose: () => void): HTMLElement {
 	const toggletip = document.createElement("obc-toggletip");
@@ -91,8 +101,13 @@ function buildAisPopupContent(target: AisTarget, onClose: () => void): HTMLEleme
 		["Position", formatLatLon(target.lat, target.lon)],
 		["SOG", target.sogKn !== null ? `${target.sogKn.toFixed(1)} kn` : "Unknown"],
 		["Heading", target.headingDeg !== null ? `${target.headingDeg.toFixed(0)}°` : "Unknown"],
+		["COG", target.cogDeg !== null ? `${target.cogDeg.toFixed(0)}°` : "Unknown"],
+		["Turn", target.turnDegPerMin !== null ? formatTurnRate(target.turnDegPerMin) : "Unknown"],
+		["Nav status", formatNavStatus(target.navStatus)],
 	];
-	if (target.stale) rows.push(["Status", "Sleeping (no recent report)"]);
+	// "Signal", not "Status" -- nav status above already owns that word for the vessel's own
+	// reported state; this row is about the freshness of our own reception instead.
+	if (target.stale) rows.push(["Signal", "Sleeping (no recent report)"]);
 
 	for (const [label, value] of rows) {
 		const row = document.createElement("div");
@@ -118,6 +133,9 @@ function targetRenderEquals(a: AisTarget, b: AisTarget): boolean {
 		a.lon === b.lon &&
 		a.sogKn === b.sogKn &&
 		a.headingDeg === b.headingDeg &&
+		a.cogDeg === b.cogDeg &&
+		a.turnDegPerMin === b.turnDegPerMin &&
+		a.navStatus === b.navStatus &&
 		a.stale === b.stale
 	);
 }

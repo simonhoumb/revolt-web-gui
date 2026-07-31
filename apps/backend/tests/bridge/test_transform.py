@@ -254,7 +254,16 @@ def test_radar_spoke_flushes_after_stale_timeout(client: RosBridgeClient) -> Non
 def test_ais_target_full_report(client: RosBridgeClient) -> None:
 	result = client._transform(
 		"/ais/decoded_message",
-		{"mmsi": 257123456, "lat": 59.3783, "lon": 10.6030, "sog": 8.2, "heading": 91},
+		{
+			"mmsi": 257123456,
+			"lat": 59.3783,
+			"lon": 10.6030,
+			"sog": 8.2,
+			"heading": 91,
+			"cog": 93.5,
+			"turn": 12.0,
+			"status": 0,
+		},
 	)
 	assert result is not None
 	assert result["type"] == "ais_target"
@@ -263,6 +272,76 @@ def test_ais_target_full_report(client: RosBridgeClient) -> None:
 	assert result["lon"] == pytest.approx(10.6030)
 	assert result["sog_kn"] == pytest.approx(8.2)
 	assert result["heading_deg"] == 91
+	assert result["cog_deg"] == pytest.approx(93.5)
+	assert result["turn_deg_per_min"] == pytest.approx(12.0)
+	assert result["nav_status"] == 0
+
+
+def test_ais_target_cog_not_available_sentinel(client: RosBridgeClient) -> None:
+	# 360.0 is the AIS protocol's own "course not available" sentinel.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "cog": 360.0},
+	)
+	assert result is not None
+	assert result["cog_deg"] is None
+
+
+def test_ais_target_cog_missing_field_default(client: RosBridgeClient) -> None:
+	# ais_decoder.py falls back to 360.0 when a message type has no course field at all (e.g. a
+	# base station report); _handle_ais_target itself defaults to the same sentinel if the "cog"
+	# key is absent entirely, covering an older/not-yet-updated SimpleAISdata publisher too.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45},
+	)
+	assert result is not None
+	assert result["cog_deg"] is None
+
+
+def test_ais_target_turn_not_available_sentinel(client: RosBridgeClient) -> None:
+	# -128 is the AIS protocol's own "no turn information available" sentinel.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "turn": -128.0},
+	)
+	assert result is not None
+	assert result["turn_deg_per_min"] is None
+
+
+def test_ais_target_turn_fast_sentinel_passed_through(client: RosBridgeClient) -> None:
+	# +-127 mean "turning right/left faster than 5deg/30s, precise rate unavailable" -- real,
+	# meaningful data (unlike -128), so it's passed through rather than nulled.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "turn": 127.0},
+	)
+	assert result is not None
+	assert result["turn_deg_per_min"] == pytest.approx(127.0)
+
+
+def test_ais_target_status_undefined_passed_through(client: RosBridgeClient) -> None:
+	# Unlike cog/turn, nav_status is never nulled -- 15 ("undefined") is itself a real status
+	# code, not absence of data.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "status": 15},
+	)
+	assert result is not None
+	assert result["nav_status"] == 15
+
+
+def test_ais_target_cog_turn_status_missing_defaults(client: RosBridgeClient) -> None:
+	# A message with none of cog/turn/status at all (older publisher, or a base station report)
+	# should fall back to the same "not available" sentinels ais_decoder.py itself defaults to.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45},
+	)
+	assert result is not None
+	assert result["cog_deg"] is None
+	assert result["turn_deg_per_min"] is None
+	assert result["nav_status"] == 15
 
 
 def test_ais_target_heading_not_available_sentinel(client: RosBridgeClient) -> None:
