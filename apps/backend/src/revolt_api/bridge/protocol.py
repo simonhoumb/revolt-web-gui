@@ -233,6 +233,15 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 			"linear_actuator_retract_state topics, which also carry a small status int."
 		),
 	),
+	TopicSpec(
+		"/waypoint_list",
+		"custom_msgs/WaypointList",
+		description=(
+			"Active waypoint list from waypoint_switcher_node, republished at 1Hz "
+			"(ControlSystemROS2's guidance/waypoint_switcher). Confirms an /update_waypoint_list "
+			"send landed; publish_and_await_ack correlates on this echo."
+		),
+	),
 ]
 
 PHYSICAL_PUBLISH_TOPICS: list[TopicSpec] = [

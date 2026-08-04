@@ -320,8 +320,10 @@ class RosBridgeClient:
 	) -> AckStatus:
 		"""Publish, then wait for the mission planner's /waypoint_list echo to confirm it landed.
 
-		There is no ROS2 service/ack for these topics (see CLAUDE.md's phased-transport note); the
-		only confirmation available is that the sim's own active-list echo matches what was sent.
+		There is no ROS2 service/ack for these topics; the only confirmation available is that
+		waypoint_switcher_node's own active-list echo matches what was sent. Requires the caller's
+		BRIDGE_TARGET to actually subscribe to /waypoint_list (see protocol.py's
+		PHYSICAL_SUBSCRIBE_TOPICS / SIMULATION_SUBSCRIBE_TOPICS) -- both targets do.
 		Only one send can be pending at a time; a second call while one is in flight replaces it.
 		"""
 		if not self._connected:

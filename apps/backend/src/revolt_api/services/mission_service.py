@@ -55,9 +55,10 @@ _START_ALLOWED_STATUSES: frozenset[MissionStatus] = frozenset(
 async def get_loaded_mission_id(db: AsyncSession) -> uuid.UUID | None:
 	"""The mission most recently sent to the vessel: "loaded," in the ECDIS/autopilot sense.
 
-	Not gated on last_send_status == "acknowledged": physical-target sends always resolve to
-	"timed_out" (no echo mechanism exists there), so requiring an ack would make "loaded" always
-	empty on the real vessel. Reaching the wire is what counts.
+	Not gated on last_send_status == "acknowledged": a dropped/delayed echo (e.g. rosbridge
+	hiccup, or the 1Hz /waypoint_list republish just missing the ack window) would otherwise
+	make "loaded" flicker false despite the mission having reached the vessel. Reaching the
+	wire is what counts.
 	"""
 	result = await db.execute(
 		select(Mission.id)
@@ -228,16 +229,14 @@ async def send_mission(
 ) -> MissionSendResult:
 	"""Re-validate (Phase 2), then publish the mission's full waypoint list.
 
-	Waits for the sim's /waypoint_list echo to confirm it landed (see
-	RosBridgeClient.publish_and_await_ack). Always re-runs the hazard check itself rather than
-	trusting a client-reported "already validated" flag; a route that was safe when last
-	checked, or never checked at all, must not reach the vessel unexamined. "blocked" refuses
-	the send (409); "warning" and "no_data" (route outside charted ENC coverage) do not, since
-	the vessel is tested in areas this delivery has no chart data for.
-
-	On BRIDGE_TARGET=physical nothing currently echoes /waypoint_list back, so a send there
-	correctly resolves to "timed_out" rather than being special-cased: honest degradation, not a
-	bug, until a physical-vessel ack path exists.
+	Waits for waypoint_switcher_node's /waypoint_list echo to confirm it landed (see
+	RosBridgeClient.publish_and_await_ack) -- the same topic and wire format on both
+	BRIDGE_TARGET=simulation and physical, since ControlSystemROS2's waypoint_switcher node
+	runs on the real vessel too. Always re-runs the hazard check itself rather than trusting a
+	client-reported "already validated" flag; a route that was safe when last checked, or never
+	checked at all, must not reach the vessel unexamined. "blocked" refuses the send (409);
+	"warning" and "no_data" (route outside charted ENC coverage) do not, since the vessel is
+	tested in areas this delivery has no chart data for.
 	"""
 	mission_id = mission.id
 	waypoints = mission.waypoints
