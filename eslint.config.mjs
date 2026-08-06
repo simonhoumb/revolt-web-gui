@@ -12,6 +12,7 @@ export default tseslint.config(
 		ignores: [
 			"**/dist/**",
 			"**/build/**",
+			"**/.tsc-out/**",
 			"**/node_modules/**",
 			"**/*.d.ts",
 			"apps/backend/**", // Python, not linted by ESLint

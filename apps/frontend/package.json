@@ -9,7 +9,8 @@
 		"preview": "vite preview",
 		"typecheck": "tsc --build --noEmit",
 		"test": "vitest",
-		"test:ci": "vitest run --reporter=junit --outputFile=../../test-results/vitest.xml"
+		"test:ci": "vitest run --reporter=junit --outputFile=../../test-results/vitest.xml",
+		"generate:sprite": "tsx scripts/generate-chart-sprite.ts"
 	},
 	"dependencies": {
 		"@oicl/openbridge-webcomponents": "^1.0.1",
@@ -24,9 +25,11 @@
 		"three": "^0.170.0"
 	},
 	"devDependencies": {
+		"@resvg/resvg-js": "^2.6.2",
 		"@testing-library/jest-dom": "^6.0.0",
 		"@testing-library/react": "^16.0.0",
 		"@testing-library/user-event": "^14.0.0",
+		"@types/pngjs": "^6.0.5",
 		"@types/react": "^18.3.0",
 		"@types/react-dom": "^18.3.0",
 		"@types/react-grid-layout": "^2.1.0",
@@ -34,6 +37,9 @@
 		"@vitejs/plugin-react": "^4.0.0",
 		"@vitest/coverage-v8": "^3.0.0",
 		"jsdom": "^26.0.0",
+		"pngjs": "^7.0.0",
+		"potpack": "^2.1.0",
+		"tsx": "^4.23.5",
 		"vite": "^5.0.0",
 		"vitest": "^3.0.0"
 	}
