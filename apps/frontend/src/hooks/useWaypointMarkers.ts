@@ -78,11 +78,6 @@ const HAZARD_LINE_COLOR: [
 	"#0ca30c",
 ];
 
-// Fixed safety contour (m) for the client-side ENC check (Phase 1). ReVolt's shallow draft means a
-// mariner-configurable margin isn't needed the way it would be on a deep-draft vessel; Phase 2's
-// server-side check will eventually pair this with a proper vessel-beam/safety-margin config.
-const SAFETY_CONTOUR_M = 3;
-
 // Local structural types for the legs source's GeoJSON payload; see useVesselTrackLayer's
 // TrackFeature comment for why this isn't @types/geojson.
 interface LegFeature {
@@ -173,11 +168,12 @@ function createWaypointElement(sequenceNumber: number): { el: HTMLDivElement } {
 function recomputeLegHazards(
 	map: MapLibreMap,
 	waypoints: Waypoint[],
+	safetyContourM: number,
 	setLegValidation: (result: Record<string, HazardSummary>) => void,
 ): void {
 	const legPositions = computeLegPositions(waypoints);
 	const hazards =
-		legPositions.length > 0 ? evaluateEncHazards(map, legPositions, SAFETY_CONTOUR_M) : {};
+		legPositions.length > 0 ? evaluateEncHazards(map, legPositions, safetyContourM) : {};
 	setLegValidation(hazards);
 	const source = map.getSource<GeoJSONSource>(LEGS_SOURCE_ID);
 	source?.setData(legsToGeoJSON(legPositions, computeTurnArcs(waypoints), hazards));
@@ -194,6 +190,9 @@ export interface UseWaypointMarkersOptions {
 		longitude: number,
 	) => Promise<void>;
 	setLegValidation: (result: Record<string, HazardSummary>) => void;
+	/** Mariner's configured safety depth (m), from ChartSettingsContext; drives both the client-side
+	 * ENC hazard check below and the chart's own safety-contour visual highlight (chartStyle.ts). */
+	safetyContourM: number;
 }
 
 /**
@@ -212,6 +211,7 @@ export function useWaypointMarkers(
 		addWaypoint,
 		updateWaypointPosition,
 		setLegValidation,
+		safetyContourM,
 	}: UseWaypointMarkersOptions,
 ): void {
 	const waypointMarkersRef = useRef<Map<string, Marker>>(new Map());
@@ -221,12 +221,16 @@ export function useWaypointMarkers(
 	// state/DOM identity aren't disturbed by unrelated list changes).
 	const waypointsRef = useRef(waypoints);
 	const legValidationRef = useRef(legValidation);
+	const safetyContourMRef = useRef(safetyContourM);
 	useEffect(() => {
 		waypointsRef.current = waypoints;
 	}, [waypoints]);
 	useEffect(() => {
 		legValidationRef.current = legValidation;
 	}, [legValidation]);
+	useEffect(() => {
+		safetyContourMRef.current = safetyContourM;
+	}, [safetyContourM]);
 
 	// Which waypoint (if any) is currently selected; only the selected one is draggable. See
 	// iconTagFor's comment for why. Fully internal: MapWidget's own render doesn't need to know
@@ -294,7 +298,12 @@ export function useWaypointMarkers(
 		// is exactly the event that fires once loading/rendering has genuinely settled; catches
 		// and corrects that case without needing a waypoint change to trigger a recompute.
 		const handleIdle = () => {
-			recomputeLegHazards(map, waypointsRef.current, setLegValidation);
+			recomputeLegHazards(
+				map,
+				waypointsRef.current,
+				safetyContourMRef.current,
+				setLegValidation,
+			);
 		};
 		map.on("idle", handleIdle);
 
@@ -399,7 +408,7 @@ export function useWaypointMarkers(
 						const updated = evaluateEncHazards(
 							mapRef.current,
 							touchingLegs,
-							SAFETY_CONTOUR_M,
+							safetyContourMRef.current,
 						);
 						setLegValidation({ ...legValidationRef.current, ...updated });
 					}
@@ -450,16 +459,17 @@ export function useWaypointMarkers(
 	}, [waypoints, selectedWaypointId]);
 
 	// Recompute hazards for the whole route and refresh the legs line layer whenever the
-	// persisted waypoint list changes (add/dragend/delete/reorder all flow through here). Live,
-	// per-leg feedback during an active drag is handled separately above. The map's own "idle"
-	// event (registered at mount, see recomputeLegHazards' comment) covers the case where this
-	// runs before the map's tiles have actually loaded.
+	// persisted waypoint list changes (add/dragend/delete/reorder all flow through here), or when
+	// the mariner changes the safety-contour depth itself. Live, per-leg feedback during an active
+	// drag is handled separately above. The map's own "idle" event (registered at mount, see
+	// recomputeLegHazards' comment) covers the case where this runs before the map's tiles have
+	// actually loaded.
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map) return;
-		recomputeLegHazards(map, waypoints, setLegValidation);
-		// setLegValidation is stable; only waypoints should trigger a recompute, not legValidation
-		// itself (that would loop).
+		recomputeLegHazards(map, waypoints, safetyContourM, setLegValidation);
+		// setLegValidation is stable; only waypoints/safetyContourM should trigger a recompute, not
+		// legValidation itself (that would loop).
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [waypoints, mapRef]);
+	}, [waypoints, safetyContourM, mapRef]);
 }

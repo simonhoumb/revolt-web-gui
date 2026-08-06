@@ -3,6 +3,11 @@ import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/s
 import { ObcToggleButtonGroup } from "@oicl/openbridge-webcomponents-react/components/toggle-button-group/toggle-button-group.js";
 import { ObcToggleButtonOption } from "@oicl/openbridge-webcomponents-react/components/toggle-button-option/toggle-button-option.js";
 import { ObcToggleButtonOptionType } from "@oicl/openbridge-webcomponents/dist/components/toggle-button-option/toggle-button-option.js";
+import { ObcNumberInputField } from "@oicl/openbridge-webcomponents-react/components/number-input-field/number-input-field.js";
+import {
+	ObcNumberInputField as ObcNumberInputFieldElement,
+	ObcNumberInputFieldSize,
+} from "@oicl/openbridge-webcomponents/dist/components/number-input-field/number-input-field.js";
 import { ObcIconButton } from "@oicl/openbridge-webcomponents-react/components/icon-button/icon-button.js";
 import { IconButtonVariant } from "@oicl/openbridge-webcomponents/dist/components/icon-button/icon-button.js";
 import { ObiHeadingHUpProposal } from "@oicl/openbridge-webcomponents-react/icons/icon-heading-h-up-proposal.js";
@@ -23,11 +28,14 @@ import { useAisTargets } from "../../hooks/useAisTargets.js";
 import { useMission } from "../../context/useMission.js";
 import { useLegHazards } from "../../context/useLegHazards.js";
 import { useApps } from "../../context/useApps.js";
+import { useChartSettings } from "../../context/useChartSettings.js";
 import { useMapLibreInstance, scaleNmForZoom } from "../../hooks/useMapLibreInstance.js";
 import { useOwnShipMarker } from "../../hooks/useOwnShipMarker.js";
 import { useVesselTrackLayer } from "../../hooks/useVesselTrackLayer.js";
 import { useWaypointMarkers } from "../../hooks/useWaypointMarkers.js";
 import { useAisMarkers } from "../../hooks/useAisMarkers.js";
+import { inputValue } from "../../lib/dom.js";
+import { s52Color } from "../../lib/s52Colors.js";
 import styles from "./MapWidget.module.css";
 import { Tooltip } from "./Tooltip.js";
 
@@ -53,14 +61,52 @@ export function MapWidget() {
 	const { addWaypoint, updateWaypointPosition } = useMission();
 	const { legValidation, setLegValidation } = useLegHazards();
 	const aisTargets = useAisTargets();
+	const { palette, symbolStyle, setSymbolStyle, safetyContourM, setSafetyContourM } =
+		useChartSettings();
+	const [safetyContourDraft, setSafetyContourDraft] = useState(String(safetyContourM));
+	const safetyContourInputRef = useRef<ObcNumberInputFieldElement | null>(null);
+
+	useEffect(() => {
+		setSafetyContourDraft(String(safetyContourM));
+	}, [safetyContourM]);
+
+	const commitSafetyContour = useCallback(() => {
+		const parsed = Number.parseFloat(safetyContourDraft);
+		if (Number.isFinite(parsed) && parsed > 0 && parsed !== safetyContourM) {
+			setSafetyContourM(parsed);
+		} else {
+			setSafetyContourDraft(String(safetyContourM));
+		}
+	}, [safetyContourDraft, safetyContourM, setSafetyContourM]);
+
+	// ObcNumberInputField's onBlur prop is unreliable through @lit/react's wrapper (only onInput is
+	// in its events map), so commit-on-blur is wired via a ref + native focusout listener instead;
+	// see WaypointRow.tsx's speed input for the same pattern and the full explanation.
+	useEffect(() => {
+		const el = safetyContourInputRef.current;
+		if (!el) return;
+		el.addEventListener("focusout", commitSafetyContour);
+		return () => {
+			el.removeEventListener("focusout", commitSafetyContour);
+		};
+	}, [commitSafetyContour]);
 
 	// Call order matters: useOwnShipMarker/useVesselTrackLayer/useWaypointMarkers/useAisMarkers
 	// all read mapRef.current inside a mount effect of their own, relying on
 	// useMapLibreInstance's mount effect (which actually creates the map) having already run
 	// earlier in this same commit.
-	const { mapRef, zoom } = useMapLibreInstance(containerRef);
-	useOwnShipMarker(mapRef, { latitude, longitude, headingDeg });
-	useVesselTrackLayer(mapRef, track);
+	const { mapRef, zoom } = useMapLibreInstance(containerRef, {
+		palette,
+		symbolStyle,
+		safetyContourM,
+	});
+	useOwnShipMarker(mapRef, {
+		latitude,
+		longitude,
+		headingDeg,
+		color: s52Color(palette, "ships"),
+	});
+	useVesselTrackLayer(mapRef, track, palette);
 	useWaypointMarkers(mapRef, {
 		waypoints,
 		legValidation,
@@ -68,6 +114,7 @@ export function MapWidget() {
 		addWaypoint,
 		updateWaypointPosition,
 		setLegValidation,
+		safetyContourM,
 	});
 	useAisMarkers(mapRef, aisVisible ? aisTargets : []);
 
@@ -176,6 +223,13 @@ export function MapWidget() {
 			setAisVisible(e.detail.value === "visible");
 		},
 		[],
+	);
+
+	const handleSymbolStyleValue = useCallback(
+		(e: CustomEvent<{ value: string; previousValue: string }>) => {
+			setSymbolStyle(e.detail.value === "traditional" ? "traditional" : "simplified");
+		},
+		[setSymbolStyle],
 	);
 
 	const handleToggleControls = useCallback(() => {
@@ -300,6 +354,43 @@ export function MapWidget() {
 								</ObcToggleButtonOption>
 							</Tooltip>
 						</ObcToggleButtonGroup>
+						{/* Symbol style and safety contour live here, not in the brilliance panel: those
+						    are chart-content/mission-safety settings a mariner adjusts while looking at
+						    the chart, not display-preference settings that apply uniformly regardless of
+						    what's being planned. */}
+						<ObcToggleButtonGroup
+							aria-label="Symbol style"
+							value={symbolStyle}
+							type={ObcToggleButtonOptionType.text}
+							onValue={handleSymbolStyleValue}
+						>
+							<Tooltip label="Simplified symbols" asChild>
+								<ObcToggleButtonOption
+									value="simplified"
+									aria-label="Simplified symbols"
+								>
+									Simplified
+								</ObcToggleButtonOption>
+							</Tooltip>
+							<Tooltip label="Traditional symbols" asChild>
+								<ObcToggleButtonOption
+									value="traditional"
+									aria-label="Traditional symbols"
+								>
+									Traditional
+								</ObcToggleButtonOption>
+							</Tooltip>
+						</ObcToggleButtonGroup>
+						<ObcNumberInputField
+							ref={safetyContourInputRef}
+							aria-label="Safety contour depth"
+							size={ObcNumberInputFieldSize.Regular}
+							unit="m"
+							value={safetyContourDraft}
+							onInput={(e) => {
+								setSafetyContourDraft(inputValue(e));
+							}}
+						/>
 					</>
 				)}
 			</div>
