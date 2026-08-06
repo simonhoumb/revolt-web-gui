@@ -32,6 +32,7 @@ import { useChartSettings } from "../../context/useChartSettings.js";
 import { useMapLibreInstance, scaleNmForZoom } from "../../hooks/useMapLibreInstance.js";
 import { useOwnShipMarker } from "../../hooks/useOwnShipMarker.js";
 import { useVesselTrackLayer } from "../../hooks/useVesselTrackLayer.js";
+import { useLightSectors } from "../../hooks/useLightSectors.js";
 import { useWaypointMarkers } from "../../hooks/useWaypointMarkers.js";
 import { useAisMarkers } from "../../hooks/useAisMarkers.js";
 import { inputValue } from "../../lib/dom.js";
@@ -91,8 +92,8 @@ export function MapWidget() {
 		};
 	}, [commitSafetyContour]);
 
-	// Call order matters: useOwnShipMarker/useVesselTrackLayer/useWaypointMarkers/useAisMarkers
-	// all read mapRef.current inside a mount effect of their own, relying on
+	// Call order matters: useOwnShipMarker/useVesselTrackLayer/useLightSectors/useWaypointMarkers/
+	// useAisMarkers all read mapRef.current inside a mount effect of their own, relying on
 	// useMapLibreInstance's mount effect (which actually creates the map) having already run
 	// earlier in this same commit.
 	const { mapRef, zoom } = useMapLibreInstance(containerRef, {
@@ -107,6 +108,7 @@ export function MapWidget() {
 		color: s52Color(palette, "ships"),
 	});
 	useVesselTrackLayer(mapRef, track, palette);
+	useLightSectors(mapRef, palette);
 	useWaypointMarkers(mapRef, {
 		waypoints,
 		legValidation,
