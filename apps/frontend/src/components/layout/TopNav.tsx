@@ -20,12 +20,26 @@ import { useVesselHealth, type AlertLevel } from "../../hooks/useVesselHealth.js
 import { useBatteryData } from "../../hooks/useBatteryData.js";
 import { useLayout } from "../../context/useLayout.js";
 import { useApps } from "../../context/useApps.js";
+import { useChartSettings } from "../../context/useChartSettings.js";
 import { useMinuteUpdate } from "../../hooks/useMinuteUpdate.js";
 import { AlertMenu } from "./AlertMenu.js";
 import { WidgetPicker } from "./WidgetPicker.js";
 import { NavigationMenu } from "./NavigationMenu.js";
+import { BrillianceMenu } from "./BrillianceMenu.js";
 import { Tooltip } from "../widgets/Tooltip.js";
 import styles from "./TopNav.module.css";
+
+// Brightness 0 would black out the whole app chrome, which is never useful (real bridge dimmer
+// controls have a non-zero floor for the same reason); clamped to a range that stays usable at
+// both ends instead of mapping the slider's 0-100 range onto CSS filter: brightness()'s 0-1+ range
+// literally.
+const MIN_BRIGHTNESS_FILTER = 0.4;
+const MAX_BRIGHTNESS_FILTER = 1.15;
+
+function brightnessToFilterValue(brightness: number): number {
+	const t = brightness / 100;
+	return MIN_BRIGHTNESS_FILTER + t * (MAX_BRIGHTNESS_FILTER - MIN_BRIGHTNESS_FILTER);
+}
 
 function toObcAlertType(level: AlertLevel | null): AlertType | undefined {
 	if (level === "alarm") return AlertType.Alarm;
@@ -35,19 +49,32 @@ function toObcAlertType(level: AlertLevel | null): AlertType | undefined {
 }
 
 export function TopNav() {
-	const [dusk, setDusk] = useState(true);
 	const [alertMenuOpen, setAlertMenuOpen] = useState(false);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [navMenuOpen, setNavMenuOpen] = useState(false);
 	const [systemMenuOpen, setSystemMenuOpen] = useState(false);
+	const [brillianceMenuOpen, setBrillianceMenuOpen] = useState(false);
 	const wrapperRef = useRef<HTMLDivElement>(null);
 	const systemButtonRef = useRef<ObcSystemButtonElement>(null);
 
-	const toggleTheme = useCallback(() => {
-		const next = !dusk;
-		document.documentElement.setAttribute("data-obc-theme", next ? "dusk" : "day");
-		setDusk(next);
-	}, [dusk]);
+	const { palette, brightness } = useChartSettings();
+
+	// data-obc-theme is the app-wide theme signal OBC's own CSS reads (see openbridge.css); this
+	// keeps the rest of the UI chrome in sync with whatever palette the brilliance panel picks for
+	// the chart, rather than the two ever being independently toggled.
+	useEffect(() => {
+		document.documentElement.setAttribute("data-obc-theme", palette);
+	}, [palette]);
+
+	// No CSS var for this in OBC itself (its brightness prop is a controlled slider with no
+	// built-in visual effect); applied on #root via index.css so it covers the whole app chrome,
+	// consistent with the brilliance panel being one control for everything, not just the chart.
+	useEffect(() => {
+		document.documentElement.style.setProperty(
+			"--chart-brightness",
+			String(brightnessToFilterValue(brightness)),
+		);
+	}, [brightness]);
 
 	const {
 		alertCount,
@@ -77,6 +104,7 @@ export function TopNav() {
 		setAlertMenuOpen((open) => !open);
 		setPickerOpen(false);
 		setNavMenuOpen(false);
+		setBrillianceMenuOpen(false);
 		closeSystemMenu();
 	}, [closeSystemMenu]);
 
@@ -84,6 +112,7 @@ export function TopNav() {
 		setPickerOpen((open) => !open);
 		setAlertMenuOpen(false);
 		setNavMenuOpen(false);
+		setBrillianceMenuOpen(false);
 		closeSystemMenu();
 	}, [closeSystemMenu]);
 
@@ -91,6 +120,15 @@ export function TopNav() {
 		setNavMenuOpen((open) => !open);
 		setAlertMenuOpen(false);
 		setPickerOpen(false);
+		setBrillianceMenuOpen(false);
+		closeSystemMenu();
+	}, [closeSystemMenu]);
+
+	const handleBrillianceClick = useCallback(() => {
+		setBrillianceMenuOpen((open) => !open);
+		setAlertMenuOpen(false);
+		setPickerOpen(false);
+		setNavMenuOpen(false);
 		closeSystemMenu();
 	}, [closeSystemMenu]);
 
@@ -100,10 +138,12 @@ export function TopNav() {
 			setAlertMenuOpen(false);
 			setPickerOpen(false);
 			setNavMenuOpen(false);
+			setBrillianceMenuOpen(false);
 		}
 	}, []);
 
-	const anyMenuOpen = alertMenuOpen || pickerOpen || navMenuOpen || systemMenuOpen;
+	const anyMenuOpen =
+		alertMenuOpen || pickerOpen || navMenuOpen || systemMenuOpen || brillianceMenuOpen;
 	useEffect(() => {
 		if (!anyMenuOpen) return;
 		function handleClickOutside(e: MouseEvent) {
@@ -111,6 +151,7 @@ export function TopNav() {
 				setAlertMenuOpen(false);
 				setPickerOpen(false);
 				setNavMenuOpen(false);
+				setBrillianceMenuOpen(false);
 				closeSystemMenu();
 			}
 		}
@@ -176,8 +217,8 @@ export function TopNav() {
 				pageName={appDef.label}
 				showClock
 				showDimmingButton
-				dimmingButtonActivated={dusk}
-				onDimmingButtonClicked={toggleTheme}
+				dimmingButtonActivated={brillianceMenuOpen}
+				onDimmingButtonClicked={handleBrillianceClick}
 				menuButtonActivated={navMenuOpen}
 				onMenuButtonClicked={handleMenuClick}
 			>
@@ -232,6 +273,7 @@ export function TopNav() {
 				</div>
 			</ObcTopBar>
 			{alertMenuOpen && <AlertMenu alerts={alerts} />}
+			{brillianceMenuOpen && <BrillianceMenu />}
 			{pickerOpen && (
 				<WidgetPicker
 					onClose={() => {

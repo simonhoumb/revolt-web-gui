@@ -137,7 +137,10 @@ beforeEach(() => {
 			this.callback = callback;
 		}
 		observe(el: Element) {
-			this.callback([{ contentRect: el.getBoundingClientRect() } as ResizeObserverEntry], this);
+			this.callback(
+				[{ contentRect: el.getBoundingClientRect() } as ResizeObserverEntry],
+				this,
+			);
 		}
 		unobserve() {
 			return undefined;
