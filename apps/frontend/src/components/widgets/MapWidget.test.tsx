@@ -11,9 +11,12 @@ import { useAisTargets } from "../../hooks/useAisTargets.js";
 import { useMission } from "../../context/useMission.js";
 import { useLegHazards } from "../../context/useLegHazards.js";
 import { useApps } from "../../context/useApps.js";
+import { useChartSettings } from "../../context/useChartSettings.js";
 import { APPS } from "./apps.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
+import type { ChartPalette } from "../../lib/s52Colors.js";
+import { buildOsloFjordStyle } from "../../lib/chartStyle.js";
 
 vi.mock("../../hooks/useGnssData.js", () => ({
 	useGnssData: vi.fn(),
@@ -33,6 +36,9 @@ vi.mock("../../context/useLegHazards.js", () => ({
 vi.mock("../../context/useApps.js", () => ({
 	useApps: vi.fn(),
 }));
+vi.mock("../../context/useChartSettings.js", () => ({
+	useChartSettings: vi.fn(),
+}));
 
 const mockUseGnssData = useGnssData as Mock;
 const mockUseVesselTrack = useVesselTrack as Mock;
@@ -40,6 +46,7 @@ const mockUseAisTargets = useAisTargets as Mock;
 const mockUseMission = useMission as Mock;
 const mockUseLegHazards = useLegHazards as Mock;
 const mockUseApps = useApps as Mock;
+const mockUseChartSettings = useChartSettings as Mock;
 
 function setApp(activeAppId: keyof typeof APPS = "custom") {
 	mockUseApps.mockReturnValue({
@@ -380,6 +387,7 @@ beforeEach(() => {
 	// setup call. The "AIS targets" describe block below overrides this per test.
 	mockUseAisTargets.mockReturnValue([]);
 	setApp();
+	setChartSettings();
 });
 
 afterEach(() => {
@@ -401,41 +409,60 @@ function setTrack(points: TrackPoint[] = []) {
 	mockUseVesselTrack.mockReturnValue(points);
 }
 
+const mockSetPalette = vi.fn();
+const mockSetSymbolStyle = vi.fn();
+const mockSetSafetyContourM = vi.fn();
+const mockSetBrightness = vi.fn();
+
+function setChartSettings(overrides: { palette?: ChartPalette; safetyContourM?: number } = {}) {
+	mockUseChartSettings.mockReturnValue({
+		palette: overrides.palette ?? "dusk",
+		setPalette: mockSetPalette,
+		symbolStyle: "simplified",
+		setSymbolStyle: mockSetSymbolStyle,
+		safetyContourM: overrides.safetyContourM ?? 3,
+		setSafetyContourM: mockSetSafetyContourM,
+		brightness: 50,
+		setBrightness: mockSetBrightness,
+	});
+}
+
 describe("MapWidget", () => {
-	// index.html ships data-obc-theme="dusk" by default (TopNav's dimming
-	// button toggles it to "day"); with no attribute at all -- the jsdom test
-	// environment's starting state -- the widget should also fall back to the
-	// dark style, since "day" is the only value that means light.
-	it("initializes with the dark style by default (no theme attribute)", () => {
+	// ChartSettingsContext defaults to the "dusk" palette (see setChartSettings()'s own default,
+	// matching index.html's data-obc-theme="dusk" and ChartSettingsContext.tsx's DEFAULT_PALETTE).
+	it("initializes with the dusk-palette style by default", () => {
 		setGnss();
 		setTrack();
 		setMission();
 		render(<MapWidget />);
-		expect(mapInstances[0]?.options.style).toBe("/map-styles/oslo-fjord-dark.json");
+		expect(mapInstances[0]?.options.style).toEqual(
+			buildOsloFjordStyle("dusk", "simplified", 3),
+		);
 	});
 
-	it("initializes with the light style when the theme is already day", () => {
-		document.documentElement.setAttribute("data-obc-theme", "day");
+	it("initializes with the day-palette style when the chart settings palette is day", () => {
+		setChartSettings({ palette: "day" });
 		setGnss();
 		setTrack();
 		setMission();
 		render(<MapWidget />);
-		expect(mapInstances[0]?.options.style).toBe("/map-styles/oslo-fjord-light.json");
+		expect(mapInstances[0]?.options.style).toEqual(buildOsloFjordStyle("day", "simplified", 3));
 	});
 
-	it("swaps to the light style when data-obc-theme changes to day", async () => {
-		document.documentElement.setAttribute("data-obc-theme", "dusk");
+	it("swaps to the new palette's style when the chart settings palette changes", () => {
 		setGnss();
 		setTrack();
 		setMission();
-		render(<MapWidget />);
-		document.documentElement.setAttribute("data-obc-theme", "day");
+		const { rerender } = render(<MapWidget />);
 
-		await vi.waitFor(() => {
-			expect(mapInstances[0]?.setStyle).toHaveBeenCalledWith(
-				"/map-styles/oslo-fjord-light.json",
-			);
+		setChartSettings({ palette: "night" });
+		act(() => {
+			rerender(<MapWidget />);
 		});
+
+		expect(mapInstances[0]?.setStyle).toHaveBeenCalledWith(
+			buildOsloFjordStyle("night", "simplified", 3),
+		);
 	});
 
 	it("removes the map instance on unmount", () => {

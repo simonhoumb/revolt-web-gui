@@ -14,6 +14,14 @@
 	position: relative;
 }
 
+/* Overrides day's shared --container-background-color (rgb(247, 247, 247), also used for the card
+   tiles' own interior fill, card.css:17/126) specifically for the grid's own background -- i.e.
+   the gap between tiles, not the tiles themselves -- to a more clearly grey #e0e0e0 rather than
+   the off-white OBC ships. */
+:global(html[data-obc-theme="day"]) .grid {
+	background-color: #e0e0e0;
+}
+
 .tileWrapper {
 	height: 100%;
 	position: relative;

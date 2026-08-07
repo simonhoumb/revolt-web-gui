@@ -39,11 +39,27 @@ CELLS=(NO4G0821 NO4H0820 NO4H0821 NO5G0821 NO5H0820)
 # ENC validation uses it to distinguish "checked and no features found" from
 # "no chart coverage", so it is available for queryRenderedFeatures() but is
 # never rendered in the MapLibre style.
-LAYERS=(
+#
+# Split into two groups for Stage 3 (see below): THINNED_LAYERS get Tippecanoe's
+# default density-based point dropping, POINT_LAYERS don't.
+THINNED_LAYERS=(
 	DEPARE DEPCNT SOUNDG COALNE LNDARE SBDARE SLCONS
 	BOYLAT BOYSAW BOYSPP BOYCAR BCNLAT BCNSPP BCNISD
-	LIGHTS WRECKS OBSTRN UWTROC RESARE TSSLPT TSSBND TSELNE M_COVR
+	WRECKS OBSTRN UWTROC RESARE TSSLPT TSSBND TSELNE M_COVR
 )
+
+# LIGHTS is built without density-based thinning (see Stage 3). A single physical light with
+# multiple color sectors is encoded as several LIGHTS point features stacked at the exact same
+# coordinate (one per sector, distinguished by SECTR1/SECTR2/COLOUR -- see Feature 22's light-sector
+# rendering notes in the frontend). Tippecanoe's --drop-densest-as-needed treats exactly-co-located
+# points as maximally "dense" and drops them first, disproportionately harder than the rest of the
+# chart's normally-spread-out features -- confirmed directly against the built tiles: a real light's
+# lights layer was entirely empty at zoom 9-10, and only 1 of 6 co-located sector features survived
+# at zoom 11-12, more only appearing as the map was zoomed in further. LIGHTS is small (a few hundred
+# features across this whole delivery), so retaining every point at every zoom costs nothing size-wise.
+POINT_LAYERS=(LIGHTS)
+
+LAYERS=("${THINNED_LAYERS[@]}" "${POINT_LAYERS[@]}")
 
 rm -rf "$CONSOLIDATED_DIR" "$GEOJSON_DIR" "$OUTPUT_DIR"
 mkdir -p "$CONSOLIDATED_DIR" "$GEOJSON_DIR" "$OUTPUT_DIR"
@@ -98,16 +114,32 @@ done
 
 echo "== Building oslo-fjord.mbtiles (tippecanoe) =="
 
-# This Tippecanoe version applies one zoom range to every input layer.
-# Layer-specific visibility is therefore controlled in the MapLibre style
-# using per-layer minzoom values.
-tippecanoe_args=(-o "$OUTPUT_DIR/oslo-fjord.mbtiles" -f -Z6 -z16 --drop-densest-as-needed --extend-zooms-if-still-dropping)
+# This Tippecanoe version applies one zoom range and one point-dropping policy to every layer in a
+# single invocation -- it has no per-layer override for either. Layer-specific *visibility* is
+# already handled separately, in the MapLibre style's per-layer minzoom values; per-layer *dropping*
+# needs two separate tippecanoe builds merged with tile-join instead, so POINT_LAYERS (LIGHTS) can
+# opt out of density-based thinning without disabling it for every other, genuinely dense layer.
+THINNED_MBTILES="$DATA_DIR/thinned.mbtiles"
+POINT_MBTILES="$DATA_DIR/points.mbtiles"
 
-for layer in "${LAYERS[@]}"; do
+thinned_args=(-o "$THINNED_MBTILES" -f -Z6 -z16 --drop-densest-as-needed --extend-zooms-if-still-dropping)
+for layer in "${THINNED_LAYERS[@]}"; do
 	layer_lower=$(echo "$layer" | tr 'A-Z' 'a-z')
-	tippecanoe_args+=(-L "${layer_lower}:$GEOJSON_DIR/${layer_lower}.geojson")
+	thinned_args+=(-L "${layer_lower}:$GEOJSON_DIR/${layer_lower}.geojson")
 done
+tippecanoe "${thinned_args[@]}"
 
-tippecanoe "${tippecanoe_args[@]}"
+# -r1 sets Tippecanoe's point-thinning rate to "keep everything" -- every LIGHTS feature, including
+# every co-located sector of a single physical light, is present at every zoom level it would
+# otherwise appear at.
+point_args=(-o "$POINT_MBTILES" -f -Z6 -z16 -r1)
+for layer in "${POINT_LAYERS[@]}"; do
+	layer_lower=$(echo "$layer" | tr 'A-Z' 'a-z')
+	point_args+=(-L "${layer_lower}:$GEOJSON_DIR/${layer_lower}.geojson")
+done
+tippecanoe "${point_args[@]}"
+
+tile-join -o "$OUTPUT_DIR/oslo-fjord.mbtiles" -f "$THINNED_MBTILES" "$POINT_MBTILES"
+rm -f "$THINNED_MBTILES" "$POINT_MBTILES"
 
 echo "== Done: $OUTPUT_DIR/oslo-fjord.mbtiles =="

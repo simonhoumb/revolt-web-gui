@@ -16,6 +16,14 @@
 	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
 }
 
+/* The dark drop-shadow above is meant as a contrast halo against a busy/dark chart -- it's
+   invisible against dusk/night's near-black water, but reads as a visible dark smudge against
+   day/bright's light backgrounds, where the marker's own color already contrasts fine without it. */
+:global(html[data-obc-theme="day"]) .vesselMarker,
+:global(html[data-obc-theme="bright"]) .vesselMarker {
+	filter: none;
+}
+
 .waypointMarker {
 	/* MapLibre's own .maplibregl-marker class (applied to the same element) sets position:
 	   absolute and positions the marker purely via a CSS transform. "relative" here would win the
@@ -45,6 +53,11 @@
 	color: var(--element-highlighted-color, #ffcf6e);
 }
 
+:global(html[data-obc-theme="day"]) .waypointMarker,
+:global(html[data-obc-theme="bright"]) .waypointMarker {
+	filter: none;
+}
+
 .aisTargetMarker {
 	/* See .waypointMarker's comment: MapLibre positions markers purely via a CSS transform on
 	   this same element, so "absolute" (not "relative") is required to avoid block-stacking. */
@@ -54,6 +67,11 @@
 	color: var(--element-active-color, #d0d0d0);
 	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
 	cursor: pointer;
+}
+
+:global(html[data-obc-theme="day"]) .aisTargetMarker,
+:global(html[data-obc-theme="bright"]) .aisTargetMarker {
+	filter: none;
 }
 
 /* Strips MapLibre's own default popup chrome (background/padding/shadow, and its own triangle

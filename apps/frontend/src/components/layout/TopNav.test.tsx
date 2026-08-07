@@ -6,6 +6,7 @@ import { useVesselHealth } from "../../hooks/useVesselHealth.js";
 import { useBatteryData } from "../../hooks/useBatteryData.js";
 import { useLayout } from "../../context/useLayout.js";
 import { useApps } from "../../context/useApps.js";
+import { useChartSettings } from "../../context/useChartSettings.js";
 import { APPS } from "../widgets/apps.js";
 import { useMinuteUpdate } from "../../hooks/useMinuteUpdate.js";
 
@@ -21,6 +22,9 @@ vi.mock("../../context/useLayout.js", () => ({
 vi.mock("../../context/useApps.js", () => ({
 	useApps: vi.fn(),
 }));
+vi.mock("../../context/useChartSettings.js", () => ({
+	useChartSettings: vi.fn(),
+}));
 vi.mock("../../hooks/useMinuteUpdate.js", () => ({
 	useMinuteUpdate: vi.fn(),
 }));
@@ -29,11 +33,14 @@ const mockUseVesselHealth = useVesselHealth as Mock;
 const mockUseBatteryData = useBatteryData as Mock;
 const mockUseLayout = useLayout as Mock;
 const mockUseApps = useApps as Mock;
+const mockUseChartSettings = useChartSettings as Mock;
 const mockUseMinuteUpdate = useMinuteUpdate as Mock;
 
 const toggleEditMode = vi.fn();
 const setEditMode = vi.fn();
 const setActiveApp = vi.fn();
+const setPalette = vi.fn();
+const setBrightness = vi.fn();
 
 function setDefaults() {
 	mockUseVesselHealth.mockReturnValue({
@@ -75,6 +82,16 @@ function setDefaults() {
 		isLocked: false,
 		setActiveApp,
 	});
+	mockUseChartSettings.mockReturnValue({
+		palette: "dusk",
+		setPalette,
+		symbolStyle: "simplified",
+		setSymbolStyle: vi.fn(),
+		safetyContourM: 3,
+		setSafetyContourM: vi.fn(),
+		brightness: 50,
+		setBrightness,
+	});
 	mockUseMinuteUpdate.mockReturnValue("2026-07-15T00:00:00.000Z");
 }
 
@@ -84,20 +101,48 @@ afterEach(() => {
 });
 
 describe("TopNav", () => {
-	it("toggles the theme attribute on the document root and the dimming button state", () => {
+	it("syncs the data-obc-theme attribute from the chart settings palette", () => {
 		setDefaults();
 		document.documentElement.removeAttribute("data-obc-theme");
 		render(<TopNav />);
+		expect(document.documentElement.getAttribute("data-obc-theme")).toBe("dusk");
+	});
 
-		const dimButton = document.querySelector("obc-top-bar") as HTMLElement & {
-			dimmingButtonActivated: boolean;
-		};
-		expect(dimButton.dimmingButtonActivated).toBe(true);
+	it("opens the brilliance panel on the dimming button click, and closes it again on a second click", () => {
+		setDefaults();
+		render(<TopNav />);
+
+		expect(document.querySelector("obc-brilliance-menu")).toBeNull();
+		act(() => {
+			document
+				.querySelector("obc-top-bar")
+				?.dispatchEvent(new CustomEvent("dimming-button-clicked"));
+		});
+		expect(document.querySelector("obc-brilliance-menu")).not.toBeNull();
 
 		act(() => {
-			dimButton.dispatchEvent(new CustomEvent("dimming-button-clicked"));
+			document
+				.querySelector("obc-top-bar")
+				?.dispatchEvent(new CustomEvent("dimming-button-clicked"));
 		});
-		expect(document.documentElement.getAttribute("data-obc-theme")).toBe("day");
+		expect(document.querySelector("obc-brilliance-menu")).toBeNull();
+	});
+
+	it("changing the brilliance panel's palette updates the chart settings, which the data-obc-theme sync effect then applies", () => {
+		setDefaults();
+		render(<TopNav />);
+		act(() => {
+			document
+				.querySelector("obc-top-bar")
+				?.dispatchEvent(new CustomEvent("dimming-button-clicked"));
+		});
+
+		act(() => {
+			document
+				.querySelector("obc-brilliance-menu")
+				?.dispatchEvent(new CustomEvent("palette-changed", { detail: { value: "night" } }));
+		});
+		expect(setPalette).toHaveBeenCalledWith("night");
 	});
 
 	it("opens the widget picker on click, and closes it again on a second click", () => {
