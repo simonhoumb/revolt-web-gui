@@ -399,6 +399,7 @@ function symbolLayer(
 	minzoom: number,
 	iconSize: number,
 	iconOffset?: [number, number],
+	iconOpacity?: ExpressionSpecification,
 ): LayerSpecification {
 	return {
 		id,
@@ -412,6 +413,7 @@ function symbolLayer(
 			"icon-allow-overlap": true,
 			...(iconOffset ? { "icon-offset": iconOffset } : {}),
 		},
+		...(iconOpacity ? { paint: { "icon-opacity": iconOpacity } } : {}),
 	};
 }
 
@@ -424,6 +426,19 @@ function symbolLayer(
 // above the main symbol, the same idea real S-52 point symbols use) keeps both visible and legible
 // as separate marks instead of occluding each other.
 const LIGHT_ICON_OFFSET: [number, number] = [0, -16];
+
+// useLightSectors.ts already draws a colored ring (with a black outline and dashed sector-limit
+// lines) around every light that has real SECTR1/SECTR2 data -- showing the point icon on top of
+// that ring too is redundant (the ring already conveys "there's a light here" and its color(s) more
+// precisely than one representative icon color can) and visually competes with it. Omnidirectional
+// lights have no sector concept and no ring, so the point icon stays the only indicator for those.
+//
+// This hides the icon via icon-opacity, not a layer filter: useLightSectors.ts finds sector-bearing
+// features by calling queryRenderedFeatures() against this same "lights" layer, which only sees
+// features the layer actually renders -- a filter excluding sectored features would make them
+// unqueryable too, silently breaking every ring. Opacity keeps the feature "rendered" (and
+// therefore queryable) while making it visually invisible.
+const LIGHT_ICON_OPACITY: ExpressionSpecification = ["case", ["has", "SECTR1"], 0, 1];
 
 // OBC's traditional buoy/beacon icons are thin outline linework (paper-chart-style symbols),
 // noticeably harder to pick out on a busy chart than the simplified set's solid filled shapes at
@@ -443,7 +458,7 @@ function aidsToNavigationLayers(symbolStyle: SymbolStyle): LayerSpecification[] 
 		symbolLayer("bcnlat", "bcnlat", BEACON_LATERAL_ICON, 11, size),
 		symbolLayer("bcnspp", "bcnspp", "beacon-special-purpose", 11, size),
 		symbolLayer("bcnisd", "bcnisd", "beacon-isolated-danger", 11, size),
-		symbolLayer("lights", "lights", LIGHT_ICON, 9, 1.0, LIGHT_ICON_OFFSET),
+		symbolLayer("lights", "lights", LIGHT_ICON, 9, 1.0, LIGHT_ICON_OFFSET, LIGHT_ICON_OPACITY),
 	];
 }
 
