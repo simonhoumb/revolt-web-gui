@@ -1,6 +1,7 @@
 import { useBridgeData } from "../context/useBridgeData.js";
 import { useLiveTick } from "./useLiveTick.js";
 import { isStale } from "../lib/staleness.js";
+import { DHT22_STALE_MS } from "../lib/thresholds.js";
 
 // Hardware/actuators/firmware/stern/src/main.cpp:79-80 and .../bow/src/main.cpp:54-55 define
 // critical_temperature_level = 100.0 and critical_humidity_level = 99.0 identically on both
@@ -54,24 +55,24 @@ export function useEnclosureHealthData(): EnclosureHealthData {
 			stern: {
 				valueC: temperature.stern?.value_c,
 				status: temperatureStatus(temperature.stern?.value_c ?? null),
-				stale: isStale(temperature.stern?.timestamp_ms, now),
+				stale: isStale(temperature.stern?.timestamp_ms, now, DHT22_STALE_MS),
 			},
 			bow: {
 				valueC: temperature.bow?.value_c,
 				status: temperatureStatus(temperature.bow?.value_c ?? null),
-				stale: isStale(temperature.bow?.timestamp_ms, now),
+				stale: isStale(temperature.bow?.timestamp_ms, now, DHT22_STALE_MS),
 			},
 		},
 		humidity: {
 			stern: {
 				valuePct: humidity.stern?.value_pct,
 				status: humidityStatus(humidity.stern?.value_pct ?? null),
-				stale: isStale(humidity.stern?.timestamp_ms, now),
+				stale: isStale(humidity.stern?.timestamp_ms, now, DHT22_STALE_MS),
 			},
 			bow: {
 				valuePct: humidity.bow?.value_pct,
 				status: humidityStatus(humidity.bow?.value_pct ?? null),
-				stale: isStale(humidity.bow?.timestamp_ms, now),
+				stale: isStale(humidity.bow?.timestamp_ms, now, DHT22_STALE_MS),
 			},
 		},
 		emergencyStopActive: emergencyStop?.active ?? false,
