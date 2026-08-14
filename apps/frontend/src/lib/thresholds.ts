@@ -14,3 +14,9 @@ export const THRUSTER_MAX_AMPERES = 30.0;
 // for long. Much shorter than AIS's own multi-minute staleness window (useAisTargets.ts), which
 // reflects real AIS reporting intervals rather than a continuous telemetry topic going quiet.
 export const SENSOR_STALE_MS = 5_000;
+
+// DHT22 (enclosure temperature/humidity) is a documented outlier: both firmware boards only
+// publish it every 10s (SENSOR_HUMIDITY_INTERVAL/SENSOR_TEMPERATURE_INTERVAL in
+// Hardware/actuators/firmware/{stern,bow}/src/main.cpp), well past the 5s default tuned for
+// sub-second topics -- readings were flipping to stale for roughly half of every publish cycle.
+export const DHT22_STALE_MS = 25_000;

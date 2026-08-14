@@ -8,7 +8,7 @@ import {
 } from "./useEnclosureHealthData.js";
 import { useBridgeData } from "../context/useBridgeData.js";
 import type { BridgeData } from "../context/bridgeDataReducer.js";
-import { SENSOR_STALE_MS } from "../lib/thresholds.js";
+import { SENSOR_STALE_MS, DHT22_STALE_MS } from "../lib/thresholds.js";
 
 vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
@@ -163,10 +163,16 @@ describe("useEnclosureHealthData — staleness", () => {
 		expect(result.current.emergencyStopStale).toBe(false);
 		expect(result.current.actuatorStale).toBe(false);
 
+		// emergencyStop/linearActuator use the shared SENSOR_STALE_MS window; temperature/humidity
+		// use the longer DHT22_STALE_MS window since the sensor only publishes every 10s.
 		vi.setSystemTime(SENSOR_STALE_MS + 1);
 		rerender();
-		expect(result.current.temperature.bow.stale).toBe(true);
+		expect(result.current.temperature.bow.stale).toBe(false);
 		expect(result.current.emergencyStopStale).toBe(true);
 		expect(result.current.actuatorStale).toBe(true);
+
+		vi.setSystemTime(DHT22_STALE_MS + 1);
+		rerender();
+		expect(result.current.temperature.bow.stale).toBe(true);
 	});
 });
