@@ -182,7 +182,7 @@ async def test_describe_commands_resolves_topic_select_allowed_values_per_target
 	echo = next(m for m in metas if m.command_id == "echo_topic")
 	assert echo.params[0].kind == "topic_select"
 	assert "/fix" in (echo.params[0].allowed_values or [])
-	assert "/waypoint_list" not in (echo.params[0].allowed_values or [])
+	assert "/revolt/sim/stc/position/hull" not in (echo.params[0].allowed_values or [])
 
 
 async def test_describe_commands_text_params_have_no_allowed_values() -> None:
