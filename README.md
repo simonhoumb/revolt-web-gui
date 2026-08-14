@@ -2,6 +2,10 @@
 
 Web-based GUI for monitoring and controlling the Revolt autonomous surface vessel. Provides real-time sensor feeds, map visualization, trajectory planning, and mission control over a ROS2 bridge.
 
+<div align="center">
+	<img width="720" height="405" alt="ReVoltGuiPresentationVideoPlus" src="https://github.com/user-attachments/assets/7e44871b-918d-48bb-9824-63ae21e09e8c" />
+</div>
+
 ## Stack
 
 | Layer            | Technology                                            |
