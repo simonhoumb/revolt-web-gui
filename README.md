@@ -50,7 +50,7 @@ WebApp/
 
 Both pnpm and uv install to `~/.local/bin` on a fresh Ubuntu account, which usually isn't on `PATH` by default, see Troubleshooting below if either command isn't found after installing.
 
-### Editor setup [Optional]
+### Editor setup [Optional, but recommended when using VSCode]
 
 Open the repo folder in VS Code and accept the "install recommended extensions" prompt (`.vscode/extensions.json`: ESLint, Prettier, Ruff, Python). Format-on-save is already configured. The Python interpreter is pinned to `apps/backend/.venv/bin/python`, so run the Python install step below before VS Code can resolve backend imports.
 
