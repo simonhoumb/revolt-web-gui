@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useRadarData } from "./useRadarData.js";
-import { useBridgeData } from "../context/BridgeDataContext.js";
-import type { BridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import type { BridgeData } from "../context/bridgeDataReducer.js";
 import type { RadarSpokeMsg } from "@revolt/shared-types";
 
-vi.mock("../context/BridgeDataContext.js", () => ({
+vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -30,7 +30,9 @@ const base: BridgeData = {
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,
@@ -80,6 +82,7 @@ describe("useRadarData", () => {
 	it("returns an empty buffer when no spoke has arrived", () => {
 		const { result } = renderHook(() => useRadarData());
 		expect(result.current.spokes).toEqual([]);
+		expect(result.current.stale).toBe(true);
 	});
 
 	it("accumulates spokes at distinct azimuths into the buffer", () => {
@@ -106,15 +109,24 @@ describe("useRadarData", () => {
 		expect(result.current.spokes).toHaveLength(1);
 	});
 
-	it("clears the buffer after the stale timeout with no new spoke", async () => {
+	it("is not stale right after a spoke arrives", () => {
+		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(0.1) });
+		const { result } = renderHook(() => useRadarData());
+		flushRaf();
+		expect(result.current.stale).toBe(false);
+	});
+
+	it("keeps the last sweep but flags it stale after the timeout with no new spoke", async () => {
 		mockUseBridgeData.mockReturnValue({ ...base, radarSpoke: spoke(0.1) });
 		const { result } = renderHook(() => useRadarData());
 		flushRaf();
 		expect(result.current.spokes).toHaveLength(1);
+		expect(result.current.stale).toBe(false);
 
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(6000);
 		});
-		expect(result.current.spokes).toHaveLength(0);
+		expect(result.current.spokes).toHaveLength(1);
+		expect(result.current.stale).toBe(true);
 	});
 });

@@ -1,3 +1,5 @@
+"""The SensorReading table model: a generic per-sensor-type raw reading record."""
+
 import enum
 import uuid
 from datetime import datetime
@@ -11,6 +13,8 @@ from revolt_api.models.base import Base, TimestampMixin, new_uuid
 
 
 class SensorType(enum.StrEnum):
+	"""Which vessel sensor a SensorReading row came from."""
+
 	gnss = "gnss"
 	imu = "imu"
 	thruster_stern_port = "thruster_stern_port"
@@ -25,6 +29,8 @@ class SensorType(enum.StrEnum):
 
 
 class SensorReading(Base, TimestampMixin):
+	"""One raw reading from a vessel sensor, keyed by type; shape of raw_data varies by sensor_type."""
+
 	__tablename__ = "sensor_reading"
 
 	id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)

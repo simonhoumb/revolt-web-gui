@@ -13,6 +13,7 @@ export interface TrackPoint {
 	timestampMs: number;
 }
 
+/** Own-ship past-track breadcrumb trail, sampled at a fixed interval over a rolling window. */
 export function useVesselTrack(): TrackPoint[] {
 	const { latitude, longitude } = useGnssData();
 	const pointsRef = useRef<TrackPoint[]>([]);

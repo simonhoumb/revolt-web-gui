@@ -19,6 +19,7 @@ import {
 	RosCommandNotFoundError,
 	rosCommandApi,
 } from "../../lib/rosCommandApi.js";
+import { matchRank } from "./matchRank.js";
 import styles from "./RosCommandWidget.module.css";
 
 interface HistoryEntry {
@@ -35,18 +36,6 @@ function paramsSummaryFor(params: Record<string, string>): string {
 	const entries = Object.entries(params).filter(([, value]) => value !== "");
 	if (entries.length === 0) return "";
 	return entries.map(([name, value]) => `${name}=${value}`).join(" ");
-}
-
-// 0 if the match is at the start of the id/label, 1 if it only appears somewhere inside --
-// used to sort the best match first instead of leaving suggestions in registry order once
-// several of them match. ObcContextMenuInput's items only accept a plain string label (no rich/
-// bold content -- see the option considered and rejected for this), so ranking is the way this
-// app surfaces "which match is best" within that constraint.
-export function matchRank(command: RosCommandMeta, needle: string): number {
-	const startsWith =
-		command.command_id.toLowerCase().startsWith(needle) ||
-		command.label.toLowerCase().startsWith(needle);
-	return startsWith ? 0 : 1;
 }
 
 export function RosCommandWidget() {
@@ -181,7 +170,18 @@ export function RosCommandWidget() {
 		setSelectedCommand(command);
 		setPromptValue("");
 		setPromptFocused(false);
-		setParamValues({});
+		// ObcDropdownButton displays options[0] as selected by default whenever its value prop is
+		// unset, but only fires dropdown-change (which is what updates paramValues) once the user
+		// picks a different option -- same as a native <select>, choosing the option that's
+		// already shown doesn't fire a change event. Without seeding paramValues here, that first
+		// option is never sent, either.
+		const defaults: Record<string, string> = {};
+		for (const param of command.params) {
+			const defaultValue = param.allowed_values?.[0];
+			if (param.kind === "text" || defaultValue === undefined) continue;
+			defaults[param.name] = defaultValue;
+		}
+		setParamValues(defaults);
 	}
 
 	function clearSelection() {

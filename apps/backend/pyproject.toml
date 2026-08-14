@@ -15,6 +15,7 @@ dependencies = [
     "alembic>=1.13",
     "structlog>=24.0",
     "websockets>=13",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +25,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "anyio>=4",
     "ruff>=0.5",
+    "pdoc>=15",
 ]
 
 [build-system]
@@ -39,8 +41,17 @@ target-version = "py312"
 src = ["src"]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501", "W191"]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "D"]
+# D206 (docstring indented with tabs) conflicts with this project's tab indentation, same
+# reason E501/W191 are ignored.
+ignore = ["E501", "W191", "D206"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"migrations/**" = ["D"]
 
 [tool.ruff.format]
 quote-style = "double"

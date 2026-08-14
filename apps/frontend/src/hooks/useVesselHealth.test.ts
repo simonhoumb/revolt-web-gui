@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useVesselHealth } from "./useVesselHealth.js";
-import { useBridgeData } from "../context/BridgeDataContext.js";
-import type { BridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import type { BridgeData } from "../context/bridgeDataReducer.js";
 
-vi.mock("../context/BridgeDataContext.js", () => ({
+vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -29,7 +29,9 @@ const base: BridgeData = {
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,

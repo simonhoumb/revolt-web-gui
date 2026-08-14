@@ -3,7 +3,7 @@
 Extracted from routers/mission.py so the router stays a thin HTTP boundary (parse the request,
 fetch the mission or 404, delegate here, return the result) while this module owns ENC
 re-validation policy, bridge publish/ack orchestration, resume-cache handling, and the associated
-audit logging -- previously all fused into the route handlers themselves.
+audit logging, previously all fused into the route handlers themselves.
 """
 
 import uuid
@@ -38,13 +38,13 @@ _PHYSICAL_AUTONOMY_NOTE = (
 
 _IN_FLIGHT_STATES: frozenset[MissionExecutionState] = frozenset({"starting", "active", "pausing"})
 
-# Missions in these statuses aren't running or resumable -- the vessel has no live interest in
+# Missions in these statuses aren't running or resumable; the vessel has no live interest in
 # their waypoints, so editing them safely invalidates "loaded" (see invalidate_load_if_edited).
 _EDITABLE_WITHOUT_VESSEL_IMPACT: frozenset[MissionStatus] = frozenset(
 	{MissionStatus.draft, MissionStatus.aborted, MissionStatus.completed}
 )
 
-# Starting is valid from any status except active -- an already-active mission has nothing to
+# Starting is valid from any status except active: an already-active mission has nothing to
 # (re)start. draft/aborted/completed all fall through to the fresh-start branch (loaded-check
 # below); paused additionally allows the resume branch (see the stricter check inside it).
 _START_ALLOWED_STATUSES: frozenset[MissionStatus] = frozenset(
@@ -53,10 +53,13 @@ _START_ALLOWED_STATUSES: frozenset[MissionStatus] = frozenset(
 
 
 async def get_loaded_mission_id(db: AsyncSession) -> uuid.UUID | None:
-	"""The mission most recently sent to the vessel -- "loaded," in the ECDIS/autopilot sense.
-	Not gated on last_send_status: a send attempt reaching the wire is what counts (physical
-	target sends always resolve to "timed_out", no echo mechanism exists there -- requiring
-	"acknowledged" would make the loaded concept permanently empty on the real vessel)."""
+	"""The mission most recently sent to the vessel: "loaded," in the ECDIS/autopilot sense.
+
+	Not gated on last_send_status == "acknowledged": a dropped/delayed echo (e.g. rosbridge
+	hiccup, or the 1Hz /waypoint_list republish just missing the ack window) would otherwise
+	make "loaded" flicker false despite the mission having reached the vessel. Reaching the
+	wire is what counts.
+	"""
 	result = await db.execute(
 		select(Mission.id)
 		.where(Mission.last_sent_at.isnot(None))
@@ -67,10 +70,12 @@ async def get_loaded_mission_id(db: AsyncSession) -> uuid.UUID | None:
 
 
 def reject_if_superseding_mission(bridge: RosBridgeClient, mission_id: uuid.UUID) -> None:
-	"""Refuse to send a *different* mission while one is genuinely in-flight on the vessel --
-	the vessel has one physical waypoint queue, not one per mission, so sending mission B while
-	mission A is active would silently hijack A's route out from under it. Re-sending the same
-	tracked mission (e.g. pushing edited waypoints mid-run) is unaffected."""
+	"""Refuse to send a different mission while one is genuinely in-flight on the vessel.
+
+	The vessel has one physical waypoint queue, not one per mission, so sending mission B while
+	A is active would silently hijack A's route. Re-sending the same tracked mission (e.g.
+	pushing edited waypoints mid-run) is unaffected.
+	"""
 	tracked = bridge.tracked_mission_id
 	if (
 		tracked is not None
@@ -90,10 +95,11 @@ def reject_if_superseding_mission(bridge: RosBridgeClient, mission_id: uuid.UUID
 
 
 def reject_if_stale_mission(bridge: RosBridgeClient, mission_id: uuid.UUID) -> None:
-	"""Defensive guard for pause/terminate: refuse to act if a *different* mission is the one
-	currently tracked, so a stale browser tab can't pause/terminate the wrong route. Fails open
-	when nothing is tracked (e.g. after a backend restart, in-memory tracking state is lost) so a
-	genuinely stuck mission can still be terminated."""
+	"""Defensive guard for pause/terminate: refuse to act on a different mission than the tracked one.
+
+	Fails open when nothing is tracked (e.g. after a backend restart) so a genuinely stuck
+	mission can still be terminated.
+	"""
 	tracked = bridge.tracked_mission_id
 	if tracked is not None and tracked != str(mission_id):
 		raise HTTPException(
@@ -101,7 +107,7 @@ def reject_if_stale_mission(bridge: RosBridgeClient, mission_id: uuid.UUID) -> N
 			detail={
 				"message": (
 					f"Mission {tracked} is the mission currently tracked on the vessel, not this "
-					"one -- refusing to avoid acting on the wrong route."
+					"one; refusing to avoid acting on the wrong route."
 				),
 				"reason": "stale_mission",
 			},
@@ -111,9 +117,12 @@ def reject_if_stale_mission(bridge: RosBridgeClient, mission_id: uuid.UUID) -> N
 def reject_invalid_transition(
 	mission: Mission, allowed: frozenset[MissionStatus], action: str
 ) -> None:
-	"""Enforce the mission execution state machine server-side -- the frontend disables buttons
-	for the same reason, but that's a UI courtesy, not a guarantee (e.g. nothing stops a direct
-	curl call). Without this, pausing an aborted mission would silently mark it "paused" again."""
+	"""Enforce the mission execution state machine server-side.
+
+	The frontend disables buttons for the same reason, but that's a UI courtesy, not a guarantee
+	(nothing stops a direct API call). Without this, pausing an aborted mission would silently
+	mark it "paused" again.
+	"""
 	if mission.status not in allowed:
 		raise HTTPException(
 			status_code=409,
@@ -126,11 +135,12 @@ def reject_invalid_transition(
 
 def invalidate_load_if_edited(mission: Mission) -> None:
 	"""Clear last_sent_at/last_send_status when a mission that isn't active/paused is edited.
-	Deliberately does NOT clear it for active/paused missions: the vessel's guidance stack keeps
-	its own independent copy of the waypoints once published (confirmed by reading the
-	ControlSystem repo), so it keeps executing the pre-edit route regardless of what the planner
-	now shows -- invalidating "loaded" there would make Mission Control falsely claim nothing is
-	loaded while the vessel is still physically executing the old plan."""
+
+	Deliberately not cleared for active/paused missions: the vessel's guidance stack keeps its
+	own copy of the waypoints once published, so it keeps executing the pre-edit route
+	regardless of what the planner now shows. Invalidating "loaded" there would make Mission
+	Control falsely claim nothing is loaded while the vessel is still executing the old plan.
+	"""
 	if mission.status in _EDITABLE_WITHOUT_VESSEL_IMPACT and mission.last_sent_at is not None:
 		mission.last_sent_at = None
 		mission.last_send_status = None
@@ -138,8 +148,10 @@ def invalidate_load_if_edited(mission: Mission) -> None:
 
 async def _run_hazard_validation(db: AsyncSession, mission: Mission) -> ValidationResult:
 	"""Run the Phase 2 authoritative ENC hazard check and persist the result onto the mission.
-	Shared by validate_mission, send_mission, and start_mission -- all three must re-run this
-	fresh rather than trusting a stale mission.last_validation_status."""
+
+	Shared by validate_mission, send_mission, and start_mission: all three must re-run this
+	fresh rather than trusting a stale mission.last_validation_status.
+	"""
 	result = await evaluate_route_hazards(
 		db, mission.waypoints, settings.safety_margin_m, settings.safety_contour_m
 	)
@@ -158,8 +170,11 @@ async def _reject_if_hazards_blocked(
 	action: str,
 	verb: str,
 ) -> None:
-	"""Refuse a send/start whose route was found blocked -- shared by send_mission and
-	start_mission, the two endpoints that actually publish to the vessel."""
+	"""Refuse a send/start whose route was found blocked.
+
+	Shared by send_mission and start_mission, the two endpoints that actually publish to the
+	vessel.
+	"""
 	if validation.status != "blocked":
 		return
 	await log_action(
@@ -185,13 +200,13 @@ async def _reject_if_hazards_blocked(
 async def validate_mission(
 	db: AsyncSession, session_id: str, mission: Mission
 ) -> MissionValidationResult:
-	"""Authoritative server-side ENC hazard check (Phase 2) against the enc_* PostGIS tables
-	(infra/enc-pipeline/ingest_postgis.sh) — independent of whatever chart tiles happen to be
-	rendered in the requesting browser's current viewport/zoom. See encValidation.ts's Phase 1
-	client-side check (advisory only) and WebApp/CLAUDE.md's ENC validation section for why that
-	distinction matters. send_mission() below always re-runs this itself before publishing —
-	this exists so the frontend can show hazard state before the operator attempts a send at
-	all, not as the only gate.
+	"""Authoritative server-side ENC hazard check (Phase 2).
+
+	Checked against the enc_* PostGIS tables (infra/enc-pipeline/ingest_postgis.sh), independent
+	of whatever chart tiles the browser happens to have rendered. See encValidation.ts's Phase 1
+	client-side check (advisory only) for why that distinction matters. send_mission() always
+	re-runs this itself before publishing; this endpoint exists so the frontend can show hazard
+	state before the operator even attempts a send, not as the only gate.
 	"""
 	result = await _run_hazard_validation(db, mission)
 	await log_action(
@@ -212,20 +227,16 @@ async def validate_mission(
 async def send_mission(
 	db: AsyncSession, bridge: RosBridgeClient, session_id: str, mission: Mission
 ) -> MissionSendResult:
-	"""Re-validate (Phase 2), then publish the mission's full waypoint list and wait for the
-	sim's /waypoint_list echo to confirm it landed (see RosBridgeClient.publish_and_await_ack).
+	"""Re-validate (Phase 2), then publish the mission's full waypoint list.
 
-	Always re-runs the authoritative hazard check itself rather than trusting a client-reported
-	"already validated" flag — a route that was safe when last checked, or never checked at all,
-	must not reach the vessel unexamined. A "blocked" result refuses the send outright (409);
-	"warning" (e.g. a shallow-water crossing) and "no_data" (route passes outside charted ENC
-	coverage) do not — the vessel is tested in areas this delivery has no chart data for at all, so
-	sending has to stay possible there. Sending isn't the only way to catch either one, either —
-	the operator has already seen them surfaced by Phase 1 while planning.
-
-	On BRIDGE_TARGET=physical there is currently nothing that echoes /waypoint_list back, so
-	a send there will correctly resolve to "timed_out" rather than being special-cased —
-	that is honest degradation, not a bug, until a physical-vessel ack path exists.
+	Waits for waypoint_switcher_node's /waypoint_list echo to confirm it landed (see
+	RosBridgeClient.publish_and_await_ack) -- the same topic and wire format on both
+	BRIDGE_TARGET=simulation and physical, since ControlSystemROS2's waypoint_switcher node
+	runs on the real vessel too. Always re-runs the hazard check itself rather than trusting a
+	client-reported "already validated" flag; a route that was safe when last checked, or never
+	checked at all, must not reach the vessel unexamined. "blocked" refuses the send (409);
+	"warning" and "no_data" (route outside charted ENC coverage) do not, since the vessel is
+	tested in areas this delivery has no chart data for.
 	"""
 	mission_id = mission.id
 	waypoints = mission.waypoints
@@ -246,7 +257,7 @@ async def send_mission(
 	)
 
 	if status != "not_connected" and bridge.has_resume_points():
-		# Any publish to /update_waypoint_list replaces the vessel's entire queue -- whatever any
+		# Any publish to /update_waypoint_list replaces the vessel's entire queue, so whatever any
 		# previously-paused mission's resume snapshot remembered (including this same mission's
 		# own stale one, if re-sending after edits) no longer reflects reality.
 		invalidated = bridge.clear_resume_cache()
@@ -287,20 +298,18 @@ async def send_mission(
 async def start_mission(
 	db: AsyncSession, bridge: RosBridgeClient, session_id: str, mission: Mission
 ) -> MissionExecutionResult:
-	"""Start executing a mission. Two distinct cases:
+	"""Start executing a mission, handling two distinct cases.
 
-	- Fresh start (no resume_cache entry): the waypoints must already be loaded on the vessel via
-	a prior /send -- mirrors real ECDIS/autopilot, where uploading a route and engaging the
-	autopilot are two separate steps. This does not publish anything itself in this case (see the
-	loaded-mission check below); it only engages execution of what's already there, so there is
-	no ack to wait for.
-	- Resume (this mission was previously paused, resume_cache has its remaining queue): this is
-	the vessel's own "pick up where it left off" capability, not a new route upload -- it still
-	self-publishes the cached remainder and gates on the ack, same as before this redesign.
+	Fresh start (no resume_cache entry): the waypoints must already be loaded via a prior /send,
+	mirroring ECDIS/autopilot's separate upload-then-engage steps. Nothing is published here; it
+	only engages execution of what's already there, so there's no ack to wait for.
 
-	On simulation, also engages autonomy (/arduino/is_autonomous). On the physical vessel,
-	engaging autonomy is the RC operator's action -- see _PHYSICAL_AUTONOMY_NOTE -- so this only
-	marks the mission active; autonomy engagement itself is outside the GUI's control there.
+	Resume (mission was previously paused, resume_cache has its remaining queue): the vessel's
+	own "pick up where it left off" capability, not a new route upload. Still self-publishes the
+	cached remainder and gates on the ack.
+
+	On simulation, also engages autonomy (/arduino/is_autonomous). On the physical vessel that's
+	the RC operator's action (see _PHYSICAL_AUTONOMY_NOTE), so this only marks the mission active.
 	"""
 	mission_id = mission.id
 	reject_invalid_transition(mission, _START_ALLOWED_STATUSES, "start")
@@ -317,11 +326,10 @@ async def start_mission(
 	autonomy_note: str | None = None
 
 	if resumed is not None:
-		# Resuming is specifically "continue a paused mission" -- stricter than the general
+		# Resuming is specifically "continue a paused mission", stricter than the general
 		# _START_ALLOWED_STATUSES check above, which also lets draft/aborted/completed through
 		# to the fresh-start branch.
 		reject_invalid_transition(mission, frozenset({MissionStatus.paused}), "resume")
-		# Resume: still self-publishes and gates on a live ack, exactly as before this redesign.
 		ros_msg = sim_waypoint_list_to_ros_dict(resumed)
 		expected = expected_ack_from_sim(resumed)
 		first_seq: int | None = resumed[0]["id"] if resumed else None
@@ -329,9 +337,8 @@ async def start_mission(
 
 		# Track before publishing, not after: publish_and_await_ack's own wait resolves via
 		# _transform() processing the echo, which broadcasts execution status using whatever
-		# _tracked_mission_id is *already* set to at that moment. Tracking only on success would
-		# leave a window where that echo-triggered broadcast is attributed to a stale mission id
-		# left over from a previous Start, misreporting this mission's data under the wrong id.
+		# _tracked_mission_id is already set at that moment. Tracking only on success would
+		# misattribute that echo to a stale mission id left over from a previous Start.
 		bridge.track_mission(resume_key, total_count)
 		status = await bridge.publish_and_await_ack(
 			"/update_waypoint_list", "custom_msgs/WaypointList", ros_msg, expected
@@ -340,8 +347,8 @@ async def start_mission(
 		if succeeded:
 			bridge.pop_resume_point(resume_key)
 	else:
-		# Fresh start: the waypoints must already be loaded via a prior /send -- nothing is
-		# published here, so there's no ack to gate on; the loaded-check is the only precondition.
+		# Fresh start: the waypoints must already be loaded via a prior /send, so nothing is
+		# published here; there's no ack to gate on, the loaded-check is the only precondition.
 		loaded_id = await get_loaded_mission_id(db)
 		if loaded_id != mission_id:
 			raise HTTPException(
@@ -374,7 +381,7 @@ async def start_mission(
 		state = "active"
 		bridge.broadcast_tracked_status(resume_key, state, first_seq, total_count)
 	else:
-		# The resume didn't actually take -- don't leave this mission falsely tracked as if it
+		# The resume didn't actually take; don't leave this mission falsely tracked as if it
 		# were executing.
 		bridge.untrack_mission()
 
@@ -401,12 +408,13 @@ async def start_mission(
 async def pause_mission(
 	db: AsyncSession, bridge: RosBridgeClient, session_id: str, mission: Mission
 ) -> MissionExecutionResult:
-	"""Pause a mission: snapshot the vessel's actual remaining queue (the last-echoed
-	/waypoint_list, which already reflects any waypoints it has popped as reached) as a resume
-	point, then clear the active list to stop the vessel. Starting again resends this snapshot
-	instead of the full original mission, so completed legs aren't re-run. If there's no echo yet
-	(e.g. the mission was never actually sent), there's no meaningful resume point to capture --
-	a subsequent Start falls back to a fresh full send, which is the correct behaviour anyway.
+	"""Pause a mission: snapshot the vessel's remaining queue, then clear the active list to stop it.
+
+	The snapshot is the last-echoed /waypoint_list (already reflects any waypoints popped as
+	reached); starting again resends it instead of the full original mission, so completed legs
+	aren't re-run. If there's no echo yet (mission never actually sent), there's nothing
+	meaningful to capture; a subsequent Start falls back to a fresh full send, which is correct
+	anyway.
 	"""
 	mission_id = mission.id
 	reject_invalid_transition(mission, frozenset({MissionStatus.active}), "pause")
@@ -433,7 +441,12 @@ async def pause_mission(
 
 	mission.status = MissionStatus.paused
 	await db.commit()
-	remaining_count = len(remaining) if remaining else 0
+	# None means no /waypoint_list echo has ever been received (e.g. testing against a rosbag
+	# replay that doesn't include this topic): "we don't actually know," not "confirmed empty."
+	# Collapsing that into remaining_count=0 would understate this as 100% complete instead of
+	# correctly reporting nothing known reached yet. Mirrors _push_mission_execution_status_to's
+	# own is-not-None distinction and its "assume nothing consumed" fallback.
+	remaining_count = len(remaining) if remaining is not None else len(mission.waypoints)
 	bridge.broadcast_tracked_status(resume_key, "paused", None, remaining_count)
 
 	await log_action(
@@ -454,14 +467,14 @@ async def pause_mission(
 async def terminate_mission(
 	db: AsyncSession, bridge: RosBridgeClient, session_id: str, mission: Mission
 ) -> MissionExecutionResult:
-	"""Terminate/abort a mission: clear the active waypoint list to stop the vessel (verified
-	sufficient on both physical and simulation targets -- see the client.py/router module notes
-	on speed_control tracking u_ref unconditionally and thrust_allocation sharing effort across
-	both thrusters, so zero thrust makes any stale heading command physically inert), mark the
-	mission aborted, and drop any resume snapshot -- a terminated mission's next Start is always
-	a fresh full send, never a stale partial resume from an earlier pause. Always logged at
-	severity="warning": the intent to terminate is the reportable event, not just a successful
-	ack.
+	"""Terminate/abort a mission: clear the waypoint list, mark it aborted, drop any resume snapshot.
+
+	Clearing the list is verified sufficient to stop the vessel on both targets (speed_control
+	tracks u_ref unconditionally, and thrust_allocation shares effort across both thrusters, so
+	zero thrust makes any stale heading command physically inert). Dropping the resume snapshot
+	means a terminated mission's next Start is always a fresh full send, never a stale partial
+	resume from an earlier pause. Always logged at severity="warning": the intent to terminate is
+	the reportable event, not just a successful ack.
 	"""
 	mission_id = mission.id
 	reject_invalid_transition(
@@ -469,7 +482,17 @@ async def terminate_mission(
 	)
 	resume_key = str(mission_id)
 	reject_if_stale_mission(bridge, mission_id)
-	bridge.pop_resume_point(resume_key)
+	# Terminating a paused mission: the live echo (bridge.latest_waypoint_list) is already the
+	# empty list pause itself cleared, not the real remaining count; the resume snapshot from
+	# that earlier pause is the accurate source instead. Terminating a still-active mission
+	# (never paused): there's no resume snapshot, so the live echo is accurate, same as
+	# pause_mission's own remaining_count above.
+	resume_point = bridge.pop_resume_point(resume_key)
+	remaining = resume_point if resume_point is not None else bridge.latest_waypoint_list
+	# None means no /waypoint_list echo has ever been received (e.g. testing against a rosbag
+	# replay that doesn't include this topic): "we don't actually know," not "confirmed empty."
+	# See pause_mission's own identical comment above for why that distinction matters here.
+	remaining_count = len(remaining) if remaining is not None else len(mission.waypoints)
 
 	status = await bridge.publish_and_await_ack(
 		"/update_waypoint_list", "custom_msgs/WaypointList", {"waypoints": []}, []
@@ -480,7 +503,7 @@ async def terminate_mission(
 	mission.status = MissionStatus.aborted
 	mission.completed_at = datetime.now(UTC)
 	await db.commit()
-	bridge.broadcast_tracked_status(resume_key, "aborted", None, 0)
+	bridge.broadcast_tracked_status(resume_key, "aborted", None, remaining_count)
 	bridge.untrack_mission()
 
 	await log_action(
@@ -488,12 +511,12 @@ async def terminate_mission(
 		session_id=session_id,
 		action="mission.terminate",
 		severity="warning",
-		params={"mission_id": resume_key, "status": status},
+		params={"mission_id": resume_key, "status": status, "remaining_count": remaining_count},
 	)
 	return MissionExecutionResult(
 		status=status,
 		state="aborted",
 		autonomy_engaged=False,
 		autonomy_note=None,
-		waypoint_count=0,
+		waypoint_count=remaining_count,
 	)

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LayoutProvider, useLayout } from "./LayoutContext.js";
+import { LayoutProvider } from "./LayoutContext.js";
+import { useLayout } from "./useLayout.js";
 import { ALL_WIDGET_IDS, WIDGET_REGISTRY } from "../components/widgets/registry.js";
 
 const LAYOUT_KEY = "revolt-dashboard-layout";
@@ -136,11 +137,10 @@ describe("LayoutProvider", () => {
 		expect(result.current.config.hiddenWidgets).toEqual([]);
 	});
 
-	it("always includes the built-in templates, even with no saved user templates", () => {
+	it("always includes the built-in Default template, even with no saved user templates", () => {
 		const { result } = renderLayout();
 		const names = result.current.templates.map((t) => t.name);
 		expect(names).toContain("Default");
-		expect(names).toContain("Instruments only");
 	});
 
 	it("saveTemplate adds a new user template, and replaces one with the same name", () => {
@@ -169,47 +169,28 @@ describe("LayoutProvider", () => {
 	it("loadTemplate applies a built-in template's tiles and hidden widgets", () => {
 		const { result } = renderLayout();
 		act(() => {
-			result.current.loadTemplate("Instruments only");
+			result.current.updateLayout([{ i: "battery", x: 5, y: 5, w: 3, h: 5 }]);
 		});
-		expect(result.current.config.hiddenWidgets).toContain("map");
-		expect(result.current.config.tiles.map((t) => t.i)).toContain("thruster");
-	});
-
-	it("every widget id is accounted for in the Instruments only template's tiles or hiddenWidgets, never neither", () => {
-		// Regression test: mission_control used to be missing from both the hand-listed tiles
-		// array and the hand-listed hiddenWidgets array for this template, so loading it left
-		// mission_control neither shown nor tracked as hidden. Deriving both lists from the
-		// registry (see registry.ts's instrumentsOnlyPosition) makes that structurally
-		// impossible now -- this asserts the invariant holds for every widget, not just the one
-		// that happened to be missing before.
-		const { result } = renderLayout();
 		act(() => {
-			result.current.loadTemplate("Instruments only");
+			result.current.loadTemplate("Default");
 		});
-		const accounted = new Set([
-			...result.current.config.tiles.map((t) => t.i),
-			...result.current.config.hiddenWidgets,
-		]);
-		for (const id of ALL_WIDGET_IDS) {
-			expect(accounted.has(id)).toBe(true);
-		}
-		expect(result.current.config.hiddenWidgets).toContain("mission_control");
+		expect(result.current.config.tiles.map((t) => t.i)).toContain("thruster");
 	});
 
 	it("the default layout's tile positions/sizes are unchanged by deriving them from the registry", () => {
 		// Locks in that switching DEFAULT_TILES from a hand-listed array to a registry-derived
-		// one didn't silently change the curated dashboard's appearance -- particularly for
-		// camera/mission/mission_control, whose default-layout size deliberately differs from
-		// their own defaultW/defaultH (see registry.ts's comments on those entries).
+		// one didn't silently change the curated dashboard's appearance, particularly for camera,
+		// whose default-layout height deliberately differs from its own defaultH (see registry.ts's
+		// comment on that entry).
 		const { result } = renderLayout();
 		const byId = new Map(result.current.config.tiles.map((t) => [t.i, t]));
-		expect(byId.get("camera")).toEqual({ i: "camera", x: 0, y: 5, w: 3, h: 7 });
-		expect(byId.get("mission")).toEqual({ i: "mission", x: 6, y: 12, w: 4, h: 8 });
+		expect(byId.get("camera")).toEqual({ i: "camera", x: 2, y: 5, w: 2, h: 7 });
+		expect(byId.get("mission")).toEqual({ i: "mission", x: 3, y: 12, w: 2, h: 8 });
 		expect(byId.get("mission_control")).toEqual({
 			i: "mission_control",
-			x: 6,
+			x: 3,
 			y: 20,
-			w: 4,
+			w: 2,
 			h: 6,
 		});
 	});
@@ -298,7 +279,7 @@ describe("LayoutProvider", () => {
 		expect(result.current.layoutGeneration).toBe(initial + 3);
 
 		act(() => {
-			result.current.loadTemplate("Instruments only");
+			result.current.loadTemplate("Default");
 		});
 		expect(result.current.layoutGeneration).toBe(initial + 4);
 	});
@@ -321,6 +302,22 @@ describe("LayoutProvider", () => {
 		expect(result.current.editMode).toBe(true);
 		act(() => {
 			result.current.toggleEditMode();
+		});
+		expect(result.current.editMode).toBe(false);
+	});
+
+	it("setEditMode sets editMode to the given value directly", () => {
+		const { result } = renderLayout();
+		act(() => {
+			result.current.setEditMode(true);
+		});
+		expect(result.current.editMode).toBe(true);
+		act(() => {
+			result.current.setEditMode(true);
+		});
+		expect(result.current.editMode).toBe(true);
+		act(() => {
+			result.current.setEditMode(false);
 		});
 		expect(result.current.editMode).toBe(false);
 	});

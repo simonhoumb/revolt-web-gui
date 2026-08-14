@@ -1,3 +1,7 @@
+/* Fallback only -- .waypointList below is the one meant to scroll normally. But its siblings
+   (picker/rename/summary/send rows) are fixed-height and don't shrink, so a short enough tile
+   overflows past .content's bottom and gets clipped by TileCard's body even with the list at 0.
+   Scrolling the whole panel then is the difference between the send row being reachable or lost. */
 .content {
 	display: flex;
 	flex-direction: column;
@@ -5,6 +9,7 @@
 	height: 100%;
 	min-height: 0;
 	padding: 4px;
+	overflow-y: auto;
 }
 
 .missionRow {
@@ -103,8 +108,8 @@
    badge and coordinates completely, not just clipping them. A fixed, narrower width is enough for
    a speed value plus its "kt" unit and leaves room for the identifying info beside it. */
 .waypointRow > obc-number-input-field {
-	flex: 0 0 90px;
-	width: 90px;
+	flex: 0 0 80px;
+	width: 80px;
 }
 
 .waypointActions {

@@ -3,14 +3,20 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, Waypoint } from "@revolt/shared-types";
+import type { AisTarget } from "../../hooks/useAisTargets.js";
 import { MapWidget } from "./MapWidget.js";
 import { useGnssData } from "../../hooks/useGnssData.js";
 import { useVesselTrack } from "../../hooks/useVesselTrack.js";
 import { useAisTargets } from "../../hooks/useAisTargets.js";
-import { useMission } from "../../context/MissionContext.js";
-import { useLegHazards } from "../../context/LegHazardsContext.js";
+import { useMission } from "../../context/useMission.js";
+import { useLegHazards } from "../../context/useLegHazards.js";
+import { useApps } from "../../context/useApps.js";
+import { useChartSettings } from "../../context/useChartSettings.js";
+import { APPS } from "./apps.js";
 import type { GnssData } from "../../hooks/useGnssData.js";
 import type { TrackPoint } from "../../hooks/useVesselTrack.js";
+import type { ChartPalette } from "../../lib/s52Colors.js";
+import { buildOsloFjordStyle } from "../../lib/chartStyle.js";
 
 vi.mock("../../hooks/useGnssData.js", () => ({
 	useGnssData: vi.fn(),
@@ -21,11 +27,17 @@ vi.mock("../../hooks/useVesselTrack.js", () => ({
 vi.mock("../../hooks/useAisTargets.js", () => ({
 	useAisTargets: vi.fn(),
 }));
-vi.mock("../../context/MissionContext.js", () => ({
+vi.mock("../../context/useMission.js", () => ({
 	useMission: vi.fn(),
 }));
-vi.mock("../../context/LegHazardsContext.js", () => ({
+vi.mock("../../context/useLegHazards.js", () => ({
 	useLegHazards: vi.fn(),
+}));
+vi.mock("../../context/useApps.js", () => ({
+	useApps: vi.fn(),
+}));
+vi.mock("../../context/useChartSettings.js", () => ({
+	useChartSettings: vi.fn(),
 }));
 
 const mockUseGnssData = useGnssData as Mock;
@@ -33,6 +45,17 @@ const mockUseVesselTrack = useVesselTrack as Mock;
 const mockUseAisTargets = useAisTargets as Mock;
 const mockUseMission = useMission as Mock;
 const mockUseLegHazards = useLegHazards as Mock;
+const mockUseApps = useApps as Mock;
+const mockUseChartSettings = useChartSettings as Mock;
+
+function setApp(activeAppId: keyof typeof APPS = "custom") {
+	mockUseApps.mockReturnValue({
+		activeAppId,
+		appDef: APPS[activeAppId],
+		isLocked: activeAppId !== "custom",
+		setActiveApp: vi.fn(),
+	});
+}
 
 const baseGnss: GnssData = {
 	latitude: null,
@@ -44,6 +67,7 @@ const baseGnss: GnssData = {
 	headingDeg: null,
 	courseDeg: null,
 	isSimulation: false,
+	stale: false,
 };
 
 const mockAddWaypoint = vi.fn();
@@ -127,6 +151,7 @@ interface MockMapInstance {
 	jumpTo: ReturnType<typeof vi.fn>;
 	zoomIn: ReturnType<typeof vi.fn>;
 	zoomOut: ReturnType<typeof vi.fn>;
+	isZooming: ReturnType<typeof vi.fn>;
 	dragPan: {
 		enable: ReturnType<typeof vi.fn>;
 		disable: ReturnType<typeof vi.fn>;
@@ -155,6 +180,17 @@ interface MockMarkerInstance {
 	emit: (event: string, e?: unknown) => void;
 }
 
+interface MockPopupInstance {
+	lngLat: { lat: number; lng: number } | null;
+	content: HTMLElement | null;
+	options: Record<string, unknown>;
+	setLngLat: ReturnType<typeof vi.fn>;
+	setDOMContent: ReturnType<typeof vi.fn>;
+	addTo: ReturnType<typeof vi.fn>;
+	remove: ReturnType<typeof vi.fn>;
+	emit: (event: string, e?: unknown) => void;
+}
+
 // Plain arrays, not classes -- referenced from inside the vi.mock factory
 // below, which the vitest transform hoists above this file's other
 // top-level code, so any class it needs must be declared inside the
@@ -162,6 +198,7 @@ interface MockMarkerInstance {
 // note).
 const mapInstances: MockMapInstance[] = [];
 const markerInstances: MockMarkerInstance[] = [];
+const popupInstances: MockPopupInstance[] = [];
 
 vi.mock("maplibre-gl", () => {
 	class MockDragPan {
@@ -213,6 +250,7 @@ vi.mock("maplibre-gl", () => {
 		// (encValidation.test.ts covers that in isolation), just need queryRenderedFeatures'
 		// layer list to come through unfiltered.
 		getLayer = vi.fn(() => ({}));
+		isZooming = vi.fn(() => false);
 		dragPan = new MockDragPan();
 		touchZoomRotate = new MockTouchZoomRotate();
 		scrollZoom = new MockScrollZoom();
@@ -298,19 +336,65 @@ vi.mock("maplibre-gl", () => {
 		}
 	}
 
-	return { default: { Map: MockMap, NavigationControl: vi.fn(), Marker: MockMarker } };
+	class MockPopup {
+		lngLat: { lat: number; lng: number } | null = null;
+		content: HTMLElement | null = null;
+		options: Record<string, unknown>;
+		handlers: Record<string, Handler[]> = {};
+
+		addTo = vi.fn().mockReturnThis();
+		remove = vi.fn();
+
+		setLngLat = vi.fn((coords: [number, number]) => {
+			this.lngLat = { lng: coords[0], lat: coords[1] };
+			return this;
+		});
+
+		setDOMContent = vi.fn((el: HTMLElement) => {
+			this.content = el;
+			return this;
+		});
+
+		on = vi.fn((event: string, handler: Handler) => {
+			(this.handlers[event] ??= []).push(handler);
+			return this;
+		});
+
+		off = vi.fn((event: string, handler: Handler) => {
+			this.handlers[event] = (this.handlers[event] ?? []).filter((h) => h !== handler);
+			return this;
+		});
+
+		emit(event: string, e: unknown = {}) {
+			this.handlers[event]?.forEach((h) => {
+				h(e as never);
+			});
+		}
+
+		constructor(options: Record<string, unknown> = {}) {
+			this.options = options;
+			popupInstances.push(this);
+		}
+	}
+
+	return {
+		default: { Map: MockMap, NavigationControl: vi.fn(), Marker: MockMarker, Popup: MockPopup },
+	};
 });
 
 beforeEach(() => {
-	// AIS targets aren't under test here (see useAisMarkers, which mocked maplibre-gl can't
-	// meaningfully exercise) -- default to none so every test doesn't need its own setup call.
+	// Most tests don't care about AIS targets; default to none so they don't each need their own
+	// setup call. The "AIS targets" describe block below overrides this per test.
 	mockUseAisTargets.mockReturnValue([]);
+	setApp();
+	setChartSettings();
 });
 
 afterEach(() => {
 	cleanup();
 	mapInstances.length = 0;
 	markerInstances.length = 0;
+	popupInstances.length = 0;
 	mockAddWaypoint.mockClear();
 	mockUpdateWaypointPosition.mockClear();
 	mockSetLegValidation.mockClear();
@@ -325,41 +409,60 @@ function setTrack(points: TrackPoint[] = []) {
 	mockUseVesselTrack.mockReturnValue(points);
 }
 
+const mockSetPalette = vi.fn();
+const mockSetSymbolStyle = vi.fn();
+const mockSetSafetyContourM = vi.fn();
+const mockSetBrightness = vi.fn();
+
+function setChartSettings(overrides: { palette?: ChartPalette; safetyContourM?: number } = {}) {
+	mockUseChartSettings.mockReturnValue({
+		palette: overrides.palette ?? "dusk",
+		setPalette: mockSetPalette,
+		symbolStyle: "simplified",
+		setSymbolStyle: mockSetSymbolStyle,
+		safetyContourM: overrides.safetyContourM ?? 3,
+		setSafetyContourM: mockSetSafetyContourM,
+		brightness: 50,
+		setBrightness: mockSetBrightness,
+	});
+}
+
 describe("MapWidget", () => {
-	// index.html ships data-obc-theme="dusk" by default (TopNav's dimming
-	// button toggles it to "day"); with no attribute at all -- the jsdom test
-	// environment's starting state -- the widget should also fall back to the
-	// dark style, since "day" is the only value that means light.
-	it("initializes with the dark style by default (no theme attribute)", () => {
+	// ChartSettingsContext defaults to the "dusk" palette (see setChartSettings()'s own default,
+	// matching index.html's data-obc-theme="dusk" and ChartSettingsContext.tsx's DEFAULT_PALETTE).
+	it("initializes with the dusk-palette style by default", () => {
 		setGnss();
 		setTrack();
 		setMission();
 		render(<MapWidget />);
-		expect(mapInstances[0]?.options.style).toBe("/map-styles/oslo-fjord-dark.json");
+		expect(mapInstances[0]?.options.style).toEqual(
+			buildOsloFjordStyle("dusk", "simplified", 3),
+		);
 	});
 
-	it("initializes with the light style when the theme is already day", () => {
-		document.documentElement.setAttribute("data-obc-theme", "day");
+	it("initializes with the day-palette style when the chart settings palette is day", () => {
+		setChartSettings({ palette: "day" });
 		setGnss();
 		setTrack();
 		setMission();
 		render(<MapWidget />);
-		expect(mapInstances[0]?.options.style).toBe("/map-styles/oslo-fjord-light.json");
+		expect(mapInstances[0]?.options.style).toEqual(buildOsloFjordStyle("day", "simplified", 3));
 	});
 
-	it("swaps to the light style when data-obc-theme changes to day", async () => {
-		document.documentElement.setAttribute("data-obc-theme", "dusk");
+	it("swaps to the new palette's style when the chart settings palette changes", () => {
 		setGnss();
 		setTrack();
 		setMission();
-		render(<MapWidget />);
-		document.documentElement.setAttribute("data-obc-theme", "day");
+		const { rerender } = render(<MapWidget />);
 
-		await vi.waitFor(() => {
-			expect(mapInstances[0]?.setStyle).toHaveBeenCalledWith(
-				"/map-styles/oslo-fjord-light.json",
-			);
+		setChartSettings({ palette: "night" });
+		act(() => {
+			rerender(<MapWidget />);
 		});
+
+		expect(mapInstances[0]?.setStyle).toHaveBeenCalledWith(
+			buildOsloFjordStyle("night", "simplified", 3),
+		);
 	});
 
 	it("removes the map instance on unmount", () => {
@@ -459,6 +562,72 @@ describe("MapWidget", () => {
 		expect(mapInstances[0]?.zoomOut).toHaveBeenCalled();
 	});
 
+	function clickButton(el: Element) {
+		act(() => {
+			(el as HTMLElement).click();
+		});
+	}
+
+	it("defaults to hidden controls in the Conning app, and shown elsewhere", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container: customContainer } = render(<MapWidget />);
+		expect(customContainer.querySelector('[aria-label="Chart range"]')).not.toBeNull();
+		expect(findByLabel(customContainer, "Hide map controls")).toBeInTheDocument();
+		cleanup();
+
+		setApp("conning");
+		const { container: conningContainer } = render(<MapWidget />);
+		expect(conningContainer.querySelector('[aria-label="Chart range"]')).toBeNull();
+		expect(findByLabel(conningContainer, "Show map controls")).toBeInTheDocument();
+	});
+
+	it("hides the whole toolbar when controls are toggled off, and restores it when toggled back on", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container } = render(<MapWidget />);
+		expect(container.querySelector('[aria-label="Chart range"]')).not.toBeNull();
+		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
+		expect(container.querySelector('[aria-label="AIS targets"]')).not.toBeNull();
+
+		clickButton(findByLabel(container, "Hide map controls"));
+		expect(container.querySelector('[aria-label="Chart range"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Chart orientation"]')).toBeNull();
+		expect(container.querySelector('[aria-label="AIS targets"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Route edit mode"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Camera lock"]')).toBeNull();
+
+		clickButton(findByLabel(container, "Show map controls"));
+		expect(container.querySelector('[aria-label="Chart orientation"]')).not.toBeNull();
+	});
+
+	it("forces edit mode back to pan-only when controls are hidden while adding a waypoint", () => {
+		setGnss();
+		setTrack();
+		setMission();
+		setApp("custom");
+		const { container } = render(<MapWidget />);
+		dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+
+		act(() => {
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.5, lng: 10.5 } });
+		});
+		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
+
+		clickButton(findByLabel(container, "Hide map controls"));
+		clickButton(findByLabel(container, "Show map controls"));
+		act(() => {
+			mapInstances[0]?.emit("click", { lngLat: { lat: 59.6, lng: 10.6 } });
+		});
+		// Still 1: hiding controls reset edit mode back to "edit" (pan-only), so showing them
+		// again doesn't leave "add" active and this second click doesn't place a waypoint.
+		expect(mockAddWaypoint).toHaveBeenCalledTimes(1);
+	});
+
 	it("eases chart bearing to true heading in heading-up mode", () => {
 		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
 		setTrack();
@@ -504,6 +673,25 @@ describe("MapWidget", () => {
 
 		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
 		mapInstances[0]?.dragPan.isActive.mockReturnValue(true);
+		mapInstances[0]?.easeTo.mockClear();
+
+		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");
+
+		expect(mapInstances[0]?.easeTo).not.toHaveBeenCalled();
+	});
+
+	it("does not fight an active scroll-zoom gesture with a bearing update", () => {
+		// Same reasoning as the drag-gesture guard above: a heading/course tick arriving mid-zoom
+		// retargeting the camera's bearing via its own easeTo, while MapLibre's own zoom
+		// interpolation is also actively driving the same camera, is what read as jitter
+		// specifically while zooming.
+		setGnss({ latitude: 59.9, longitude: 10.7, headingDeg: 45, courseDeg: 90 });
+		setTrack();
+		setMission();
+		const { container } = render(<MapWidget />);
+
+		dispatchToggleValue(findByLabel(container, "Camera lock"), "free", "locked");
+		mapInstances[0]?.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easeTo.mockClear();
 
 		dispatchToggleValue(findByLabel(container, "Chart orientation"), "H", "N");
@@ -828,6 +1016,131 @@ describe("MapWidget", () => {
 				| Record<string, { status: string }>
 				| undefined;
 			expect(afterIdle?.["wp-2"]?.status).toBe("safe");
+		});
+	});
+
+	describe("AIS target details", () => {
+		function makeAisTarget(overrides: Partial<AisTarget> = {}): AisTarget {
+			return {
+				mmsi: 123456789,
+				lat: 59.9,
+				lon: 10.7,
+				sogKn: 12.3,
+				headingDeg: 90,
+				cogDeg: 95,
+				turnDegPerMin: 2,
+				navStatus: 0,
+				stale: false,
+				...overrides,
+			};
+		}
+
+		it("opens a popup with the target's details when its marker is clicked", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			expect(popupInstances).toHaveLength(1);
+			expect(popupInstances[0]?.lngLat).toEqual({ lng: 10.7, lat: 59.9 });
+			const content = popupInstances[0]?.content;
+			// MMSI is set as the obc-toggletip's own "title" property (rendered in its shadow root,
+			// so not part of textContent below), not a light-DOM row like the other fields.
+			expect(content?.tagName.toLowerCase()).toBe("obc-toggletip");
+			expect((content as unknown as { title?: string } | undefined)?.title).toBe(
+				"MMSI 123456789",
+			);
+			expect(content?.textContent).toContain("12.3 kn");
+		});
+
+		it("does not fall through to the map's own click handler (e.g. placing a waypoint)", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			const { container } = render(<MapWidget />);
+			dispatchToggleValue(findByLabel(container, "Route edit mode"), "add", "edit");
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			expect(mockAddWaypoint).not.toHaveBeenCalled();
+			expect(popupInstances).toHaveLength(1);
+		});
+
+		it("moves and refreshes the open popup as the target updates", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			const { rerender } = render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+
+			mockUseAisTargets.mockReturnValue([
+				makeAisTarget({ lat: 59.95, lon: 10.75, sogKn: 5 }),
+			]);
+			act(() => {
+				rerender(<MapWidget />);
+			});
+
+			expect(popupInstances[0]?.setLngLat).toHaveBeenCalledWith([10.75, 59.95]);
+			expect(popupInstances[0]?.content?.textContent).toContain("5.0 kn");
+		});
+
+		it("clears the selection and removes the popup when it fires its own close event", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+			expect(popupInstances).toHaveLength(1);
+
+			// The popup's own closeOnClick/close-button dismissal fires "close"; the hook listens
+			// for that to clear selectedMmsi, which in turn tears the popup down on the next effect
+			// pass -- exactly what this simulates.
+			act(() => {
+				popupInstances[0]?.emit("close");
+			});
+
+			expect(popupInstances[0]?.remove).toHaveBeenCalled();
+		});
+
+		it("closes the popup when the selected target expires", () => {
+			setGnss();
+			setTrack();
+			setMission();
+			mockUseAisTargets.mockReturnValue([makeAisTarget()]);
+			const { rerender } = render(<MapWidget />);
+
+			const aisMarker = markerInstances[1];
+			act(() => {
+				aisMarker?.element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			});
+			expect(popupInstances).toHaveLength(1);
+
+			mockUseAisTargets.mockReturnValue([]);
+			act(() => {
+				rerender(<MapWidget />);
+			});
+
+			expect(popupInstances[0]?.remove).toHaveBeenCalled();
 		});
 	});
 });

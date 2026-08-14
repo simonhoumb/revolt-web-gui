@@ -1,27 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { ObcStepperBox } from "@oicl/openbridge-webcomponents-react/components/stepper-box/stepper-box.js";
 import { useLidarData } from "../../hooks/useLidarData.js";
+import { usePointCloudData } from "../../hooks/usePointCloudData.js";
+import { Lidar2DCanvas } from "./Lidar2DCanvas.js";
+import { Lidar3DScene } from "./Lidar3DScene.js";
+import type { WidgetViewMode } from "./ViewModeToggle.js";
 import styles from "./LidarWidget.module.css";
-
-function cssVar(name: string): string {
-	return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-// Rotate the scan cloud so the vessel bow points up.
-// Measure: place an object straight ahead of the bow, note how many degrees
-// clockwise it appears from the top of the widget, then set that value here.
-const MOUNTING_YAW_DEG = -80;
 
 const ZOOM_STEPS = [5, 10, 20, 50, 100, 130];
 const DEFAULT_ZOOM_IDX = 3; // 50 m
 
-export function LidarWidget() {
-	const { scan, points } = useLidarData();
-	const canvasRef = useRef<HTMLCanvasElement>(null);
+interface LidarWidgetProps {
+	viewMode?: WidgetViewMode; // "detailed" = 2D top-down, "instrument" = 3D point cloud scene
+}
+
+export function LidarWidget({ viewMode }: LidarWidgetProps) {
+	const is3D = viewMode === "instrument";
+
+	const { points: scanPoints, stale: scanStale } = useLidarData();
+	const { points: cloudPoints, stale: cloudStale } = usePointCloudData();
+	// Prefer the full multi-ring point cloud; fall back to the single-ring /scan points if the
+	// point cloud topic hasn't arrived yet, so a problem in the new pipeline doesn't blank the
+	// whole 2D view. The 3D scene has no such fallback -- /scan carries no height info, so there's
+	// nothing meaningful to render in 3D from it.
+	const points2D = cloudPoints.length > 0 ? cloudPoints : scanPoints;
+	// A frozen full scan looks identical to a live one, unlike radar's incrementally-aging spokes
+	// -- so a stale source shows a "no signal" overlay instead, same convention as CameraWidget.
+	const usingCloudFor2D = cloudPoints.length > 0;
+	const noSignal2D = points2D.length === 0 || (usingCloudFor2D ? cloudStale : scanStale);
+	const noSignal3D = cloudPoints.length === 0 || cloudStale;
+	const noSignal = is3D ? noSignal3D : noSignal2D;
+
 	const canvasAreaRef = useRef<HTMLDivElement>(null);
-	const drawRef = useRef<() => void>(() => {
-		return;
-	});
 	const [canvasSize, setCanvasSize] = useState(260);
 	const [zoomIdx, setZoomIdx] = useState(DEFAULT_ZOOM_IDX);
 
@@ -54,7 +64,10 @@ export function LidarWidget() {
 	// Mouse-wheel zoom while the cursor is over the instrument, same convention as MapWidget's
 	// scrollZoom -- only zooms this widget, not the dashboard page underneath it. Requires a
 	// native (non-passive) listener since React's JSX onWheel can't reliably preventDefault.
+	// Skipped in 3D mode -- the scene's own OrbitControls handles wheel zoom there instead, and
+	// this zoom ladder is a 2D-only concept (a fixed top-down display range).
 	useEffect(() => {
+		if (is3D) return;
 		const el = canvasAreaRef.current;
 		if (!el) return;
 		const onWheel = (e: WheelEvent) => {
@@ -69,135 +82,34 @@ export function LidarWidget() {
 		return () => {
 			el.removeEventListener("wheel", onWheel);
 		};
-	}, []);
-
-	useEffect(() => {
-		drawRef.current = () => {
-			const canvas = canvasRef.current;
-			if (!canvas) return;
-			const ctx = canvas.getContext("2d");
-			if (!ctx) return;
-
-			const size = canvasSize;
-			const center = size / 2;
-			const radius = center - 4; // 4 px margin inside canvas bounds
-
-			// Transparent outside the circle — tile background shows through.
-			ctx.clearRect(0, 0, size, size);
-
-			// Instrument background circle + border ring.
-			ctx.beginPath();
-			ctx.arc(center, center, radius, 0, 2 * Math.PI);
-			ctx.fillStyle = cssVar("--instrument-frame-primary-color");
-			ctx.fill();
-			ctx.strokeStyle = cssVar("--instrument-frame-tertiary-color");
-			ctx.lineWidth = 1.5;
-			ctx.stroke();
-
-			if (!scan) {
-				ctx.fillStyle = cssVar("--element-inactive-color");
-				ctx.font = "12px monospace";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "middle";
-				ctx.fillText("No data", center, center);
-				return;
-			}
-
-			// Clip everything else to the circle so points never spill outside.
-			ctx.save();
-			ctx.beginPath();
-			ctx.arc(center, center, radius, 0, 2 * Math.PI);
-			ctx.clip();
-
-			const scale = radius / displayRange;
-
-			// Three inner range rings at 25 / 50 / 75 % of displayRange.
-			ctx.strokeStyle = cssVar("--instrument-frame-tertiary-color");
-			ctx.lineWidth = 0.5;
-			for (let i = 1; i <= 3; i++) {
-				const r = (i / 4) * radius;
-				ctx.beginPath();
-				ctx.arc(center, center, r, 0, 2 * Math.PI);
-				ctx.stroke();
-			}
-
-			// Ring distance labels — placed at right of center, vertically at each ring.
-			const fmtDist = (v: number) =>
-				v >= 10 ? `${String(Math.round(v))} m` : `${String(parseFloat(v.toFixed(1)))} m`;
-			ctx.fillStyle = cssVar("--instrument-tick-mark-label-secondary-color");
-			ctx.font = "8px monospace";
-			ctx.textAlign = "left";
-			ctx.textBaseline = "middle";
-			for (let i = 1; i <= 3; i++) {
-				const r = (i / 4) * radius;
-				ctx.fillText(fmtDist(displayRange * (i / 4)), center + 4, center - r);
-			}
-
-			// Outer range label just inside the top of the circle.
-			ctx.font = "9px monospace";
-			ctx.textAlign = "left";
-			ctx.textBaseline = "top";
-			ctx.fillText(`${String(displayRange)} m`, center + 4, center - radius + 4);
-
-			// Rotate scan cloud so bow faces up. Positive = clockwise correction.
-			ctx.save();
-			ctx.translate(center, center);
-			ctx.rotate(MOUNTING_YAW_DEG * (Math.PI / 180));
-			ctx.translate(-center, -center);
-
-			// Scan returns.
-			ctx.fillStyle = cssVar("--instrument-enhanced-primary-color");
-			for (const { x, y } of points) {
-				const px = center + x * scale;
-				const py = center - y * scale; // canvas Y-axis is inverted
-				ctx.fillRect(px - 1, py - 1, 2, 2);
-			}
-
-			// Vessel marker at centre.
-			ctx.fillStyle = cssVar("--element-active-color");
-			ctx.beginPath();
-			ctx.arc(center, center, 4, 0, 2 * Math.PI);
-			ctx.fill();
-
-			ctx.restore(); // undo rotation — back to clip-only space
-
-			ctx.restore(); // undo clip
-		};
-
-		drawRef.current();
-	}, [scan, points, canvasSize, displayRange]);
-
-	// Redraw when theme changes — registered once, always calls the latest closure.
-	useEffect(() => {
-		const observer = new MutationObserver(() => {
-			drawRef.current();
-		});
-		observer.observe(document.documentElement, {
-			attributes: true,
-			attributeFilter: ["data-obc-theme"],
-		});
-		return () => {
-			observer.disconnect();
-		};
-	}, []);
+	}, [is3D]);
 
 	return (
 		<div className={styles.container}>
 			<div ref={canvasAreaRef} className={styles.canvasArea}>
-				<canvas
-					ref={canvasRef}
-					className={styles.canvas}
-					width={canvasSize}
-					height={canvasSize}
-					aria-label="2D lidar scan view"
-				/>
+				{is3D ? (
+					<Lidar3DScene points={cloudPoints} />
+				) : (
+					<Lidar2DCanvas
+						points={points2D}
+						canvasSize={canvasSize}
+						displayRange={displayRange}
+					/>
+				)}
+				{noSignal && (
+					<div className={styles.overlay}>
+						<span className={styles.overlayText}>No signal</span>
+					</div>
+				)}
 			</div>
-			<div className={styles.controls}>
-				<ObcStepperBox aria-label="Lidar range" onUp={zoomIn} onDown={zoomOut}>
-					<div>{displayRange}</div>
-					<div slot="unit">m</div>
-				</ObcStepperBox>
-			</div>
+			{!is3D && (
+				<div className={styles.controls}>
+					<ObcStepperBox aria-label="Lidar range" onUp={zoomIn} onDown={zoomOut}>
+						<div>{displayRange}</div>
+						<div slot="unit">m</div>
+					</ObcStepperBox>
+				</div>
+			)}
 		</div>
 	);
 }

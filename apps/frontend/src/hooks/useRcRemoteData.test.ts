@@ -1,11 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useRcRemoteData } from "./useRcRemoteData.js";
-import { useBridgeData } from "../context/BridgeDataContext.js";
-import type { BridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import type { BridgeData } from "../context/bridgeDataReducer.js";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
-vi.mock("../context/BridgeDataContext.js", () => ({
+vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -29,7 +30,9 @@ const base: BridgeData = {
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,
@@ -89,5 +92,40 @@ describe("useRcRemoteData", () => {
 		expect(result.current.throttlePercent).toBeCloseTo(100, 0);
 		expect(result.current.aileronPercent).toBeCloseTo(-100, 0);
 		expect(result.current.gear).toBe("auto");
+	});
+});
+
+describe("useRcRemoteData — staleness", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("is stale when no rc_remote message has arrived", () => {
+		mockUseBridgeData.mockReturnValue(base);
+		const { result } = renderHook(() => useRcRemoteData());
+		expect(result.current.stale).toBe(true);
+	});
+
+	it("is not stale for a fresh reading, and becomes stale once the window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		mockUseBridgeData.mockReturnValue({
+			...base,
+			rcRemote: {
+				v: "1",
+				type: "rc_remote",
+				timestamp_ms: 0,
+				throttle: 1500,
+				aileron: 1500,
+				rudder: 1500,
+				gear: "manual",
+			},
+		});
+		const { result, rerender } = renderHook(() => useRcRemoteData());
+		expect(result.current.stale).toBe(false);
+
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		rerender();
+		expect(result.current.stale).toBe(true);
 	});
 });

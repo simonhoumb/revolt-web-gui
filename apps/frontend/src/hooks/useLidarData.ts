@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { LidarScanMsg } from "@revolt/shared-types";
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import { useLiveTick } from "./useLiveTick.js";
+import { isStale } from "../lib/staleness.js";
 
 export interface LidarPoint {
 	x: number; // metres East (X=right in vessel frame)
@@ -10,9 +12,12 @@ export interface LidarPoint {
 export interface LidarData {
 	scan: LidarScanMsg | null;
 	points: LidarPoint[];
+	stale: boolean;
 }
 
+/** Latest lidar scan plus its ranges converted to Cartesian points for canvas rendering. */
 export function useLidarData(): LidarData {
+	useLiveTick();
 	const { lidarScan } = useBridgeData();
 
 	const points = useMemo(() => {
@@ -24,5 +29,5 @@ export function useLidarData(): LidarData {
 		});
 	}, [lidarScan]);
 
-	return { scan: lidarScan, points };
+	return { scan: lidarScan, points, stale: isStale(lidarScan?.timestamp_ms, Date.now()) };
 }

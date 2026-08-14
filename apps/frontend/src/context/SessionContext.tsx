@@ -1,15 +1,9 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { getSessionId } from "../session.js";
+import { SessionContext } from "./useSession.js";
 
-const SessionContext = createContext<string | null>(null);
-
+/** Provides a stable per-tab session id (sessionStorage-backed) to useSession(). */
 export function SessionProvider({ children }: { children: ReactNode }) {
 	const [sessionId] = useState(() => getSessionId());
 	return <SessionContext.Provider value={sessionId}>{children}</SessionContext.Provider>;
-}
-
-export function useSession(): string {
-	const id = useContext(SessionContext);
-	if (!id) throw new Error("useSession must be used within SessionProvider");
-	return id;
 }

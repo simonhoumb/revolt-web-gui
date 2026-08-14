@@ -21,6 +21,7 @@ const baseGnss: GnssData = {
 	headingDeg: null,
 	courseDeg: null,
 	isSimulation: false,
+	stale: false,
 };
 
 describe("useVesselTrack", () => {

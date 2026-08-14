@@ -3,13 +3,13 @@ import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import type { Mission, Waypoint } from "@revolt/shared-types";
 import { useWaypointDraft } from "./useWaypointDraft.js";
-import { useMission } from "../context/MissionContext.js";
-import { useLegHazards } from "../context/LegHazardsContext.js";
+import { useMission } from "../context/useMission.js";
+import { useLegHazards } from "../context/useLegHazards.js";
 
-vi.mock("../context/MissionContext.js", () => ({
+vi.mock("../context/useMission.js", () => ({
 	useMission: vi.fn(),
 }));
-vi.mock("../context/LegHazardsContext.js", () => ({
+vi.mock("../context/useLegHazards.js", () => ({
 	useLegHazards: vi.fn(),
 }));
 

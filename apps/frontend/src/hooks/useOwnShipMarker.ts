@@ -1,5 +1,5 @@
 import maplibregl, { type Map as MapLibreMap, type Marker } from "maplibre-gl";
-// Imported for its custom-element registration side effect (customElement(...)) -- the marker
+// Imported for its custom-element registration side effect (customElement(...)); the marker
 // below creates the element directly rather than mounting a nested React root, since unmounting a
 // secondary root synchronously during the parent's own unmount trips a React warning.
 import "@oicl/openbridge-webcomponents/dist/icons/icon-own-ship-iec.js";
@@ -11,6 +11,10 @@ export interface OwnShipPosition {
 	latitude: number | null;
 	longitude: number | null;
 	headingDeg: number | null;
+	/** S-52 SHIPS token for the current palette (see s52Colors.ts); overrides the marker's default
+	 * OBC-theme color so the own-ship symbol tracks the chart's own palette, not just the app's UI
+	 * chrome theme. */
+	color: string;
 }
 
 /**
@@ -22,7 +26,7 @@ export interface OwnShipPosition {
  */
 export function useOwnShipMarker(
 	mapRef: RefObject<MapLibreMap | null>,
-	{ latitude, longitude, headingDeg }: OwnShipPosition,
+	{ latitude, longitude, headingDeg, color }: OwnShipPosition,
 ): void {
 	const markerRef = useRef<Marker | null>(null);
 
@@ -57,4 +61,8 @@ export function useOwnShipMarker(
 		if (!marker || headingDeg === null) return;
 		marker.setRotation(headingDeg);
 	}, [headingDeg]);
+
+	useEffect(() => {
+		markerRef.current?.getElement().style.setProperty("color", color);
+	}, [color]);
 }

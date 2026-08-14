@@ -1,4 +1,6 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import { useLiveTick } from "./useLiveTick.js";
+import { isStale } from "../lib/staleness.js";
 
 // custom_msgs/RCRemote.msg documents throttle/aileron/rudder as raw PWM in the range
 // 1070-1930, so 1500 is the stick's own documented center, not a tuned constant.
@@ -15,9 +17,12 @@ export interface RcRemoteData {
 	aileronPercent: number | null;
 	rudderPercent: number | null;
 	gear: "manual" | "auto" | null;
+	stale: boolean;
 }
 
+/** RC transmitter stick positions as signed percentages, plus the gear (manual/auto) switch. */
 export function useRcRemoteData(): RcRemoteData {
+	useLiveTick();
 	const { rcRemote } = useBridgeData();
 
 	return {
@@ -25,5 +30,6 @@ export function useRcRemoteData(): RcRemoteData {
 		aileronPercent: rcRemote ? toStickPercent(rcRemote.aileron) : null,
 		rudderPercent: rcRemote ? toStickPercent(rcRemote.rudder) : null,
 		gear: rcRemote?.gear ?? null,
+		stale: isStale(rcRemote?.timestamp_ms, Date.now()),
 	};
 }

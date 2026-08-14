@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 import { voltageStatus } from "./useBatteryData.js";
 
 export type AlertLevel = "alarm" | "warning" | "caution";
@@ -21,6 +21,7 @@ export interface VesselHealth {
 	highestAlertLevel: AlertLevel | null;
 }
 
+/** Derives the TopNav alert list (connection/e-stop/control-mode/battery) from raw bridge state. */
 export function useVesselHealth(): VesselHealth {
 	const { wsConnected, bridgeConnected, latencyMs, emergencyStop, controlMode, battery } =
 		useBridgeData();
@@ -75,7 +76,7 @@ export function useVesselHealth(): VesselHealth {
 				id: "bat-alarm",
 				title: "Battery voltage critical",
 				description:
-					"Voltage below 11.0 V — approaching Arduino emergency cutoff at 10.0 V.",
+					"Voltage below 11.0 V, approaching Arduino emergency cutoff at 10.0 V.",
 				level: "alarm",
 			});
 		} else if (batStatus === "overvolt") {
@@ -89,7 +90,7 @@ export function useVesselHealth(): VesselHealth {
 			result.push({
 				id: "bat-warning",
 				title: "Battery voltage low",
-				description: "Voltage below 11.5 V — monitor closely.",
+				description: "Voltage below 11.5 V, monitor closely.",
 				level: "warning",
 			});
 		}

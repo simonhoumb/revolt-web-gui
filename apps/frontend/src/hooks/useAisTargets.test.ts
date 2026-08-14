@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useAisTargets } from "./useAisTargets.js";
-import { useBridgeData } from "../context/BridgeDataContext.js";
-import type { BridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import type { BridgeData } from "../context/bridgeDataReducer.js";
 import type { AisTargetMsg } from "@revolt/shared-types";
 
-vi.mock("../context/BridgeDataContext.js", () => ({
+vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -32,7 +32,9 @@ function withAisTargets(aisTargets: BridgeData["aisTargets"]): BridgeData {
 		cameraStatus: null,
 		thrusterFeedback: { bow: null, port: null, starboard: null },
 		lidarScan: null,
+		pointCloud: null,
 		radarSpoke: null,
+		radarPointCloud: null,
 		aisTargets,
 		imu: null,
 		activeWaypointList: null,
@@ -54,6 +56,9 @@ function target(overrides: Partial<AisTargetMsg> = {}): AisTargetMsg {
 		lon: 10.6,
 		sog_kn: 8.0,
 		heading_deg: 90,
+		cog_deg: 95.0,
+		turn_deg_per_min: 2.0,
+		nav_status: 0,
 		...overrides,
 	};
 }
@@ -86,6 +91,9 @@ describe("useAisTargets", () => {
 				lon: 10.6,
 				sogKn: 8.0,
 				headingDeg: 90,
+				cogDeg: 95.0,
+				turnDegPerMin: 2.0,
+				navStatus: 0,
 				stale: false,
 			},
 		]);
@@ -117,6 +125,25 @@ describe("useAisTargets", () => {
 		const { result } = renderHook(() => useAisTargets());
 		expect(result.current[0]?.sogKn).toBeNull();
 		expect(result.current[0]?.headingDeg).toBeNull();
+	});
+
+	it("passes through null cog/turn for targets without valid data", () => {
+		mockUseBridgeData.mockReturnValue(
+			withAisTargets({
+				2571234: target({ mmsi: 2571234, cog_deg: null, turn_deg_per_min: null }),
+			}),
+		);
+		const { result } = renderHook(() => useAisTargets());
+		expect(result.current[0]?.cogDeg).toBeNull();
+		expect(result.current[0]?.turnDegPerMin).toBeNull();
+	});
+
+	it("passes through nav_status as-is, including the undefined/15 code", () => {
+		mockUseBridgeData.mockReturnValue(
+			withAisTargets({ 2571234: target({ mmsi: 2571234, nav_status: 15 }) }),
+		);
+		const { result } = renderHook(() => useAisTargets());
+		expect(result.current[0]?.navStatus).toBe(15);
 	});
 
 	it("returns multiple targets keyed by mmsi", () => {

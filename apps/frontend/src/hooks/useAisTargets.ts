@@ -1,4 +1,4 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
 import { useMinuteUpdate } from "./useMinuteUpdate.js";
 
 // AIS has no "target gone" message, so staleness/expiry are computed at read time from each
@@ -15,9 +15,13 @@ export interface AisTarget {
 	lon: number;
 	sogKn: number | null;
 	headingDeg: number | null;
+	cogDeg: number | null;
+	turnDegPerMin: number | null;
+	navStatus: number;
 	stale: boolean;
 }
 
+/** Live AIS targets with staleness computed at read time (re-evaluated once a minute). */
 export function useAisTargets(): AisTarget[] {
 	const { aisTargets } = useBridgeData();
 	// Ticks once a minute purely to force staleness/expiry to re-evaluate against the current
@@ -35,6 +39,9 @@ export function useAisTargets(): AisTarget[] {
 			lon: msg.lon,
 			sogKn: msg.sog_kn,
 			headingDeg: msg.heading_deg,
+			cogDeg: msg.cog_deg,
+			turnDegPerMin: msg.turn_deg_per_min,
+			navStatus: msg.nav_status,
 			stale: age > STALE_MS,
 		});
 	}

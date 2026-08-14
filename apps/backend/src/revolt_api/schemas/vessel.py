@@ -1,3 +1,5 @@
+"""Pydantic request/response schemas for VesselState."""
+
 import uuid
 from datetime import datetime
 
@@ -7,11 +9,15 @@ from revolt_api.models.vessel import ControlMode
 
 
 class Position(BaseModel):
+	"""A WGS84 lat/lon pair, the API's wire format for any geometry column."""
+
 	latitude: float
 	longitude: float
 
 
 class VesselStateCreate(BaseModel):
+	"""Request body for recording a new VesselState snapshot."""
+
 	timestamp: datetime
 	latitude: float
 	longitude: float
@@ -23,6 +29,8 @@ class VesselStateCreate(BaseModel):
 
 
 class VesselStateRead(BaseModel):
+	"""Response body for a stored VesselState row."""
+
 	model_config = ConfigDict(from_attributes=True)
 
 	id: uuid.UUID

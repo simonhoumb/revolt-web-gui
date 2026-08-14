@@ -1,15 +1,18 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import type { RadarSpokeMsg } from "@revolt/shared-types";
 import { RadarWidget } from "./RadarWidget.js";
-import { useRadarData, type RadarData } from "../../hooks/useRadarData.js";
+import {
+	useRadarPointsData,
+	type RadarPointsData,
+	type RadarPoint,
+} from "../../hooks/useRadarPointsData.js";
 
-vi.mock("../../hooks/useRadarData.js", () => ({
-	useRadarData: vi.fn(),
+vi.mock("../../hooks/useRadarPointsData.js", () => ({
+	useRadarPointsData: vi.fn(),
 }));
 
-const mockUseRadarData = useRadarData as Mock;
+const mockUseRadarPointsData = useRadarPointsData as Mock;
 
 // Same technique as LidarWidget.test.tsx -- jsdom has no 2D canvas context, so a fake one lets
 // these tests assert on which drawing calls the widget actually made.
@@ -49,29 +52,18 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function makeSpoke(overrides: Partial<RadarSpokeMsg> = {}): RadarSpokeMsg {
-	return {
-		v: "1",
-		type: "radar_spoke",
-		timestamp_ms: 0,
-		azimuth: 0,
-		range_start: 5,
-		range_increment: 10,
-		num_samples: 4,
-		min_intensity: 0,
-		max_intensity: 255,
-		intensity: [50, 100, 150, 200],
-		...overrides,
-	};
+function makePoint(overrides: Partial<RadarPoint> = {}): RadarPoint {
+	return { x: 10, y: 0, z: 0, intensity: 200, ...overrides };
 }
 
-function makeRadarData(overrides: Partial<RadarData> = {}): RadarData {
-	return { spokes: [], ...overrides };
+function makeRadarPointsData(overrides: Partial<RadarPointsData> = {}): RadarPointsData {
+	return { cloud: null, points: [], stale: false, ...overrides };
 }
 
 // Unlike LidarWidget (which draws synchronously in its effect), RadarWidget batches the draw via
-// requestAnimationFrame so bursts of spoke messages coalesce into one paint per frame -- tests
-// need to flush that frame before asserting on canvas calls.
+// requestAnimationFrame -- carried over from when it consumed /radar/spoke, where bursts of
+// messages needed coalescing into one paint per frame; tests still need to flush that frame
+// before asserting on canvas calls.
 async function flushRaf(): Promise<void> {
 	await act(async () => {
 		await new Promise((resolve) => setTimeout(resolve, 20));
@@ -88,8 +80,8 @@ function findByLabel(container: HTMLElement, label: string): Element {
 }
 
 describe("RadarWidget", () => {
-	it("draws a 'No data' label when the sweep buffer is empty", async () => {
-		mockUseRadarData.mockReturnValue(makeRadarData());
+	it("draws a 'No data' label when there are no points", async () => {
+		mockUseRadarPointsData.mockReturnValue(makeRadarPointsData());
 		render(<RadarWidget />);
 		await flushRaf();
 		expect(fakeCtx.fillText).toHaveBeenCalledWith(
@@ -99,12 +91,19 @@ describe("RadarWidget", () => {
 		);
 	});
 
-	it("draws a filled point for each sample above the intensity floor once spokes arrive", async () => {
-		mockUseRadarData.mockReturnValue(makeRadarData({ spokes: [makeSpoke()] }));
+	it("draws a filled point for each point within the display range once points arrive", async () => {
+		mockUseRadarPointsData.mockReturnValue(
+			makeRadarPointsData({
+				points: [
+					makePoint({ x: 10, y: 0 }),
+					makePoint({ x: 0, y: 20 }),
+					makePoint({ x: 5, y: 5 }),
+				],
+			}),
+		);
 		render(<RadarWidget />);
 		await flushRaf();
-		// min_intensity=0, so all 4 samples clear the "intensity <= min_intensity" skip.
-		expect(fakeCtx.fillRect).toHaveBeenCalledTimes(4);
+		expect(fakeCtx.fillRect).toHaveBeenCalledTimes(3);
 		expect(fakeCtx.fillText).not.toHaveBeenCalledWith(
 			"No data",
 			expect.any(Number),
@@ -112,14 +111,24 @@ describe("RadarWidget", () => {
 		);
 	});
 
+	it("skips points outside the current display range", async () => {
+		// Default zoom is 1 NM (~1852 m); this point is far beyond it.
+		mockUseRadarPointsData.mockReturnValue(
+			makeRadarPointsData({ points: [makePoint({ x: 50_000, y: 0 })] }),
+		);
+		render(<RadarWidget />);
+		await flushRaf();
+		expect(fakeCtx.fillRect).not.toHaveBeenCalled();
+	});
+
 	it("renders the canvas with an accessible label", () => {
-		mockUseRadarData.mockReturnValue(makeRadarData());
+		mockUseRadarPointsData.mockReturnValue(makeRadarPointsData());
 		render(<RadarWidget />);
 		expect(screen.getByLabelText("Radar PPI view")).toBeInTheDocument();
 	});
 
 	it("starts at the default 1 NM range and steps in/out through the fixed zoom levels", () => {
-		mockUseRadarData.mockReturnValue(makeRadarData());
+		mockUseRadarPointsData.mockReturnValue(makeRadarPointsData());
 		const { container } = render(<RadarWidget />);
 		expect(screen.getByText("1")).toBeInTheDocument();
 		const stepper = findByLabel(container, "Radar range");
@@ -137,7 +146,7 @@ describe("RadarWidget", () => {
 	});
 
 	it("stays pinned at the closest and widest zoom steps rather than wrapping", () => {
-		mockUseRadarData.mockReturnValue(makeRadarData());
+		mockUseRadarPointsData.mockReturnValue(makeRadarPointsData());
 		const { container } = render(<RadarWidget />);
 		const stepper = findByLabel(container, "Radar range");
 
@@ -153,7 +162,7 @@ describe("RadarWidget", () => {
 	});
 
 	it("zooms via mouse wheel over the canvas area, in on scroll-up and out on scroll-down", () => {
-		mockUseRadarData.mockReturnValue(makeRadarData());
+		mockUseRadarPointsData.mockReturnValue(makeRadarPointsData());
 		render(<RadarWidget />);
 		expect(screen.getByText("1")).toBeInTheDocument();
 
@@ -169,5 +178,21 @@ describe("RadarWidget", () => {
 			fireEvent.wheel(canvasArea, { deltaY: 100 });
 		});
 		expect(screen.getByText("1")).toBeInTheDocument();
+	});
+
+	it("shows a 'No signal' overlay when the feed has gone stale", () => {
+		mockUseRadarPointsData.mockReturnValue(
+			makeRadarPointsData({ points: [makePoint()], stale: true }),
+		);
+		render(<RadarWidget />);
+		expect(screen.getByText("No signal")).toBeInTheDocument();
+	});
+
+	it("hides the 'No signal' overlay when the feed is fresh", () => {
+		mockUseRadarPointsData.mockReturnValue(
+			makeRadarPointsData({ points: [makePoint()], stale: false }),
+		);
+		render(<RadarWidget />);
+		expect(screen.queryByText("No signal")).not.toBeInTheDocument();
 	});
 });

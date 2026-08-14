@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { ALL_WIDGET_IDS, WIDGET_REGISTRY } from "./registry.js";
+import {
+	ALL_WIDGET_IDS,
+	WIDGET_REGISTRY,
+	deriveInstrumentsOnlyTiles,
+	deriveInstrumentsOnlyHidden,
+} from "./registry.js";
 
 describe("WIDGET_REGISTRY", () => {
 	it("has an entry for every id in ALL_WIDGET_IDS, and no extras", () => {
@@ -71,6 +76,34 @@ describe("WIDGET_REGISTRY", () => {
 					a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 				expect(overlaps).toBe(false);
 			}
+		}
+	});
+});
+
+describe("deriveInstrumentsOnlyTiles / deriveInstrumentsOnlyHidden", () => {
+	it("every widget id is accounted for in exactly one of tiles or hidden, never neither or both", () => {
+		// Regression test: mission_control used to be missing from both a hand-listed tiles array
+		// and a hand-listed hiddenWidgets array for the old "Instruments only" template, so loading
+		// it left mission_control neither shown nor tracked as hidden. Deriving both lists from the
+		// same registry data (instrumentsOnlyPosition) makes that structurally impossible. This
+		// asserts the invariant holds for every widget, not just the one that happened to be missing
+		// before.
+		const tileIds = new Set(deriveInstrumentsOnlyTiles().map((t) => t.i));
+		const hiddenIds = new Set(deriveInstrumentsOnlyHidden());
+		for (const id of ALL_WIDGET_IDS) {
+			expect(tileIds.has(id) !== hiddenIds.has(id)).toBe(true);
+		}
+		expect(hiddenIds.has("mission_control")).toBe(true);
+	});
+
+	it("every derived tile's widget id has an instrumentsOnlyPosition in the registry, matching verbatim", () => {
+		for (const tile of deriveInstrumentsOnlyTiles()) {
+			expect(WIDGET_REGISTRY[tile.i].instrumentsOnlyPosition).toEqual({
+				x: tile.x,
+				y: tile.y,
+				w: tile.w,
+				h: tile.h,
+			});
 		}
 	});
 });

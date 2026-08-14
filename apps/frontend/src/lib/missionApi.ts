@@ -61,20 +61,23 @@ async function throwMissionError(res: Response, fallbackMessage: string): Promis
 	throw new MissionBlockedError(message, body.detail?.hazards ?? []);
 }
 
+/** Request body for missionApi.create(). */
 export interface MissionCreatePayload {
 	name: string;
 	description?: string | null;
 }
 
+/** Request body for missionApi.update(); unset fields are left unchanged. */
 export interface MissionUpdatePayload {
 	name?: string;
 	description?: string | null;
 	status?: MissionStatus;
 }
 
+/** Request body for missionApi.createWaypoint(). */
 export interface WaypointCreatePayload {
 	// Ignored by the create endpoint (server always appends at the end) but required by the
-	// backend schema — send a placeholder.
+	// backend schema; send a placeholder.
 	sequence_number: number;
 	latitude: number;
 	longitude: number;
@@ -84,6 +87,7 @@ export interface WaypointCreatePayload {
 	heading_deg?: number | null;
 }
 
+/** Request body for missionApi.updateWaypoint(); unset fields are left unchanged. */
 export interface WaypointUpdatePayload {
 	latitude?: number;
 	longitude?: number;
@@ -93,6 +97,7 @@ export interface WaypointUpdatePayload {
 	heading_deg?: number | null;
 }
 
+/** Request body for one waypoint within missionApi.replaceWaypoints(). */
 export interface WaypointReplacePayload {
 	latitude: number;
 	longitude: number;
@@ -117,6 +122,7 @@ function handleEmpty(res: Response): void {
 	}
 }
 
+/** REST client for /api/missions: waypoint CRUD plus the validate/send/start/pause/terminate commands. */
 export const missionApi = {
 	async list(status?: MissionStatus): Promise<Mission[]> {
 		const query = status ? `?status=${encodeURIComponent(status)}` : "";

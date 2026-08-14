@@ -1,3 +1,5 @@
+"""Pydantic request/response schemas for the ROS2 command console."""
+
 from datetime import datetime
 from typing import Any, Literal
 
@@ -5,6 +7,8 @@ from pydantic import BaseModel, Field
 
 
 class RosCommandParamMeta(BaseModel):
+	"""Describes one parameter a command accepts, resolved for the current registry response."""
+
 	name: str
 	label: str
 	kind: Literal["topic_select", "param_select", "text"]
@@ -17,6 +21,8 @@ class RosCommandParamMeta(BaseModel):
 
 
 class RosCommandMeta(BaseModel):
+	"""Response body entry for GET /api/ros-commands: one command's UI metadata."""
+
 	command_id: str
 	label: str
 	description: str
@@ -24,10 +30,14 @@ class RosCommandMeta(BaseModel):
 
 
 class RosCommandRequest(BaseModel):
+	"""Request body for POST /api/ros-commands/{command_id}."""
+
 	params: dict[str, str] = Field(default_factory=dict)
 
 
 class RosCommandResult(BaseModel):
+	"""Response body for a command execution."""
+
 	command_id: str
 	ok: bool
 	# "not_connected" | "timed_out" | "service_call_failed" | "no_data_yet" | None

@@ -1,9 +1,10 @@
 // Versioned message contracts for the ROS2 bridge WebSocket connection.
-// Mirror of apps/backend/src/revolt_api/bridge/contracts.py — keep in sync.
+// Mirror of apps/backend/src/revolt_api/bridge/contracts.py; keep in sync.
 //
 // All messages include a `v` version literal and a `type` discriminant.
 // Switch on `msg.type` to narrow; check `msg.v` to guard unknown schema versions.
 
+/** Battery voltage reading from /arduino/stern/battery_voltage. */
 export interface BatteryMsg {
 	v: "1";
 	type: "battery";
@@ -11,6 +12,7 @@ export interface BatteryMsg {
 	voltage_v: number; // raw volts from /arduino/stern/battery_voltage
 }
 
+/** Per-motor current draw, converted from raw ADC via the ACS712 formula. */
 export interface CurrentMsg {
 	v: "1";
 	type: "current";
@@ -20,6 +22,7 @@ export interface CurrentMsg {
 	amperes: number; // raw_adc * 30.0 / 1023.0 via ACS712
 }
 
+/** DHT22 enclosure temperature reading, stern or bow. */
 export interface TemperatureMsg {
 	v: "1";
 	type: "temperature";
@@ -28,6 +31,7 @@ export interface TemperatureMsg {
 	value_c: number;
 }
 
+/** DHT22 enclosure humidity reading, stern or bow. */
 export interface HumidityMsg {
 	v: "1";
 	type: "humidity";
@@ -36,6 +40,7 @@ export interface HumidityMsg {
 	value_pct: number;
 }
 
+/** Stern thruster azimuth angle feedback, port or starboard. */
 export interface AzimuthFeedbackMsg {
 	v: "1";
 	type: "azimuth_feedback";
@@ -44,6 +49,7 @@ export interface AzimuthFeedbackMsg {
 	angle_deg: number;
 }
 
+/** Raw RC transmitter channel values, from custom_msgs/RCRemote. */
 export interface RcRemoteMsg {
 	v: "1";
 	type: "rc_remote";
@@ -54,6 +60,7 @@ export interface RcRemoteMsg {
 	gear: "manual" | "auto"; // 0=manual, 1=auto
 }
 
+/** Stern light beacon lamp state, decoded from the firmware's red/yellow/green bitmask. */
 export interface LightBeaconMsg {
 	v: "1";
 	type: "light_beacon";
@@ -63,6 +70,7 @@ export interface LightBeaconMsg {
 	green: boolean;
 }
 
+/** Current vessel control mode. */
 export interface ControlModeMsg {
 	v: "1";
 	type: "control_mode";
@@ -70,6 +78,7 @@ export interface ControlModeMsg {
 	mode: "manual" | "manual_assisted" | "autonomous" | "miscommunication";
 }
 
+/** Stern emergency-stop status. */
 export interface EmergencyStopMsg {
 	v: "1";
 	type: "emergency_stop";
@@ -77,6 +86,7 @@ export interface EmergencyStopMsg {
 	active: boolean; // true when UInt8 value != 0
 }
 
+/** Bow linear actuator retract/extend state. */
 export interface LinearActuatorMsg {
 	v: "1";
 	type: "linear_actuator";
@@ -84,6 +94,10 @@ export interface LinearActuatorMsg {
 	retracted: boolean; // true when UInt8 value == 1
 }
 
+/**
+ * Backend-to-rosbridge connection status. Always the first message sent after connecting, so
+ * the UI knows immediately whether telemetry is live before any topic data arrives.
+ */
 export interface BridgeStatusMsg {
 	v: "1";
 	type: "bridge_status";
@@ -93,6 +107,7 @@ export interface BridgeStatusMsg {
 	target: string; // "physical" or "simulation"
 }
 
+/** Liveness status for a camera feed, derived from recent frame arrival. */
 export interface CameraStatusMsg {
 	v: "1";
 	type: "camera_status";
@@ -101,6 +116,7 @@ export interface CameraStatusMsg {
 	connected: boolean; // true when a frame was received within the last 3 seconds
 }
 
+/** Keepalive the frontend uses to compute round-trip latency. */
 export interface PingMsg {
 	v: "1";
 	type: "ping";
@@ -109,6 +125,7 @@ export interface PingMsg {
 
 // Simulation (pygemini/STC) message contracts
 
+/** Simulated hull pose from the pygemini/STC simulation environment. */
 export interface SimHullPositionMsg {
 	v: "1";
 	type: "sim_hull_position";
@@ -122,6 +139,7 @@ export interface SimHullPositionMsg {
 	orient_w: number;
 }
 
+/** Simulated hull linear and angular velocity. */
 export interface SimHullVelocityMsg {
 	v: "1";
 	type: "sim_hull_velocity";
@@ -134,6 +152,10 @@ export interface SimHullVelocityMsg {
 	ang_vel_z: number;
 }
 
+/**
+ * GNSS position fix. Sourced from /fix on the physical vessel, or converted from the sim's
+ * local-Cartesian antenna position.
+ */
 export interface GnssFixMsg {
 	v: "1";
 	type: "gnss_fix";
@@ -144,6 +166,7 @@ export interface GnssFixMsg {
 	fix_status: number; // NavSatFix.status.status: -1=NO_FIX, 0=FIX, 1=SBAS, 2=GBAS; -1 if field absent
 }
 
+/** True heading from the VS330 GNSS compass's dual-antenna RTK solution. */
 export interface GnssHeadingMsg {
 	v: "1";
 	type: "gnss_heading";
@@ -151,14 +174,19 @@ export interface GnssHeadingMsg {
 	heading_deg: number; // true heading 0-360, from /heading QuaternionStamped yaw (VS330 GNSS compass)
 }
 
+/** GNSS-derived speed and course over ground from the VS330 compass. */
 export interface GnssVelocityMsg {
 	v: "1";
 	type: "gnss_velocity";
 	timestamp_ms: number;
 	speed_ms: number; // from /vel TwistStamped linear.x/y magnitude (VS330 GNSS compass, VTG-derived)
-	course_deg: number; // course over ground 0-360, from /vel TwistStamped linear.x/y bearing
+	// Course over ground 0-360, from /vel TwistStamped linear.x/y bearing. null below the
+	// backend's MIN_COG_SPEED_MS; the angle is meaningless noise at near-zero speed, not just
+	// imprecise.
+	course_deg: number | null;
 }
 
+/** Simulated GNSS speed/heading vector. */
 export interface SimGnssVelocityMsg {
 	v: "1";
 	type: "sim_gnss_velocity";
@@ -167,6 +195,7 @@ export interface SimGnssVelocityMsg {
 	heading_rad: number; // Float32MultiArray.data[1], radians
 }
 
+/** Simulated IMU linear acceleration and angular velocity. */
 export interface SimImuMsg {
 	v: "1";
 	type: "sim_imu";
@@ -179,6 +208,10 @@ export interface SimImuMsg {
 	ang_vel_z: number;
 }
 
+/**
+ * Physical IMU attitude and raw motion data from the Xsens unit. The VS330 GNSS compass remains
+ * the authoritative heading/velocity source; this topic is attitude-only.
+ */
 export interface ImuMsg {
 	v: "1";
 	type: "imu_data";
@@ -194,6 +227,7 @@ export interface ImuMsg {
 	ang_vel_z: number;
 }
 
+/** Simulated per-thruster force/angle feedback. */
 export interface SimThrusterFeedbackMsg {
 	v: "1";
 	type: "sim_thruster_feedback";
@@ -203,6 +237,7 @@ export interface SimThrusterFeedbackMsg {
 	angle: number; // Float32MultiArray.data[1]
 }
 
+/** Single waypoint as echoed back by the simulation's /waypoint_list. */
 export interface SimWaypoint {
 	id: number;
 	pos_x: number; // PoseStamped.pose.position.x; frame TBD
@@ -214,6 +249,10 @@ export interface SimWaypoint {
 	heading_rad: number; // radians, used when heading_mode == ABSOLUTE
 }
 
+/**
+ * Full waypoint queue echoed back by the simulation. Used to confirm mission sends landed and
+ * to derive live mission execution progress (see MissionExecutionStatusMsg).
+ */
 export interface SimWaypointListMsg {
 	v: "1";
 	type: "sim_waypoint_list";
@@ -221,6 +260,7 @@ export interface SimWaypointListMsg {
 	waypoints: SimWaypoint[];
 }
 
+/** Progress of a mission send-to-vessel operation's ack/echo flow. */
 export interface MissionSendStatusMsg {
 	v: "1";
 	type: "mission_send_status";
@@ -239,6 +279,7 @@ export type MissionExecutionState =
 	| "aborted"
 	| "completed";
 
+/** Live mission execution progress, derived from the /waypoint_list echo. */
 export interface MissionExecutionStatusMsg {
 	v: "1";
 	type: "mission_execution_status";
@@ -250,6 +291,7 @@ export interface MissionExecutionStatusMsg {
 	total_count: number;
 }
 
+/** 2D lidar scan, from the Velodyne VLP-16's ring-8 horizontal slice. */
 export interface LidarScanMsg {
 	v: "1";
 	type: "lidar_scan";
@@ -262,6 +304,26 @@ export interface LidarScanMsg {
 	ranges: number[]; // metres per step; inf/NaN replaced with range_max
 }
 
+/**
+ * Decimated 3D point cloud from the Velodyne VLP-16's full 16-ring sweep, complementing
+ * LidarScanMsg's single-ring slice. Backend voxel-decimates before forwarding (see client.py's
+ * _handle_velodyne_points), same frame as LidarScanMsg's ranges.
+ */
+export interface PointCloudMsg {
+	v: "1";
+	type: "point_cloud";
+	timestamp_ms: number;
+	// Flat, interleaved [x0,y0,z0, x1,y1,z1, ...] in metres, ROS convention (x=forward, y=left,
+	// z=up). One flat array rather than per-point objects to keep the JSON payload down at this
+	// point count.
+	points: number[];
+	point_count: number; // points.length / 3
+}
+
+/**
+ * One aggregated radar azimuth bin, forwarded after backend-side binning (see client.py's
+ * RADAR_NUM_BINS comment); never a raw 1:1 spoke.
+ */
 export interface RadarSpokeMsg {
 	v: "1";
 	type: "radar_spoke";
@@ -275,6 +337,24 @@ export interface RadarSpokeMsg {
 	intensity: number[]; // one 0-255 value per sample
 }
 
+/**
+ * Cartesian radar returns, an alternative representation to RadarSpokeMsg's polar bins. Kept
+ * alongside RadarSpokeMsg while the two are evaluated against each other (see client.py's
+ * _handle_radar_points); not the widget's actual data source yet.
+ */
+export interface RadarPointCloudMsg {
+	v: "1";
+	type: "radar_point_cloud";
+	timestamp_ms: number;
+	// Flat, interleaved [x0,y0,z0,i0, x1,y1,z1,i1, ...] in metres / 0-255 intensity. Same flat-array
+	// convention as PointCloudMsg, extended with a per-point intensity value -- radar echo
+	// strength drives the widget's brightness, unlike lidar's flattened 2D view, which doesn't
+	// use one.
+	points: number[];
+	point_count: number; // points.length / 4
+}
+
+/** Decoded AIS target report, keyed by MMSI. */
 export interface AisTargetMsg {
 	v: "1";
 	type: "ais_target";
@@ -284,6 +364,12 @@ export interface AisTargetMsg {
 	lon: number;
 	sog_kn: number | null; // null when the source report has no valid speed
 	heading_deg: number | null; // null when the source report has no valid heading
+	cog_deg: number | null; // course over ground, distinct from heading_deg; null when unavailable
+	turn_deg_per_min: number | null; // rate of turn, +right/-left; null when unavailable
+	/** Raw AIS navigational status code (0-15, e.g. 0=under way using engine, 1=at anchor,
+	 * 5=moored); 15 ("undefined") is itself a real status, not absence of data, so this is never
+	 * null the way the other AIS-derived fields above are. */
+	nav_status: number;
 }
 
 export type BridgeMessage =
@@ -295,6 +381,7 @@ export type BridgeMessage =
 	| RcRemoteMsg
 	| LightBeaconMsg
 	| RadarSpokeMsg
+	| RadarPointCloudMsg
 	| AisTargetMsg
 	| ControlModeMsg
 	| EmergencyStopMsg
@@ -314,4 +401,5 @@ export type BridgeMessage =
 	| SimWaypointListMsg
 	| MissionSendStatusMsg
 	| MissionExecutionStatusMsg
-	| LidarScanMsg;
+	| LidarScanMsg
+	| PointCloudMsg;

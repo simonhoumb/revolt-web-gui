@@ -1,15 +1,26 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import type { LidarScanMsg } from "@revolt/shared-types";
+import type { LidarScanMsg, PointCloudMsg } from "@revolt/shared-types";
 import { LidarWidget } from "./LidarWidget.js";
 import { useLidarData, type LidarData } from "../../hooks/useLidarData.js";
+import { usePointCloudData, type PointCloudData } from "../../hooks/usePointCloudData.js";
 
 vi.mock("../../hooks/useLidarData.js", () => ({
 	useLidarData: vi.fn(),
 }));
+vi.mock("../../hooks/usePointCloudData.js", () => ({
+	usePointCloudData: vi.fn(),
+}));
+// The real Lidar3DScene mounts an r3f <Canvas>, which needs a WebGL context jsdom doesn't
+// provide -- stubbed here so the 2D/3D toggle tests can assert on which component rendered
+// without touching r3f internals (Lidar3DScene has its own dedicated test for that).
+vi.mock("./Lidar3DScene.js", () => ({
+	Lidar3DScene: vi.fn(() => <div data-testid="lidar-3d-scene" />),
+}));
 
 const mockUseLidarData = useLidarData as Mock;
+const mockUsePointCloudData = usePointCloudData as Mock;
 
 // jsdom implements HTMLCanvasElement but not its 2D rendering context -- getContext("2d")
 // returns null by default, which the widget already guards against (drawing is skipped
@@ -43,6 +54,9 @@ beforeEach(() => {
 	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
 		fakeCtx as unknown as CanvasRenderingContext2D,
 	);
+	// Default: no point cloud yet, so tests that only set up useLidarData fall back to /scan
+	// points exactly like before point-cloud support existed. Overridden per-test where needed.
+	mockUsePointCloudData.mockReturnValue(makePointCloudData());
 });
 
 afterEach(() => {
@@ -66,7 +80,22 @@ function makeScan(overrides: Partial<LidarScanMsg> = {}): LidarScanMsg {
 }
 
 function makeLidarData(overrides: Partial<LidarData> = {}): LidarData {
-	return { scan: null, points: [], ...overrides };
+	return { scan: null, points: [], stale: false, ...overrides };
+}
+
+function makeCloud(overrides: Partial<PointCloudMsg> = {}): PointCloudMsg {
+	return {
+		v: "1",
+		type: "point_cloud",
+		timestamp_ms: 0,
+		points: [],
+		point_count: 0,
+		...overrides,
+	};
+}
+
+function makePointCloudData(overrides: Partial<PointCloudData> = {}): PointCloudData {
+	return { cloud: null, points: [], stale: false, ...overrides };
 }
 
 // ObcStepperBox's own up/down buttons live in its shadow DOM, not reachable via RTL's usual
@@ -165,5 +194,91 @@ describe("LidarWidget", () => {
 			fireEvent.wheel(canvasArea, { deltaY: 100 });
 		});
 		expect(screen.getByText("50")).toBeInTheDocument();
+	});
+
+	it("prefers point-cloud points over /scan points when both are present", () => {
+		mockUseLidarData.mockReturnValue(
+			makeLidarData({ scan: makeScan(), points: [{ x: 1, y: 1 }] }),
+		);
+		mockUsePointCloudData.mockReturnValue(
+			makePointCloudData({
+				cloud: makeCloud({ points: [1, 2, 3, 4, 5, 6, 7, 8, 9], point_count: 3 }),
+				points: [
+					{ x: 1, y: 2, z: 3 },
+					{ x: 4, y: 5, z: 6 },
+					{ x: 7, y: 8, z: 9 },
+				],
+			}),
+		);
+		render(<LidarWidget />);
+		expect(fakeCtx.fillRect).toHaveBeenCalledTimes(3);
+	});
+
+	it("falls back to /scan points when the point cloud is empty", () => {
+		mockUseLidarData.mockReturnValue(
+			makeLidarData({
+				scan: makeScan(),
+				points: [
+					{ x: 1, y: 2 },
+					{ x: -3, y: 4 },
+				],
+			}),
+		);
+		mockUsePointCloudData.mockReturnValue(makePointCloudData());
+		render(<LidarWidget />);
+		expect(fakeCtx.fillRect).toHaveBeenCalledTimes(2);
+	});
+
+	it("renders the 2D canvas, not the 3D scene, when viewMode is undefined or 'detailed'", () => {
+		mockUseLidarData.mockReturnValue(makeLidarData());
+		render(<LidarWidget />);
+		expect(screen.getByLabelText("2D lidar scan view")).toBeInTheDocument();
+		expect(screen.queryByTestId("lidar-3d-scene")).not.toBeInTheDocument();
+
+		cleanup();
+		render(<LidarWidget viewMode="detailed" />);
+		expect(screen.getByLabelText("2D lidar scan view")).toBeInTheDocument();
+		expect(screen.queryByTestId("lidar-3d-scene")).not.toBeInTheDocument();
+	});
+
+	it("renders the 3D scene instead of the 2D canvas when viewMode is 'instrument'", () => {
+		mockUseLidarData.mockReturnValue(makeLidarData());
+		mockUsePointCloudData.mockReturnValue(
+			makePointCloudData({ points: [{ x: 1, y: 2, z: 3 }] }),
+		);
+		render(<LidarWidget viewMode="instrument" />);
+		expect(screen.getByTestId("lidar-3d-scene")).toBeInTheDocument();
+		expect(screen.queryByLabelText("2D lidar scan view")).not.toBeInTheDocument();
+	});
+
+	it("hides the zoom stepper in 3D mode, since the zoom ladder is a 2D-only concept", () => {
+		mockUseLidarData.mockReturnValue(makeLidarData());
+		render(<LidarWidget viewMode="instrument" />);
+		expect(screen.queryByLabelText("Lidar range")).not.toBeInTheDocument();
+	});
+
+	it("shows a 'No signal' overlay when the active 2D source has gone stale", () => {
+		mockUseLidarData.mockReturnValue(
+			makeLidarData({ scan: makeScan(), points: [{ x: 1, y: 2 }], stale: true }),
+		);
+		render(<LidarWidget viewMode="detailed" />);
+		expect(screen.getByText("No signal")).toBeInTheDocument();
+	});
+
+	it("hides the 'No signal' overlay when the active 2D source is fresh", () => {
+		mockUseLidarData.mockReturnValue(
+			makeLidarData({ scan: makeScan(), points: [{ x: 1, y: 2 }], stale: false }),
+		);
+		render(<LidarWidget viewMode="detailed" />);
+		expect(screen.queryByText("No signal")).not.toBeInTheDocument();
+	});
+
+	it("shows a 'No signal' overlay in 3D mode when the point cloud has gone stale", () => {
+		mockUseLidarData.mockReturnValue(makeLidarData());
+		mockUsePointCloudData.mockReturnValue(
+			makePointCloudData({ points: [{ x: 1, y: 2, z: 3 }], stale: true }),
+		);
+		render(<LidarWidget viewMode="instrument" />);
+		expect(screen.getByText("No signal")).toBeInTheDocument();
 	});
 });

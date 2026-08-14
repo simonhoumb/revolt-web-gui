@@ -1,3 +1,9 @@
+"""Topic inventories for the physical and simulation ROS2 bridge targets, and the rosbridge wire protocol's message shapes.
+
+get_subscribe_topics()/get_publish_topics() select the inventory to use based on BRIDGE_TARGET;
+both map to the same web contracts in contracts.py so the frontend needs no target-specific logic.
+"""
+
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -6,6 +12,8 @@ from typing_extensions import TypedDict
 
 @dataclass(frozen=True)
 class TopicSpec:
+	"""One ROS2 topic the bridge subscribes to or publishes on."""
+
 	topic: str
 	ros_type: str
 	throttle_rate_ms: int = (
@@ -95,6 +103,17 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/fix",
 		"sensor_msgs/NavSatFix",
+		# Confirmed via ros2 topic hz against a real rosbag: the VS330 publishes at a steady
+		# 20Hz, not the ~1Hz this mock server's own comment ("rates matching real hardware")
+		# assumed when it was built. 1Hz matches standard marine GPS/NMEA output and IEC 61174
+		# display conventions; a vessel this slow (~0.5-1 kn normal transit) moves well under a
+		# metre between 1-second fixes, imperceptible at any chart zoom level that matters, and
+		# throttling down to it also stops this topic from swamping BridgeDataContext's single
+		# combined reducer with re-renders 20x more often than every other consumer (MapWidget's
+		# camera-follow/marker updates especially) actually needs, which was making map zoom feel
+		# laggy during real playback in a way the mock's own gentler simulated rate never showed.
+		throttle_rate_ms=1000,
+		frontend_throttle_ms=1000,
 		description=(
 			"Primary GNSS fix (WGS84): latitude, longitude, altitude. "
 			"Published by the Hemisphere Vector VS330 GNSS compass via nmea_navsat."
@@ -103,6 +122,9 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/vel",
 		"geometry_msgs/TwistStamped",
+		# See /fix's own comment above; same real-vs-assumed rate mismatch, same fix.
+		throttle_rate_ms=1000,
+		frontend_throttle_ms=1000,
 		description=(
 			"GNSS speed/course over ground (VTG-derived), ENU linear.x/y components. "
 			"Published by the Hemisphere Vector VS330 GNSS compass via nmea_navsat."
@@ -111,6 +133,9 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/heading",
 		"geometry_msgs/QuaternionStamped",
+		# See /fix's own comment above; same real-vs-assumed rate mismatch, same fix.
+		throttle_rate_ms=1000,
+		frontend_throttle_ms=1000,
 		description=(
 			"True heading as a yaw-only quaternion, derived from the NMEA HDT sentence. "
 			"Published by the Hemisphere Vector VS330 GNSS compass (dual-antenna RTK "
@@ -123,7 +148,7 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		throttle_rate_ms=100,
 		description=(
 			"Intel RealSense D456 color camera, JPEG-compressed via image_transport "
-			"(realsense2_camera v4.x — namespace is /camera/camera/). Frame stored by "
+			"(realsense2_camera v4.x, namespace is /camera/camera/). Frame stored by "
 			"bridge client; served via MJPEG HTTP endpoint, not forwarded through WebSocket."
 		),
 	),
@@ -138,13 +163,37 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		),
 	),
 	TopicSpec(
+		"/velodyne_points",
+		"sensor_msgs/PointCloud2",
+		throttle_rate_ms=250,
+		frontend_throttle_ms=250,
+		description=(
+			"Full 3D Velodyne VLP-16 point cloud (all 16 rings), from velodyne_pointcloud's "
+			"velodyne_transform_node -- the same source /scan's single ring is derived from. "
+			"Backend voxel-decimates before forwarding (see client.py's _handle_velodyne_points); "
+			"throttled slower than /scan since each frame carries far more data."
+		),
+	),
+	TopicSpec(
 		"/radar/spoke",
 		"custom_msgs/RadarSpoke",
 		description=(
 			"One radar spoke per message: azimuth, range_start/increment, intensity[]. "
-			"Not time-throttled -- each message is a distinct positional slice of the sweep, "
+			"Not time-throttled; each message is a distinct positional slice of the sweep, "
 			"so dropping messages by time would leave permanent gaps rather than a lower "
 			"refresh rate. Rate control happens on the frontend render side instead."
+		),
+	),
+	TopicSpec(
+		"/radar/points",
+		"sensor_msgs/PointCloud2",
+		throttle_rate_ms=250,
+		frontend_throttle_ms=250,
+		description=(
+			"Cartesian radar returns (x, y, z, intensity per point) as an alternative to the "
+			"polar /radar/spoke feed. Kept alongside /radar/spoke -- not a replacement yet -- "
+			"while the two are evaluated against each other; see client.py's "
+			"_handle_radar_points."
 		),
 	),
 	TopicSpec(
@@ -176,12 +225,21 @@ PHYSICAL_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 		"std_msgs/UInt16",
 		description=(
 			"Bitmask mirroring the stern status LEDs: bit0=red, bit1=yellow, bit2=green. "
-			"Not yet published by firmware -- Hardware/actuators/firmware/stern/src/main.cpp "
+			"Not yet published by firmware; Hardware/actuators/firmware/stern/src/main.cpp "
 			"computes red/yellow/green booleans every 500ms (including live blink state, since "
 			"the blinking states toggle their own flag each tick) but never publishes them; this "
 			"entry is here so the GUI ships against the intended shape ahead of that firmware "
 			"change landing. Same UInt16 type as the sibling emergency_stop_status/"
 			"linear_actuator_retract_state topics, which also carry a small status int."
+		),
+	),
+	TopicSpec(
+		"/waypoint_list",
+		"custom_msgs/WaypointList",
+		description=(
+			"Active waypoint list from waypoint_switcher_node, republished at 1Hz "
+			"(ControlSystemROS2's guidance/waypoint_switcher). Confirms an /update_waypoint_list "
+			"send landed; publish_and_await_ack correlates on this echo."
 		),
 	),
 ]
@@ -225,7 +283,7 @@ SIMULATION_SUBSCRIBE_TOPICS: list[TopicSpec] = [
 	TopicSpec(
 		"/revolt/sim/stc/gnss/antenna2/position",
 		"geometry_msgs/PointStamped",
-		description="Simulated GNSS antenna 2 position — subscribed but not forwarded to frontend.",
+		description="Simulated GNSS antenna 2 position; subscribed but not forwarded to frontend.",
 	),
 	TopicSpec(
 		"/revolt/sim/stc/gnss/velocity_vector",
@@ -299,10 +357,12 @@ SIMULATION_PUBLISH_TOPICS: list[TopicSpec] = [
 
 
 def get_subscribe_topics(target: str) -> list[TopicSpec]:
+	"""The subscribe-topic inventory for BRIDGE_TARGET ("physical" or "simulation")."""
 	return SIMULATION_SUBSCRIBE_TOPICS if target == "simulation" else PHYSICAL_SUBSCRIBE_TOPICS
 
 
 def get_publish_topics(target: str) -> list[TopicSpec]:
+	"""The publish-topic inventory for BRIDGE_TARGET ("physical" or "simulation")."""
 	return SIMULATION_PUBLISH_TOPICS if target == "simulation" else PHYSICAL_PUBLISH_TOPICS
 
 
@@ -310,6 +370,8 @@ def get_publish_topics(target: str) -> list[TopicSpec]:
 
 
 class RosBridgeSubscribe(TypedDict):
+	"""Outbound {"op": "subscribe", ...} frame, sent once per topic at connect time."""
+
 	op: Literal["subscribe"]
 	topic: str
 	type: str
@@ -317,18 +379,24 @@ class RosBridgeSubscribe(TypedDict):
 
 
 class RosBridgePublishOut(TypedDict):
+	"""Outbound {"op": "publish", ...} frame, used to send commands to the vessel."""
+
 	op: Literal["publish"]
 	topic: str
 	msg: dict[str, Any]
 
 
 class RosBridgePublishIn(TypedDict):
+	"""Inbound {"op": "publish", ...} frame carrying a subscribed topic's message."""
+
 	op: Literal["publish"]
 	topic: str
 	msg: dict[str, Any]
 
 
 class RosBridgeCallService(TypedDict):
+	"""Outbound {"op": "call_service", ...} frame, used for rosapi introspection calls."""
+
 	op: Literal["call_service"]
 	id: str
 	service: str
@@ -337,6 +405,8 @@ class RosBridgeCallService(TypedDict):
 
 
 class RosBridgeServiceResponse(TypedDict):
+	"""Inbound {"op": "service_response", ...} frame answering a call_service request."""
+
 	op: Literal["service_response"]
 	id: str
 	service: str

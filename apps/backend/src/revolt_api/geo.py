@@ -3,7 +3,7 @@
 Deliberate parity with apps/frontend/src/lib/geo.ts: the server-side hazard check needs to reason
 about the same path the map draws (straight legs joined by turn-radius arcs), or the "authoritative"
 check could disagree with what the operator sees on screen. Ported formula-for-formula rather than
-sharing code across languages -- keep this in sync with geo.ts if either changes.
+sharing code across languages; keep this in sync with geo.ts if either changes.
 """
 
 import math
@@ -12,19 +12,20 @@ from dataclasses import dataclass
 
 EARTH_RADIUS_M = 6_371_000.0
 
-# Turns tighter than this are treated as effectively straight -- mirrors geo.ts's MIN_TURN_DEG.
+# Turns tighter than this are treated as effectively straight; mirrors geo.ts's MIN_TURN_DEG.
 _MIN_TURN_DEG = 2.0
-# Points sampled along each arc -- mirrors geo.ts's ARC_SEGMENTS.
+# Points sampled along each arc; mirrors geo.ts's ARC_SEGMENTS.
 _ARC_SEGMENTS = 16
 
 # WGS84-equatorial-radius-based metres-per-degree-of-latitude approximation, used only by the
-# local Cartesian projection below -- deliberately not EARTH_RADIUS_M's mean-radius great-circle
-# value above, since that's a different (and for this flat-earth-over-a-small-area use, needlessly
-# more complex) approximation than what the simulation's own coordinate frame was built against.
+# local Cartesian projection below (deliberately not EARTH_RADIUS_M's mean-radius great-circle
+# value above, since that's a different, and for this flat-earth-over-a-small-area use needlessly
+# more complex, approximation than what the simulation's own coordinate frame was built against).
 _METRES_PER_DEGREE_LAT = 111320.0
 
 
 def haversine_distance_m(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
+	"""Great-circle distance between two lat/lon points, in metres."""
 	d_lat = math.radians(b_lat - a_lat)
 	d_lon = math.radians(b_lon - a_lon)
 	lat1 = math.radians(a_lat)
@@ -34,6 +35,7 @@ def haversine_distance_m(a_lat: float, a_lon: float, b_lat: float, b_lon: float)
 
 
 def bearing_deg(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
+	"""Initial great-circle bearing from point a to point b, in degrees, normalized to [0, 360)."""
 	lat1 = math.radians(a_lat)
 	lat2 = math.radians(b_lat)
 	d_lon = math.radians(b_lon - a_lon)
@@ -70,9 +72,11 @@ def compute_turn_arc(
 	next_: tuple[float, float],
 	radius_m: float,
 ) -> list[tuple[float, float]] | None:
-	"""The circular-arc fillet a vessel follows through a waypoint, tangent to both the inbound and
-	outbound legs. Returns None when the turn is negligible or the radius is non-positive -- the
-	straight-line corner is already an accurate picture. Mirrors geo.ts's computeTurnArc exactly."""
+	"""The circular-arc fillet a vessel follows through a waypoint, tangent to both legs.
+
+	Returns None when the turn is negligible or the radius is non-positive; the straight-line
+	corner is already an accurate picture. Mirrors geo.ts's computeTurnArc exactly.
+	"""
 	if radius_m <= 0:
 		return None
 
@@ -113,11 +117,13 @@ def compute_turn_arc(
 def latlon_to_local_cartesian(
 	lat: float, lon: float, origin_lat: float, origin_lon: float
 ) -> tuple[float, float]:
-	"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North) relative to
-	origin_lat/origin_lon, using a flat-earth equirectangular approximation -- valid only over the
-	small area around a simulation's GNSS origin, unlike this module's great-circle
-	haversine/bearing/destination_point functions above. Used to translate outbound waypoints into
-	the simulation's own local coordinate frame. Inverse of local_cartesian_to_latlon."""
+	"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North), relative to origin.
+
+	Uses a flat-earth equirectangular approximation, valid only over the small area around a
+	simulation's GNSS origin, unlike this module's great-circle haversine/bearing/
+	destination_point functions above. Used to translate outbound waypoints into the simulation's
+	own local coordinate frame. Inverse of local_cartesian_to_latlon.
+	"""
 	x = (lon - origin_lon) * _METRES_PER_DEGREE_LAT * math.cos(math.radians(origin_lat))
 	y = (lat - origin_lat) * _METRES_PER_DEGREE_LAT
 	return x, y
@@ -134,17 +140,20 @@ def local_cartesian_to_latlon(
 
 @dataclass(frozen=True)
 class RouteWaypoint:
+	"""Minimal waypoint shape build_route_points() needs; decoupled from the Waypoint ORM model."""
+
 	lat: float
 	lon: float
 	switch_radius: float
 
 
 def build_route_points(waypoints: Sequence[RouteWaypoint]) -> list[tuple[float, float]]:
-	"""The actual path a vessel follows: straight legs joined by turn-radius arcs at each interior
-	waypoint (cutting the corner), not the naive straight-line-through-every-waypoint polyline.
+	"""The actual path a vessel follows: straight legs joined by turn-radius arcs, cutting corners.
+
 	Used to build the LineString that Phase 2 buffers and checks against charted hazards, so the
-	server-side check reasons about the same path the map draws rather than a cruder approximation
-	of it."""
+	server-side check reasons about the same path the map draws rather than a cruder
+	approximation of it.
+	"""
 	if len(waypoints) < 2:
 		return [(w.lat, w.lon) for w in waypoints]
 

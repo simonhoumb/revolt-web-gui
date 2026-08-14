@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import random
+import struct
 import time
 
 from websockets.asyncio.server import ServerConnection, serve
@@ -87,7 +88,9 @@ INTERVALS_PHYSICAL: dict[str, float] = {
     "/heading": 0.5,
     "/camera/camera/color/image_raw/compressed": 0.2,  # 5 fps
     "/scan": 0.1,  # 10 Hz
+    "/velodyne_points": 0.25,  # 4 Hz, matching client.py's frontend_throttle_ms for this topic
     "/radar/spoke": 0.01,  # ~= 20s-rotation / 2048 fine steps, so each tick advances one step
+    "/radar/points": 0.25,  # 4 Hz, matching client.py's frontend_throttle_ms for this topic
     "/ais/decoded_message": 3.0,  # one target report per tick, round-robin (see _make_msg)
     "/imu/data": 0.1,  # sent at the already-throttled 10Hz rate, same as /scan below
 }
@@ -134,7 +137,9 @@ TOPIC_TYPES_PHYSICAL: dict[str, str] = {
     "/heading": "geometry_msgs/QuaternionStamped",
     "/camera/camera/color/image_raw/compressed": "sensor_msgs/CompressedImage",
     "/scan": "sensor_msgs/LaserScan",
+    "/velodyne_points": "sensor_msgs/PointCloud2",
     "/radar/spoke": "custom_msgs/RadarSpoke",
+    "/radar/points": "sensor_msgs/PointCloud2",
     "/ais/decoded_message": "custom_msgs/SimpleAISdata",
     "/imu/data": "sensor_msgs/Imu",
 }
@@ -224,6 +229,153 @@ MOCK_AUTO_POP = os.environ.get("MOCK_AUTO_POP", "") == "1"
 CRAB_ANGLE_RAD = math.radians(
     15
 )  # simulated cross-current/wind drift: COG diverges from heading
+
+
+# VLP-16 firing order elevations, -15..+15 degrees in 2-degree steps.
+_VELODYNE_RING_ELEVATIONS_DEG = [-15 + i * 2 for i in range(16)]
+# Coarser than a real sweep's ~1800 points/ring -- keeps this mock's per-tick loop fast.
+_VELODYNE_AZIMUTH_STEPS = 200
+
+
+def _make_velodyne_points_msg(t: float) -> dict:
+    """Synthetic PointCloud2 (all 16 rings), same obstacle-ring pattern as /scan but in 3D.
+
+    Field layout (x,y,z,intensity,ring,time) matches the real velodyne_pointcloud driver's
+    unpadded layout, though the backend's parser reads offsets from `fields` regardless.
+    """
+    field_specs = [
+        {"name": "x", "offset": 0, "datatype": 7, "count": 1},
+        {"name": "y", "offset": 4, "datatype": 7, "count": 1},
+        {"name": "z", "offset": 8, "datatype": 7, "count": 1},
+        {"name": "intensity", "offset": 12, "datatype": 7, "count": 1},
+        {"name": "ring", "offset": 16, "datatype": 4, "count": 1},
+        {"name": "time", "offset": 18, "datatype": 7, "count": 1},
+    ]
+    point_step = 22
+    angle_inc = (2 * math.pi) / _VELODYNE_AZIMUTH_STEPS
+
+    packed = bytearray()
+    for ring_idx, elevation_deg in enumerate(_VELODYNE_RING_ELEVATIONS_DEG):
+        elevation = math.radians(elevation_deg)
+        for i in range(_VELODYNE_AZIMUTH_STEPS):
+            azimuth = i * angle_inc
+            # Same obstacle-ring-with-gaps pattern as /scan's case below, so the 3D view shows
+            # a recognizable shape rather than pure noise.
+            if (azimuth % (math.pi / 2)) < 0.2:
+                r = 125.0 + random.gauss(0, 0.5)
+            else:
+                r = 40.0 + 20.0 * math.sin(azimuth * 3 + t) + random.gauss(0, 0.5)
+            r = max(0.9, min(r, 129.9))
+            x = r * math.cos(elevation) * math.cos(azimuth)
+            y = r * math.cos(elevation) * math.sin(azimuth)
+            z = r * math.sin(elevation)
+
+            row = bytearray(point_step)
+            struct.pack_into("<f", row, 0, x)
+            struct.pack_into("<f", row, 4, y)
+            struct.pack_into("<f", row, 8, z)
+            struct.pack_into("<f", row, 12, 100.0)  # intensity, unused by the backend
+            struct.pack_into("<H", row, 16, ring_idx)
+            struct.pack_into("<f", row, 18, 0.0)  # time offset, unused by the backend
+            packed += row
+
+    return {
+        "point_step": point_step,
+        "is_bigendian": False,
+        "fields": field_specs,
+        "data": base64.b64encode(bytes(packed)).decode(),
+        "header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "velodyne"},
+    }
+
+
+# 0.5-degree resolution -- a full-circle pass generating discrete returns, not a per-sample
+# array like /radar/spoke, so this only needs enough azimuth steps to make the shoreline arc and
+# target blobs look continuous.
+_RADAR_POINTS_AZIMUTH_STEPS = 720
+
+
+def _make_radar_points_msg(t: float) -> dict:
+    """Synthetic radar PointCloud2 (Cartesian x, y, z, intensity per point).
+
+    An alternative representation to /radar/spoke's polar bins, being evaluated alongside it --
+    self-contained (no shared code with /radar/spoke) so tuning one doesn't risk changing the
+    other. Points are generated directly per return (clutter/shoreline/target) rather than off a
+    fixed range/azimuth grid, so the shoreline arc and target blobs read as continuous/solid the
+    way a real point-cloud driver's output would, not a dotted grid intersection.
+    """
+    # Same scene as /radar/spoke's mock (sea clutter near own-ship, a shoreline arc, a few moving
+    # targets), picked for visual variety only, not calibrated against the real Bekkelaget
+    # shoreline -- see that case's own comments for the reasoning behind each element.
+    land_az_min, land_az_max = math.radians(200), math.radians(260)
+    land_range_m = 1400.0
+    targets = [
+        (1.2, 740.0, 120.0),  # ~0.4 nm, dead ahead-ish
+        (3.6 + t * 0.01, 2600.0, 90.0),  # slow contact off to port
+        (5.0 - t * 0.006, 5200.0, 150.0),  # larger/slower contact further out
+    ]
+
+    point_step = 16
+    field_specs = [
+        {"name": "x", "offset": 0, "datatype": 7, "count": 1},
+        {"name": "y", "offset": 4, "datatype": 7, "count": 1},
+        {"name": "z", "offset": 8, "datatype": 7, "count": 1},
+        {"name": "intensity", "offset": 12, "datatype": 7, "count": 1},
+    ]
+
+    def pack_point(azimuth: float, r: float, intensity: float) -> bytes:
+        row = bytearray(point_step)
+        struct.pack_into("<f", row, 0, r * math.cos(azimuth))
+        struct.pack_into("<f", row, 4, r * math.sin(azimuth))
+        struct.pack_into("<f", row, 8, 0.0)
+        struct.pack_into("<f", row, 12, max(0.0, min(255.0, intensity)))
+        return bytes(row)
+
+    rows: list[bytes] = []
+    for az_i in range(_RADAR_POINTS_AZIMUTH_STEPS):
+        azimuth = az_i * (2 * math.pi / _RADAR_POINTS_AZIMUTH_STEPS)
+
+        # Sea clutter: a few faint near-range returns per azimuth, exponentially less likely
+        # further out -- discrete points instead of /radar/spoke's per-sample intensity array,
+        # but the same falloff shape.
+        for _ in range(3):
+            r = random.expovariate(1 / 150.0)
+            if r > 400.0:
+                continue
+            intensity = 20.0 + random.gauss(0, 5)
+            if intensity < 5:
+                continue
+            rows.append(pack_point(azimuth, r, intensity))
+
+        # Shoreline: one point per azimuth in the land window, so the arc reads as a continuous
+        # coastline rather than an isolated echo.
+        if land_az_min <= azimuth <= land_az_max:
+            land_r = land_range_m + 60.0 * math.sin(azimuth * 9) + random.gauss(0, 15)
+            rows.append(pack_point(azimuth, land_r, 180 + random.randint(-10, 10)))
+
+        # Other traffic: a handful of points per target, scattered within its blob radius, when
+        # this azimuth passes near the target's bearing.
+        for target_azimuth, target_range_m, radius_m in targets:
+            target_azimuth %= 2 * math.pi
+            angle_diff = abs(((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi)
+            if angle_diff >= 0.06:
+                continue
+            for _ in range(3):
+                r = target_range_m + random.uniform(-radius_m, radius_m)
+                rows.append(pack_point(azimuth, r, 200 + random.gauss(0, 20)))
+
+    data = b"".join(rows)
+    width = len(rows)
+    return {
+        "header": {"stamp": {"secs": int(t), "nsecs": 0}, "frame_id": "radar"},
+        "height": 1,
+        "width": width,
+        "fields": field_specs,
+        "is_bigendian": False,
+        "point_step": point_step,
+        "row_step": point_step * width,
+        "data": base64.b64encode(data).decode(),
+        "is_dense": True,
+    }
 
 
 def _mock_heading_rad(t: float) -> float:
@@ -475,6 +627,8 @@ def _make_msg(topic: str) -> dict:
                     "frame_id": "velodyne",
                 },
             }
+        case "/velodyne_points":
+            return _make_velodyne_points_msg(t)
         case "/radar/spoke":
             # Simulated Furuno DRS4D-NXT. The real unit emits 8,192 raw spokes/revolution
             # (confirmed via Furuno's own NavNet API spec, bundled in Hardware/radar/RadarSDK/),
@@ -497,17 +651,54 @@ def _make_msg(topic: str) -> dict:
             num_samples = 480
             range_start = 0.0
             range_increment = (8 * 1852.0) / num_samples
-            target_azimuth = 1.2
-            # ~740 m (~0.4 nm) out -- visible at the widget's default 1 nm zoom (dock-adjacent
-            # testing needs the tight end of the range ladder, not an offshore-transit range).
-            target_sample_idx = 24
-            angle_diff = abs(((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi)
             intensity_bytes = bytearray(num_samples)
+
+            # Sea clutter: real returns fade rapidly with range near own-ship (wave/spray
+            # scatter), not a flat noise floor -- exponential falloff from a peak close in, so
+            # the scope gets a faint textured glow near the center instead of mostly-black with
+            # one isolated blip.
             for i in range(num_samples):
-                level = 10 + random.gauss(0, 3)
-                if angle_diff < 0.1 and abs(i - target_sample_idx) < 4:
-                    level += 200
-                intensity_bytes[i] = max(0, min(255, int(level)))
+                r = range_start + i * range_increment
+                clutter = 25.0 * math.exp(-r / 300.0)
+                intensity_bytes[i] = max(0, min(255, int(clutter + random.gauss(0, 4))))
+
+            # Shoreline: a fixed azimuth window rendered as a solid, persistent arc of strong
+            # returns rather than a point target, since real land is a continuous coastline, not
+            # an isolated echo. The bearing/range here are picked for visual variety only, not
+            # calibrated against the real Bekkelaget shoreline.
+            land_az_min, land_az_max = math.radians(200), math.radians(260)
+            land_range_m = 1400.0
+            if land_az_min <= azimuth <= land_az_max:
+                # Per-spoke range jitter so the leading edge looks organically irregular
+                # instead of a perfect arc.
+                land_r = land_range_m + 60.0 * math.sin(azimuth * 9) + random.gauss(0, 15)
+                land_idx = int((land_r - range_start) / range_increment)
+                for i in range(max(0, land_idx - 2), min(num_samples, land_idx + 30)):
+                    intensity_bytes[i] = max(intensity_bytes[i], 180 + random.randint(-10, 10))
+
+            # Other traffic: a few point targets at different ranges/bearings, each drifting in
+            # azimuth over time so they read as independent moving contacts rather than fixed
+            # clutter. The first matches the original mock's single close-in target.
+            targets = [
+                (1.2, 740.0, 4),  # ~0.4 nm, dead ahead-ish
+                (3.6 + t * 0.01, 2600.0, 3),  # slow contact off to port
+                (5.0 - t * 0.006, 5200.0, 5),  # larger/slower contact further out
+            ]
+            for target_azimuth, target_range_m, blob_halfwidth in targets:
+                target_azimuth %= 2 * math.pi
+                angle_diff = abs(
+                    ((azimuth - target_azimuth + math.pi) % (2 * math.pi)) - math.pi
+                )
+                if angle_diff >= 0.06:
+                    continue
+                target_idx = int((target_range_m - range_start) / range_increment)
+                for i in range(
+                    max(0, target_idx - blob_halfwidth),
+                    min(num_samples, target_idx + blob_halfwidth),
+                ):
+                    level = 200 + random.gauss(0, 20)
+                    intensity_bytes[i] = max(intensity_bytes[i], max(0, min(255, int(level))))
+
             return {
                 "azimuth": round(azimuth, 5),
                 "range_start": range_start,
@@ -517,32 +708,48 @@ def _make_msg(topic: str) -> dict:
                 "max_intensity": 255,
                 "intensity": base64.b64encode(bytes(intensity_bytes)).decode(),
             }
+        case "/radar/points":
+            return _make_radar_points_msg(t)
         case "/ais/decoded_message":
             # Real AIS is a shared broadcast channel: targets take turns reporting, not one
             # message carrying every target at once. Round-robin through a few synthetic targets
             # so the map ends up with several live markers after a few ticks, same as it would
             # from a real receiver.
             targets = [
-                {  # underway, full nav data
+                {  # underway, full nav data, gently oscillating turn rate so "Turn" cycles
+                    # between turning right/left rather than sitting at a fixed value
                     "mmsi": 257123456,
                     "lat": round(59.3783 + 0.006 * math.sin(t / 40), 6),
                     "lon": round(10.6030 + 0.004 * math.cos(t / 40), 6),
                     "sog": round(8.0 + random.gauss(0, 0.2), 1),
                     "heading": int((t * 3) % 360),
+                    # Offset from heading, not equal to it -- cog is the vessel's actual
+                    # direction of travel, heading is which way the bow points; real conditions
+                    # (current/leeway) mean the two rarely coincide exactly.
+                    "cog": round((t * 3 + 8) % 360, 1),
+                    "turn": round(6 * math.sin(t / 20), 1),
+                    "status": 0,  # under way using engine
                 },
-                {  # slower vessel, opposite side of own-ship
+                {  # slower vessel, opposite side of own-ship, steady course (no turn)
                     "mmsi": 257654321,
                     "lat": round(59.3733 - 0.003 * math.cos(t / 60), 6),
                     "lon": round(10.5850 - 0.003 * math.sin(t / 60), 6),
                     "sog": round(4.0 + random.gauss(0, 0.1), 1),
                     "heading": int((200 + t * 1.5) % 360),
+                    "cog": round((200 + t * 1.5 - 4) % 360, 1),
+                    "turn": 0.0,
+                    "status": 8,  # under way sailing
                 },
-                {  # base station: no sog/heading, matches SimpleAISdata.msg's sentinels
+                {  # base station: no sog/heading/cog/turn/status, matches SimpleAISdata.msg's
+                    # sentinels for a report type that doesn't carry any of them
                     "mmsi": 2571234,
                     "lat": 59.3820,
                     "lon": 10.6010,
                     "sog": 102.3,
                     "heading": 511,
+                    "cog": 360.0,
+                    "turn": -128.0,
+                    "status": 15,
                 },
             ]
             return targets[int(t / 3) % len(targets)]

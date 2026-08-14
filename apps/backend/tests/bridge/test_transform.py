@@ -254,7 +254,16 @@ def test_radar_spoke_flushes_after_stale_timeout(client: RosBridgeClient) -> Non
 def test_ais_target_full_report(client: RosBridgeClient) -> None:
 	result = client._transform(
 		"/ais/decoded_message",
-		{"mmsi": 257123456, "lat": 59.3783, "lon": 10.6030, "sog": 8.2, "heading": 91},
+		{
+			"mmsi": 257123456,
+			"lat": 59.3783,
+			"lon": 10.6030,
+			"sog": 8.2,
+			"heading": 91,
+			"cog": 93.5,
+			"turn": 12.0,
+			"status": 0,
+		},
 	)
 	assert result is not None
 	assert result["type"] == "ais_target"
@@ -263,6 +272,76 @@ def test_ais_target_full_report(client: RosBridgeClient) -> None:
 	assert result["lon"] == pytest.approx(10.6030)
 	assert result["sog_kn"] == pytest.approx(8.2)
 	assert result["heading_deg"] == 91
+	assert result["cog_deg"] == pytest.approx(93.5)
+	assert result["turn_deg_per_min"] == pytest.approx(12.0)
+	assert result["nav_status"] == 0
+
+
+def test_ais_target_cog_not_available_sentinel(client: RosBridgeClient) -> None:
+	# 360.0 is the AIS protocol's own "course not available" sentinel.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "cog": 360.0},
+	)
+	assert result is not None
+	assert result["cog_deg"] is None
+
+
+def test_ais_target_cog_missing_field_default(client: RosBridgeClient) -> None:
+	# ais_decoder.py falls back to 360.0 when a message type has no course field at all (e.g. a
+	# base station report); _handle_ais_target itself defaults to the same sentinel if the "cog"
+	# key is absent entirely, covering an older/not-yet-updated SimpleAISdata publisher too.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45},
+	)
+	assert result is not None
+	assert result["cog_deg"] is None
+
+
+def test_ais_target_turn_not_available_sentinel(client: RosBridgeClient) -> None:
+	# -128 is the AIS protocol's own "no turn information available" sentinel.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "turn": -128.0},
+	)
+	assert result is not None
+	assert result["turn_deg_per_min"] is None
+
+
+def test_ais_target_turn_fast_sentinel_passed_through(client: RosBridgeClient) -> None:
+	# +-127 mean "turning right/left faster than 5deg/30s, precise rate unavailable" -- real,
+	# meaningful data (unlike -128), so it's passed through rather than nulled.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "turn": 127.0},
+	)
+	assert result is not None
+	assert result["turn_deg_per_min"] == pytest.approx(127.0)
+
+
+def test_ais_target_status_undefined_passed_through(client: RosBridgeClient) -> None:
+	# Unlike cog/turn, nav_status is never nulled -- 15 ("undefined") is itself a real status
+	# code, not absence of data.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45, "status": 15},
+	)
+	assert result is not None
+	assert result["nav_status"] == 15
+
+
+def test_ais_target_cog_turn_status_missing_defaults(client: RosBridgeClient) -> None:
+	# A message with none of cog/turn/status at all (older publisher, or a base station report)
+	# should fall back to the same "not available" sentinels ais_decoder.py itself defaults to.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 59.382, "lon": 10.601, "sog": 0.0, "heading": 45},
+	)
+	assert result is not None
+	assert result["cog_deg"] is None
+	assert result["turn_deg_per_min"] is None
+	assert result["nav_status"] == 15
 
 
 def test_ais_target_heading_not_available_sentinel(client: RosBridgeClient) -> None:
@@ -293,6 +372,25 @@ def test_ais_target_sog_decoder_default_sentinel(client: RosBridgeClient) -> Non
 	)
 	assert result is not None
 	assert result["sog_kn"] is None
+
+
+def test_ais_target_position_not_available_sentinel(client: RosBridgeClient) -> None:
+	# ITU-R M.1371's own "position not available" sentinel (lat=91, lon=181), decoded verbatim
+	# by pyais with no filtering -- outside the real geographic range, which is exactly what
+	# crashed the frontend's map marker before this was dropped here instead.
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 91.0, "lon": 181.0, "sog": 0.0, "heading": 511},
+	)
+	assert result is None
+
+
+def test_ais_target_out_of_range_position_dropped(client: RosBridgeClient) -> None:
+	result = client._transform(
+		"/ais/decoded_message",
+		{"mmsi": 2571234, "lat": 95.0, "lon": 10.601, "sog": 0.0, "heading": 511},
+	)
+	assert result is None
 
 
 def test_unknown_topic_returns_none(client: RosBridgeClient) -> None:
@@ -465,6 +563,33 @@ def test_physical_gnss_velocity(client: RosBridgeClient) -> None:
 	assert result["course_deg"] == pytest.approx(45.0)
 
 
+def test_gnss_velocity_below_min_speed_has_no_course(client: RosBridgeClient) -> None:
+	# Course over ground is an angle derived from the velocity vector -- below MIN_COG_SPEED_MS
+	# the vector is small enough that receiver noise dominates the angle, so it's published as
+	# None rather than a meaningless number (see MIN_COG_SPEED_MS's own comment in client.py).
+	msg = {"twist": {"linear": {"x": 0.01, "y": 0.01, "z": 0.0}}}
+	result = client._transform("/vel", msg)
+	assert result is not None
+	assert result["speed_ms"] == pytest.approx(0.01414, abs=1e-4)
+	assert result["course_deg"] is None
+
+
+def test_gnss_velocity_ema_smooths_course_across_messages(client: RosBridgeClient) -> None:
+	# Same speed (5 m/s), course swings from 45deg to 135deg between two messages -- the smoothed
+	# course should land somewhere between the two raw values, not jump straight to 135.
+	msg_45 = {"twist": {"linear": {"x": 3.5355339059327378, "y": 3.5355339059327378, "z": 0.0}}}
+	msg_135 = {"twist": {"linear": {"x": 3.5355339059327378, "y": -3.5355339059327378, "z": 0.0}}}
+
+	first = client._transform("/vel", msg_45)
+	assert first is not None
+	assert first["course_deg"] == pytest.approx(45.0)
+
+	second = client._transform("/vel", msg_135)
+	assert second is not None
+	assert second["course_deg"] is not None
+	assert 45.0 < second["course_deg"] < 135.0
+
+
 def test_sim_gnss_velocity(client: RosBridgeClient) -> None:
 	result = client._transform("/revolt/sim/stc/gnss/velocity_vector", _FLOAT32MA_2)
 	assert result is not None
@@ -499,10 +624,11 @@ def test_imu_identity_quaternion(client: RosBridgeClient) -> None:
 
 
 def test_imu_pure_roll(client: RosBridgeClient) -> None:
-	# 30 degree rotation about x: q = (sin(15deg), 0, 0, cos(15deg))
+	# 30 degree rotation about x: q = (sin(15deg), 0, 0, cos(15deg)). Negated relative to the raw
+	# formula (see _handle_imu's comment) to match the vessel's actual visible roll direction.
 	result = client._transform("/imu/data", _imu_msg(0.258819, 0.0, 0.0, 0.965926))
 	assert result is not None
-	assert result["roll_deg"] == pytest.approx(30.0, abs=1e-3)
+	assert result["roll_deg"] == pytest.approx(-30.0, abs=1e-3)
 	assert result["pitch_deg"] == pytest.approx(0.0, abs=1e-3)
 	assert result["yaw_deg"] == pytest.approx(0.0, abs=1e-3)
 
@@ -605,6 +731,220 @@ def test_lidar_scan_replaces_inf_with_range_max(client: RosBridgeClient) -> None
 	assert result["ranges"][0] == pytest.approx(25.0)
 	assert result["ranges"][1] == pytest.approx(3.0)
 	assert result["ranges"][2] == pytest.approx(25.0)
+
+
+def _make_pointcloud2_msg(
+	points: list[tuple[float, float, float]],
+	*,
+	fields_in_order: list[str] | None = None,
+	is_bigendian: bool = False,
+) -> dict:
+	"""Build a synthetic PointCloud2-shaped wire dict.
+
+	fields_in_order controls the on-wire field layout (default x,y,z first) so tests can prove
+	the parser reads offsets from `fields` rather than assuming x,y,z start at offset 0.
+	"""
+	import struct
+
+	fields_in_order = fields_in_order or ["x", "y", "z"]
+	endian = ">" if is_bigendian else "<"
+	field_specs = []
+	offset = 0
+	for name in fields_in_order:
+		field_specs.append({"name": name, "offset": offset, "datatype": 7, "count": 1})
+		offset += 4
+	point_step = offset
+
+	packed = bytearray()
+	for x, y, z in points:
+		values = {"x": x, "y": y, "z": z}
+		row = bytearray(point_step)
+		for spec in field_specs:
+			struct.pack_into(f"{endian}f", row, spec["offset"], values.get(spec["name"], 0.0))
+		packed += row
+
+	return {
+		"point_step": point_step,
+		"is_bigendian": is_bigendian,
+		"fields": field_specs,
+		"data": base64.b64encode(bytes(packed)).decode(),
+	}
+
+
+def test_velodyne_points_basic(client: RosBridgeClient) -> None:
+	points = [(1.0, 2.0, 0.5), (3.0, -1.0, 1.5)]
+	result = client._transform("/velodyne_points", _make_pointcloud2_msg(points))
+	assert result is not None
+	assert result["type"] == "point_cloud"
+	assert result["v"] == "1"
+	assert result["point_count"] == 2
+	assert result["points"] == pytest.approx([1.0, 2.0, 0.5, 3.0, -1.0, 1.5])
+
+
+def test_velodyne_points_field_order_independent(client: RosBridgeClient) -> None:
+	# intensity placed before x/y/z shifts their offsets; the parser must read `fields` rather
+	# than assume x,y,z start at offset 0.
+	msg = _make_pointcloud2_msg([(2.0, 4.0, -0.5)], fields_in_order=["intensity", "x", "y", "z"])
+	result = client._transform("/velodyne_points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([2.0, 4.0, -0.5])
+
+
+def test_velodyne_points_filters_nan(client: RosBridgeClient) -> None:
+	points = [(1.0, 1.0, 1.0), (float("nan"), 2.0, 2.0)]
+	result = client._transform("/velodyne_points", _make_pointcloud2_msg(points))
+	assert result is not None
+	assert result["point_count"] == 1
+	assert result["points"] == pytest.approx([1.0, 1.0, 1.0])
+
+
+def test_velodyne_points_all_invalid_returns_none(client: RosBridgeClient) -> None:
+	points = [(float("nan"), float("nan"), float("nan"))]
+	result = client._transform("/velodyne_points", _make_pointcloud2_msg(points))
+	assert result is None
+
+
+def test_velodyne_points_bigendian(client: RosBridgeClient) -> None:
+	msg = _make_pointcloud2_msg([(5.0, -2.5, 0.0)], is_bigendian=True)
+	result = client._transform("/velodyne_points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([5.0, -2.5, 0.0])
+
+
+def test_velodyne_points_missing_xyz_field_returns_none(client: RosBridgeClient) -> None:
+	msg = _make_pointcloud2_msg([(1.0, 2.0, 3.0)], fields_in_order=["x", "y"])  # no z field
+	result = client._transform("/velodyne_points", msg)
+	assert result is None
+
+
+def _make_radar_pointcloud2_msg(
+	points: list[tuple[float, float, float, float]],
+	*,
+	fields_in_order: list[str] | None = None,
+	is_bigendian: bool = False,
+) -> dict:
+	"""Build a synthetic radar PointCloud2-shaped wire dict (x, y, z, intensity per point)."""
+	import struct
+
+	fields_in_order = fields_in_order or ["x", "y", "z", "intensity"]
+	endian = ">" if is_bigendian else "<"
+	field_specs = []
+	offset = 0
+	for name in fields_in_order:
+		field_specs.append({"name": name, "offset": offset, "datatype": 7, "count": 1})
+		offset += 4
+	point_step = offset
+
+	packed = bytearray()
+	for x, y, z, intensity in points:
+		values = {"x": x, "y": y, "z": z, "intensity": intensity}
+		row = bytearray(point_step)
+		for spec in field_specs:
+			struct.pack_into(f"{endian}f", row, spec["offset"], values.get(spec["name"], 0.0))
+		packed += row
+
+	return {
+		"point_step": point_step,
+		"is_bigendian": is_bigendian,
+		"fields": field_specs,
+		"data": base64.b64encode(bytes(packed)).decode(),
+	}
+
+
+def test_radar_points_basic(client: RosBridgeClient) -> None:
+	points = [(1.0, 2.0, 0.0, 100.0), (3.0, -1.0, 0.0, 50.0)]
+	result = client._transform("/radar/points", _make_radar_pointcloud2_msg(points))
+	assert result is not None
+	assert result["type"] == "radar_point_cloud"
+	assert result["v"] == "1"
+	assert result["point_count"] == 2
+	assert result["points"] == pytest.approx([1.0, 2.0, 0.0, 100.0, 3.0, -1.0, 0.0, 50.0])
+
+
+def test_radar_points_field_order_independent(client: RosBridgeClient) -> None:
+	# intensity placed before x/y/z shifts their offsets; the parser must read `fields` rather
+	# than assume a fixed layout.
+	msg = _make_radar_pointcloud2_msg(
+		[(2.0, 4.0, -0.5, 75.0)], fields_in_order=["intensity", "x", "y", "z"]
+	)
+	result = client._transform("/radar/points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([2.0, 4.0, -0.5, 75.0])
+
+
+def test_radar_points_filters_nan(client: RosBridgeClient) -> None:
+	points = [(1.0, 1.0, 0.0, 10.0), (float("nan"), 2.0, 0.0, 10.0)]
+	result = client._transform("/radar/points", _make_radar_pointcloud2_msg(points))
+	assert result is not None
+	assert result["point_count"] == 1
+	assert result["points"] == pytest.approx([1.0, 1.0, 0.0, 10.0])
+
+
+def test_radar_points_all_invalid_returns_none(client: RosBridgeClient) -> None:
+	points = [(float("nan"), float("nan"), float("nan"), float("nan"))]
+	result = client._transform("/radar/points", _make_radar_pointcloud2_msg(points))
+	assert result is None
+
+
+def test_radar_points_bigendian(client: RosBridgeClient) -> None:
+	msg = _make_radar_pointcloud2_msg([(5.0, -2.5, 0.0, 200.0)], is_bigendian=True)
+	result = client._transform("/radar/points", msg)
+	assert result is not None
+	assert result["points"] == pytest.approx([5.0, -2.5, 0.0, 200.0])
+
+
+def test_radar_points_missing_intensity_field_returns_none(client: RosBridgeClient) -> None:
+	msg = _make_radar_pointcloud2_msg([(1.0, 2.0, 3.0, 0.0)], fields_in_order=["x", "y", "z"])
+	result = client._transform("/radar/points", msg)
+	assert result is None
+
+
+def test_voxel_decimate_carries_extra_columns_through() -> None:
+	import numpy as np
+
+	from revolt_api.bridge.client import _voxel_decimate
+
+	# 4-column (x,y,z,intensity) input -- voxel bucketing must only look at the first 3 columns,
+	# not fold intensity into the spatial bucket.
+	points = np.array(
+		[
+			[0.0, 0.0, 0.0, 10.0],
+			[0.01, 0.0, 0.0, 20.0],  # same voxel cell as the point above
+			[5.0, 5.0, 5.0, 30.0],  # different cell
+		]
+	)
+	result = _voxel_decimate(points, voxel_size=0.15, max_points=100)
+	assert result.shape == (2, 4)
+	assert sorted(result[:, 3].tolist()) == [10.0, 30.0]
+
+
+def test_voxel_decimate_reduces_dense_cluster_but_preserves_z_spread() -> None:
+	import numpy as np
+
+	from revolt_api.bridge.client import _voxel_decimate
+
+	# Two dense clusters of near-duplicate points at different heights, within a single voxel
+	# cell of each other -- proves multi-ring height info survives decimation, not just that
+	# point count goes down.
+	low = np.array([[0.0, 0.0, 0.0], [0.01, 0.0, 0.0], [0.0, 0.01, 0.0]])
+	high = np.array([[0.0, 0.0, 2.0], [0.01, 0.0, 2.0], [0.0, 0.01, 2.0]])
+	xyz = np.vstack([low, high])
+	result = _voxel_decimate(xyz, voxel_size=0.15, max_points=100)
+	assert result.shape[0] == 2
+	z_values = sorted(result[:, 2])
+	assert z_values[0] == pytest.approx(0.0)
+	assert z_values[1] == pytest.approx(2.0)
+
+
+def test_voxel_decimate_caps_at_max_points() -> None:
+	import numpy as np
+
+	from revolt_api.bridge.client import _voxel_decimate
+
+	rng = np.random.default_rng(42)
+	xyz = rng.uniform(-50, 50, size=(1000, 3))  # spread out, most land in distinct voxel cells
+	result = _voxel_decimate(xyz, voxel_size=0.15, max_points=100)
+	assert result.shape[0] <= 100
 
 
 def test_camera_frame_stores_bytes_and_returns_none(client: RosBridgeClient) -> None:

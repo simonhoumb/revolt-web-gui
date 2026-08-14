@@ -1,27 +1,68 @@
 .tile {
 	height: 100%;
-	display: flex;
-	flex-direction: column;
-	background-color: var(--container-section-color, #111);
-	border: 1px solid var(--border-divider-color, #271b10);
-	border-radius: var(--border-radius-br-4, 4px);
-	overflow: hidden;
-}
-
-.body {
-	flex: 1;
-	overflow: hidden;
-	padding: 8px;
-	min-height: 0;
+	display: block;
 }
 
 .tile[data-edit-mode] {
 	cursor: move;
-	border-color: var(--element-active-color, #eaa75e);
+	--border-outline-color: var(--element-active-color, #eaa75e);
 }
 
-.header {
-	position: relative;
+.titleText {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* obc-card's title row has a fixed height (--ui-components-card-heading-container-height) and
+   vertically centers the title text within it. Anchoring to that same band (top: 0, matching
+   height, own align-items: center) instead of the title slot's own centered flex flow puts the
+   remove button in the card's top-right corner while staying vertically in line with the title
+   text, rather than drifting to the middle of the row next to short titles. */
+.removeButton {
+	position: absolute;
+	top: 0;
+	right: -8px;
+	height: var(--ui-components-card-heading-container-height, 32px);
+	display: flex;
+	align-items: center;
 	z-index: 2;
-	cursor: default;
+}
+
+/* Mirror of .removeButton on the opposite corner -- same band, same offset, just left instead of
+   right. */
+.viewModeButton {
+	position: absolute;
+	top: 0;
+	left: -8px;
+	height: var(--ui-components-card-heading-container-height, 32px);
+	display: flex;
+	align-items: center;
+	z-index: 2;
+}
+
+/* obc-card's shadow-DOM content slot is height: 100% of the card, but never actually shrinks to
+   make room for the title row above it -- it just overflows past the card's bottom edge and gets
+   clipped by the card's own overflow: hidden (confirmed by direct measurement, not just reading
+   the shadow CSS). Positioning this slot absolutely against obc-card's .wrapper (the nearest
+   positioned ancestor) instead of using height: 100% gives it a height that's correct from the
+   start, sidestepping that broken shrink. */
+.body {
+	position: absolute;
+	top: var(--ui-components-card-heading-container-height, 32px);
+	right: 0;
+	bottom: 0;
+	left: 0;
+	overflow: hidden;
+	padding-right: 8px;
+	padding-left: 8px;
+	padding-bottom: 8px;
+	box-sizing: border-box;
+	/* obc-card's shadow DOM sets user-select: none on everything in its content slot (a `* {}`
+	   reset), which is inherited here since this is that slot's content. user-select: auto would
+	   NOT undo that -- per spec, auto resolves to none when the parent's used value is none, so
+	   every widget's text (command output, coordinates, etc.) is otherwise stuck unselectable.
+	   Dragging tiles is unaffected: TileGrid restricts that to a dedicated drag handle, not this
+	   content area. */
+	user-select: text;
 }

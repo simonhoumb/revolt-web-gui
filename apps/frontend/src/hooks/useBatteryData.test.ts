@@ -1,11 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { voltageStatus, useBatteryData } from "./useBatteryData.js";
-import { useBridgeData } from "../context/BridgeDataContext.js";
-import type { BridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import type { BridgeData } from "../context/bridgeDataReducer.js";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
-vi.mock("../context/BridgeDataContext.js", () => ({
+vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -29,7 +30,9 @@ const base: BridgeData = {
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,
@@ -143,5 +146,48 @@ describe("useBatteryData — isOn threshold", () => {
 		});
 		const { result } = renderHook(() => useBatteryData());
 		expect(result.current.current.stern_port.isOn).toBe(false);
+	});
+});
+
+describe("useBatteryData — staleness", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("is stale when no battery/current reading has ever arrived", () => {
+		mockUseBridgeData.mockReturnValue(base);
+		const { result } = renderHook(() => useBatteryData());
+		expect(result.current.voltageStale).toBe(true);
+		expect(result.current.current.stern_port.stale).toBe(true);
+	});
+
+	it("is not stale for a fresh reading, and becomes stale once the window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		mockUseBridgeData.mockReturnValue({
+			...base,
+			battery: { v: "1", type: "battery", timestamp_ms: 0, voltage_v: 12.5 },
+			current: {
+				stern_port: {
+					v: "1",
+					type: "current",
+					timestamp_ms: 0,
+					location: "stern_port",
+					raw_adc: 0,
+					amperes: 1.0,
+				},
+				stern_star: null,
+				bow: null,
+			},
+		});
+
+		const { result, rerender } = renderHook(() => useBatteryData());
+		expect(result.current.voltageStale).toBe(false);
+		expect(result.current.current.stern_port.stale).toBe(false);
+
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		rerender();
+		expect(result.current.voltageStale).toBe(true);
+		expect(result.current.current.stern_port.stale).toBe(true);
 	});
 });

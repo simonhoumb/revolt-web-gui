@@ -5,6 +5,16 @@
 	height: 100%;
 }
 
+/* Bow and stern side by side, centered as a group in the widget's available space above the
+   always-visible statusList (which stays pinned to the bottom via its own margin-top: auto). */
+.locationsRow {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 24px;
+	flex: 1;
+}
+
 .locationSection {
 	display: flex;
 	flex-direction: column;
@@ -36,6 +46,12 @@
 	color: var(--element-active-color, #eaa75e);
 }
 
+.envField {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
 .statusList {
 	display: flex;
 	flex-direction: column;
@@ -52,4 +68,10 @@
 .statusLabel {
 	font-size: 0.8rem;
 	color: var(--element-active-color, #eaa75e);
+}
+
+/* Last-known reading whose topic has gone quiet -- still shown (maritime convention), just
+   visually marked as no longer live rather than hidden. */
+.stale {
+	opacity: 0.5;
 }

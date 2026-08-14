@@ -87,6 +87,13 @@ body,
 	overflow: hidden;
 }
 
+/* Set by TopNav from the brilliance panel's brightness slider (0-100 -> a clamped filter range,
+   see brightnessToFilterValue in TopNav.tsx); applied to #root, not just the map, so the one
+   brilliance control dims the whole app chrome, not only the chart. */
+#root {
+	filter: brightness(var(--chart-brightness, 1));
+}
+
 body {
 	background-color: var(--container-background-color, #000);
 	color: var(--element-active-color, #eaa75e);

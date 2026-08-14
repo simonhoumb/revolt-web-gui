@@ -1,14 +1,13 @@
-"""ROS2 introspection command orchestration (Feature 16): allow-list lookup, param validation,
-bridge dispatch, and audit logging.
+"""ROS2 introspection command orchestration.
 
-Extracted into its own service module rather than folded into mission_service.py -- this is a
-different command family (introspection over the ROS graph, not mission/waypoint orchestration)
-with its own allow-list (bridge/commands.py's COMMANDS) and no shared state with missions.
-Follows the same routers-stay-thin pattern: routers/ros_commands.py just delegates here.
+Extracted into its own service module rather than folded into mission_service.py: a different
+command family (introspection over the ROS graph, not mission/waypoint orchestration) with its
+own allow-list (bridge/commands.py's COMMANDS) and no shared state with missions. Follows the
+same routers-stay-thin pattern: routers/ros_commands.py just delegates here.
 
-v1 is introspection-only -- nothing in COMMANDS can move the vessel, so there is nothing here
-that warrants a 409 conflict/state-machine check the way mission_service.py's send/start/pause/
-terminate do. The only rejections are 404 (unknown command) and 400 (invalid/disallowed param).
+v1 is introspection-only; nothing in COMMANDS can move the vessel, so there's no 409
+conflict/state-machine check here the way mission_service.py's send/start/pause/terminate have.
+The only rejections are 404 (unknown command) and 400 (invalid/disallowed param).
 """
 
 from dataclasses import dataclass
@@ -27,18 +26,22 @@ from revolt_api.schemas.ros_commands import RosCommandMeta, RosCommandParamMeta,
 
 @dataclass
 class _Outcome:
+	"""Result of executing one command, before wrapping into the RosCommandResult response."""
+
 	ok: bool
 	error: str | None
 	result: dict[str, Any] | None
 
 
 async def describe_commands(bridge: RosBridgeClient) -> list[RosCommandMeta]:
-	"""Resolve topic_select params' allowed values against the live bridge target (bridge/
-	protocol.py's topic allow-list) and param_select params' allowed values via a live
-	/rosapi/get_param_names call, so the frontend never keeps its own copy of either. A failed
-	get_param_names call (bridge disconnected, timed out) resolves to an empty list rather than
-	failing this whole endpoint -- the registry should still load with an empty/disabled
-	parameter dropdown, not a 500, when the bridge happens to be down."""
+	"""Resolve each command's dynamic param allowed_values against the live bridge.
+
+	topic_select values come from bridge/protocol.py's topic allow-list; param_select values
+	from a live /rosapi/get_param_names call. Neither is cached client-side. A failed
+	get_param_names call resolves to an empty list rather than failing the whole endpoint; the
+	registry should still load with an empty/disabled parameter dropdown, not a 500, when the
+	bridge is down.
+	"""
 	allowed_topics = [spec.topic for spec in get_subscribe_topics(bridge.target)]
 
 	known_param_names: list[str] = []
@@ -81,11 +84,13 @@ async def describe_commands(bridge: RosBridgeClient) -> list[RosCommandMeta]:
 def _validate_static_params(
 	spec: CommandSpec, params: dict[str, str], target: str
 ) -> dict[str, str]:
-	"""Checks that don't require a live bridge round trip: required-ness, and (for topic_select
-	params) membership in bridge/protocol.py's existing topic allow-list for the live target --
-	one place topic allow-lists are curated, not two. node_details' dynamic node-liveness check
-	is handled separately in _execute_node_details, since a failure there is a bridge/transport
-	outcome, not a plain bad-request."""
+	"""Checks that don't require a live bridge round trip.
+
+	Required-ness, and (for topic_select params) membership in bridge/protocol.py's existing
+	topic allow-list, so allow-lists are curated in one place, not two. node_details' dynamic
+	node-liveness check is handled separately in _execute_node_details, since a failure there is
+	a bridge/transport outcome, not a plain bad request.
+	"""
 	validated: dict[str, str] = {}
 	for param in spec.params:
 		value = params.get(param.name)
@@ -119,9 +124,9 @@ async def _execute_service_call(
 ) -> _Outcome:
 	args: dict[str, str] = dict(validated)
 	if spec.command_id == "get_param":
-		# rosapi_msgs/GetParam requires default_value in the request even when the caller has
-		# no default in mind -- an empty string, distinguishable from a real value via the
-		# response's own "successful" field.
+		# rosapi_msgs/GetParam requires default_value in the request even when the caller has no
+		# default in mind: an empty string, distinguishable from a real value via the response's
+		# own "successful" field.
 		args.setdefault("default_value", "")
 	assert spec.rosapi_service is not None
 	assert spec.rosapi_type is not None
@@ -132,11 +137,13 @@ async def _execute_service_call(
 
 
 async def _execute_node_details(bridge: RosBridgeClient, node: str, timeout_s: float) -> _Outcome:
-	"""node_details' target can't be statically allow-listed like a topic (nodes are dynamic) --
-	re-query /rosapi/nodes live and reject (400) if the name isn't currently in the graph, same
-	"must come from live enumeration, not free text" posture as the static topic case. A failure
-	of the liveness probe itself (not connected, timed out) is a bridge outcome, not a bad
-	request -- it's returned as a normal failed _Outcome, still audit-logged, not raised as 400."""
+	"""node_details' target can't be statically allow-listed like a topic (nodes are dynamic).
+
+	Re-queries /rosapi/nodes live and rejects (400) if the name isn't currently in the graph,
+	same "must come from live enumeration, not free text" posture as the static topic case. A
+	failure of the liveness probe itself (not connected, timed out) is a bridge outcome, not a
+	bad request: it returns as a normal failed _Outcome, still audit-logged, not raised as 400.
+	"""
 	live = await bridge.call_service("/rosapi/nodes", "rosapi_msgs/Nodes", timeout_s=timeout_s)
 	if not live.ok:
 		return _Outcome(ok=False, error=live.error, result=None)
@@ -153,6 +160,7 @@ async def execute_command(
 	command_id: str,
 	params: dict[str, str],
 ) -> RosCommandResult:
+	"""Look up, validate, dispatch, and audit-log one command execution."""
 	spec = COMMANDS.get(command_id)
 	if spec is None:
 		raise HTTPException(404, detail=f"Unknown command: {command_id}")
@@ -169,7 +177,7 @@ async def execute_command(
 	executed_at = datetime.now(UTC)
 	# Every execution logged, success or failure, per the backlog's "log all executions" line.
 	# severity="info" uniformly: nothing in COMMANDS is destructive, unlike e.g.
-	# mission_service.terminate_mission's "warning" -- there is nothing here to warn about.
+	# mission_service.terminate_mission's "warning"; there is nothing here to warn about.
 	await log_action(
 		db,
 		session_id=session_id,

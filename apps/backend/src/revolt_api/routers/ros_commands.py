@@ -1,3 +1,5 @@
+"""GET/POST /api/ros-commands: the ROS2 command console's registry and execution endpoints."""
+
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,9 +19,11 @@ async def _session_id(x_session_id: str | None = Header(default=None)) -> str:
 async def list_ros_commands(
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> list[RosCommandMeta]:
-	"""The allow-listed introspection command registry, with topic_select/param_select params'
-	allowed values resolved against the live bridge -- see ros_command_service.describe_commands
-	for the full rationale."""
+	"""The allow-listed introspection command registry.
+
+	topic_select/param_select params' allowed values are resolved against the live bridge; see
+	ros_command_service.describe_commands for the full rationale.
+	"""
 	return await ros_command_service.describe_commands(bridge)
 
 
@@ -31,8 +35,10 @@ async def execute_ros_command(
 	db: AsyncSession = Depends(get_db),  # noqa: B008
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> RosCommandResult:
-	"""Execute one allow-listed introspection command -- see ros_command_service.execute_command
-	for the full rationale."""
+	"""Execute one allow-listed introspection command.
+
+	See ros_command_service.execute_command for the full rationale.
+	"""
 	return await ros_command_service.execute_command(
 		db, bridge, session_id, command_id, body.params
 	)

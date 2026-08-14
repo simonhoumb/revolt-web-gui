@@ -1,12 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Mock } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useLidarData } from "./useLidarData.js";
-import { useBridgeData } from "../context/BridgeDataContext.js";
-import type { BridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import type { BridgeData } from "../context/bridgeDataReducer.js";
 import type { LidarScanMsg } from "@revolt/shared-types";
+import { SENSOR_STALE_MS } from "../lib/thresholds.js";
 
-vi.mock("../context/BridgeDataContext.js", () => ({
+vi.mock("../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -30,7 +31,9 @@ const base: BridgeData = {
 	bridgeStatus: null,
 	thrusterFeedback: { bow: null, port: null, starboard: null },
 	lidarScan: null,
+	pointCloud: null,
 	radarSpoke: null,
+	radarPointCloud: null,
 	aisTargets: {},
 	imu: null,
 	activeWaypointList: null,
@@ -97,5 +100,30 @@ describe("useLidarData", () => {
 		mockUseBridgeData.mockReturnValue({ ...base, lidarScan: scan });
 		const { result } = renderHook(() => useLidarData());
 		expect(result.current.scan).toBe(scan);
+	});
+});
+
+describe("useLidarData — staleness", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("is stale when no scan has ever arrived", () => {
+		mockUseBridgeData.mockReturnValue({ ...base, lidarScan: null });
+		const { result } = renderHook(() => useLidarData());
+		expect(result.current.stale).toBe(true);
+	});
+
+	it("is not stale for a fresh scan, and becomes stale once the window elapses", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const scan = makeScan();
+		mockUseBridgeData.mockReturnValue({ ...base, lidarScan: scan });
+		const { result, rerender } = renderHook(() => useLidarData());
+		expect(result.current.stale).toBe(false);
+
+		vi.setSystemTime(SENSOR_STALE_MS + 1);
+		rerender();
+		expect(result.current.stale).toBe(true);
 	});
 });

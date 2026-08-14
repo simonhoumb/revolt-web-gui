@@ -2,20 +2,21 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { Mission, Waypoint } from "@revolt/shared-types";
-import { MissionWidget, moveWaypointId } from "./MissionWidget.js";
-import { useMission } from "../../context/MissionContext.js";
+import { MissionWidget } from "./MissionWidget.js";
+import { moveWaypointId } from "./moveWaypointId.js";
+import { useMission } from "../../context/useMission.js";
 import { useWaypointDraft } from "../../hooks/useWaypointDraft.js";
-import { useBridgeData } from "../../context/BridgeDataContext.js";
+import { useBridgeData } from "../../context/useBridgeData.js";
 import { formatDuration } from "../../lib/format.js";
 import { MissionBlockedError } from "../../lib/missionApi.js";
 
-vi.mock("../../context/MissionContext.js", () => ({
+vi.mock("../../context/useMission.js", () => ({
 	useMission: vi.fn(),
 }));
 vi.mock("../../hooks/useWaypointDraft.js", () => ({
 	useWaypointDraft: vi.fn(),
 }));
-vi.mock("../../context/BridgeDataContext.js", () => ({
+vi.mock("../../context/useBridgeData.js", () => ({
 	useBridgeData: vi.fn(),
 }));
 
@@ -145,7 +146,7 @@ describe("MissionWidget", () => {
 		});
 
 		render(<MissionWidget />);
-		expect(screen.getByText(/Total: 10\.0 nm/)).toBeInTheDocument();
+		expect(screen.getByText(/Total: 10\.0 NM/)).toBeInTheDocument();
 		expect(screen.getByText(/ETE 1h 0m/)).toBeInTheDocument();
 	});
 

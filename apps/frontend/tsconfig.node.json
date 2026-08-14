@@ -5,5 +5,6 @@
 		"outDir": "./.tsc-out",
 		"composite": true
 	},
-	"include": ["vite.config.ts", "vitest.config.ts"]
+	"include": ["vite.config.ts", "vitest.config.ts", "scripts/generate-chart-sprite.ts"],
+	"references": [{ "path": "./tsconfig.app.json" }]
 }

@@ -1,3 +1,5 @@
+"""GET /api/ws: the frontend's WebSocket gateway to the bridge's fan-out queue."""
+
 import asyncio
 import json
 import time
@@ -17,6 +19,7 @@ async def vessel_ws(
 	websocket: WebSocket,
 	bridge: RosBridgeClient = Depends(get_bridge),  # noqa: B008
 ) -> None:
+	"""Stream this connection's subscribed BridgeMessage queue to the browser as JSON frames."""
 	await websocket.accept()
 	# Headers: apiFetch sets X-Session-ID, but native WebSocket doesn't allow custom headers.
 	# The frontend hook sends it as ?session_id= query param instead.

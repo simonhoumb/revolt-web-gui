@@ -1,4 +1,6 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import { useLiveTick } from "./useLiveTick.js";
+import { isStale } from "../lib/staleness.js";
 
 export interface ImuData {
 	rollDeg: number | null;
@@ -10,9 +12,12 @@ export interface ImuData {
 	angVelX: number | null;
 	angVelY: number | null;
 	angVelZ: number | null;
+	stale: boolean;
 }
 
+/** IMU attitude (roll/pitch/yaw) plus raw acceleration and angular velocity. */
 export function useImuData(): ImuData {
+	useLiveTick();
 	const { imu } = useBridgeData();
 
 	return {
@@ -25,5 +30,6 @@ export function useImuData(): ImuData {
 		angVelX: imu?.ang_vel_x ?? null,
 		angVelY: imu?.ang_vel_y ?? null,
 		angVelZ: imu?.ang_vel_z ?? null,
+		stale: isStale(imu?.timestamp_ms, Date.now()),
 	};
 }

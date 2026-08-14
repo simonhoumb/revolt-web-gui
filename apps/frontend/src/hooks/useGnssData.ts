@@ -1,4 +1,6 @@
-import { useBridgeData } from "../context/BridgeDataContext.js";
+import { useBridgeData } from "../context/useBridgeData.js";
+import { useLiveTick } from "./useLiveTick.js";
+import { isStale } from "../lib/staleness.js";
 
 export type FixLabel = "No fix" | "Fix" | "SBAS" | "GBAS" | "Unknown";
 
@@ -12,6 +14,7 @@ export interface GnssData {
 	headingDeg: number | null;
 	courseDeg: number | null;
 	isSimulation: boolean;
+	stale: boolean;
 }
 
 const FIX_LABELS: Record<number, FixLabel> = {
@@ -21,7 +24,10 @@ const FIX_LABELS: Record<number, FixLabel> = {
 	[2]: "GBAS",
 };
 
+/** GNSS position, heading, and speed, from the physical compass or the simulation's own feed. */
 export function useGnssData(): GnssData {
+	useLiveTick();
+	const now = Date.now();
 	const { gnssFix, gnssHeading, gnssVelocity, gnssVelocityPhysical, bridgeStatus } =
 		useBridgeData();
 
@@ -45,5 +51,9 @@ export function useGnssData(): GnssData {
 		// field, so fall back to heading there.
 		courseDeg: gnssVelocityPhysical?.course_deg ?? headingDeg,
 		isSimulation,
+		// Based on the position fix specifically (not heading/velocity) -- that's the field an
+		// operator actually needs to trust as current, same convention as a real ECDIS flagging a
+		// stale GNSS position.
+		stale: isStale(gnssFix?.timestamp_ms, now),
 	};
 }

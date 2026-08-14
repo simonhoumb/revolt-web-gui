@@ -1,27 +1,20 @@
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import {
-	createContext,
-	useContext,
-	useState,
-	useEffect,
-	useCallback,
-	useMemo,
-	type ReactNode,
-} from "react";
-import { type WidgetId, ALL_WIDGET_IDS, WIDGET_REGISTRY } from "../components/widgets/registry.js";
+	type WidgetId,
+	type TileLayout,
+	ALL_WIDGET_IDS,
+	WIDGET_REGISTRY,
+	GRID_COLS,
+} from "../components/widgets/registry.js";
+import { LayoutContext } from "./useLayout.js";
 
-export interface TileLayout {
-	i: WidgetId;
-	x: number;
-	y: number;
-	w: number;
-	h: number;
-}
-
+/** The current tile grid: positions/sizes plus which widgets are hidden. */
 export interface LayoutConfig {
 	tiles: TileLayout[];
 	hiddenWidgets: WidgetId[];
 }
 
+/** A named, saved LayoutConfig snapshot. */
 export interface LayoutTemplate {
 	name: string;
 	tiles: TileLayout[];
@@ -29,7 +22,7 @@ export interface LayoutTemplate {
 	savedAt: number;
 }
 
-interface LayoutContextValue {
+export interface LayoutContextValue {
 	config: LayoutConfig;
 	updateLayout: (tiles: TileLayout[]) => void;
 	addWidget: (id: WidgetId) => void;
@@ -41,9 +34,10 @@ interface LayoutContextValue {
 	deleteTemplate: (name: string) => void;
 	editMode: boolean;
 	toggleEditMode: () => void;
+	setEditMode: (value: boolean) => void;
 	// Bumped only by structural changes to the tile set (add/remove/reset/load template), never by
-	// updateLayout's ordinary drag/resize commits -- TileGrid uses this to know when it's safe to
-	// re-fit the grid's row height to a *smaller* total row count. See TileGrid.tsx's neededRows
+	// updateLayout's ordinary drag/resize commits; TileGrid uses this to know when it's safe to
+	// re-fit the grid's row height to a smaller total row count. See TileGrid.tsx's neededRows
 	// comment for why that distinction matters.
 	layoutGeneration: number;
 }
@@ -66,30 +60,14 @@ const DEFAULT_CONFIG: LayoutConfig = {
 	hiddenWidgets: DEFAULT_HIDDEN,
 };
 
-// Every widget with an instrumentsOnlyPosition gets a tile there; every other widget is derived
-// as hidden -- structurally, not by hand-listing both a tiles array and a hiddenWidgets array
-// that must together cover every widget id (a real bug this app shipped with: mission_control
-// was missing from both lists here, so loading this template left it neither shown nor tracked
-// as hidden -- not reachable from WidgetPicker's toggle state either way until this fix).
-const INSTRUMENTS_ONLY_TILES: TileLayout[] = ALL_WIDGET_IDS.flatMap((id) => {
-	const position = WIDGET_REGISTRY[id].instrumentsOnlyPosition;
-	return position ? [{ i: id, ...position }] : [];
-});
-const INSTRUMENTS_ONLY_HIDDEN: WidgetId[] = ALL_WIDGET_IDS.filter(
-	(id) => !WIDGET_REGISTRY[id].instrumentsOnlyPosition,
-);
-
+// "Instruments only" used to live here as a second built-in template; it's now the locked
+// Instruments app instead (see components/widgets/apps.ts), reached from the navigation menu
+// rather than this template list, so there's exactly one place to find it.
 const BUILTIN_TEMPLATES: LayoutTemplate[] = [
 	{
 		name: "Default",
 		tiles: DEFAULT_TILES,
 		hiddenWidgets: DEFAULT_HIDDEN,
-		savedAt: 0,
-	},
-	{
-		name: "Instruments only",
-		tiles: INSTRUMENTS_ONLY_TILES,
-		hiddenWidgets: INSTRUMENTS_ONLY_HIDDEN,
 		savedAt: 0,
 	},
 ];
@@ -116,7 +94,7 @@ function loadConfig(): LayoutConfig {
 			const def = WIDGET_REGISTRY[id];
 			return {
 				i: id,
-				x: (idx * def.defaultW) % 12,
+				x: (idx * def.defaultW) % GRID_COLS,
 				y: 999,
 				w: def.defaultW,
 				h: def.defaultH,
@@ -136,7 +114,7 @@ function saveConfig(config: LayoutConfig): void {
 	try {
 		localStorage.setItem(LAYOUT_KEY, JSON.stringify(config));
 	} catch {
-		// localStorage unavailable — silently ignore
+		// localStorage unavailable, silently ignore
 	}
 }
 
@@ -154,7 +132,7 @@ function saveTemplates(templates: LayoutTemplate[]): void {
 	try {
 		localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
 	} catch {
-		// localStorage unavailable — silently ignore
+		// localStorage unavailable, silently ignore
 	}
 }
 
@@ -165,8 +143,7 @@ function nextOpenPosition(tiles: TileLayout[]): { x: number; y: number } {
 	return { x: 0, y: maxY };
 }
 
-const LayoutContext = createContext<LayoutContextValue | null>(null);
-
+/** Owns the dashboard's tile layout and saved templates, persisted to localStorage. */
 export function LayoutProvider({ children }: { children: ReactNode }) {
 	const [config, setConfig] = useState<LayoutConfig>(loadConfig);
 	const [userTemplates, setUserTemplates] = useState<LayoutTemplate[]>(loadTemplates);
@@ -274,16 +251,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 				deleteTemplate,
 				editMode,
 				toggleEditMode,
+				setEditMode,
 				layoutGeneration,
 			}}
 		>
 			{children}
 		</LayoutContext.Provider>
 	);
-}
-
-export function useLayout(): LayoutContextValue {
-	const ctx = useContext(LayoutContext);
-	if (!ctx) throw new Error("useLayout must be used within LayoutProvider");
-	return ctx;
 }

@@ -16,6 +16,14 @@
 	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
 }
 
+/* The dark drop-shadow above is meant as a contrast halo against a busy/dark chart -- it's
+   invisible against dusk/night's near-black water, but reads as a visible dark smudge against
+   day/bright's light backgrounds, where the marker's own color already contrasts fine without it. */
+:global(html[data-obc-theme="day"]) .vesselMarker,
+:global(html[data-obc-theme="bright"]) .vesselMarker {
+	filter: none;
+}
+
 .waypointMarker {
 	/* MapLibre's own .maplibregl-marker class (applied to the same element) sets position:
 	   absolute and positions the marker purely via a CSS transform. "relative" here would win the
@@ -45,6 +53,11 @@
 	color: var(--element-highlighted-color, #ffcf6e);
 }
 
+:global(html[data-obc-theme="day"]) .waypointMarker,
+:global(html[data-obc-theme="bright"]) .waypointMarker {
+	filter: none;
+}
+
 .aisTargetMarker {
 	/* See .waypointMarker's comment: MapLibre positions markers purely via a CSS transform on
 	   this same element, so "absolute" (not "relative") is required to avoid block-stacking. */
@@ -53,6 +66,29 @@
 	height: 22px;
 	color: var(--element-active-color, #d0d0d0);
 	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+	cursor: pointer;
+}
+
+:global(html[data-obc-theme="day"]) .aisTargetMarker,
+:global(html[data-obc-theme="bright"]) .aisTargetMarker {
+	filter: none;
+}
+
+/* Strips MapLibre's own default popup chrome (background/padding/shadow, and its own triangle
+   tip) so only obc-toggletip's own box and bottom-arrow show, not a double-boxed look. Needs
+   :global() since maplibregl's own classnames aren't module-scoped like .aisPopup itself. anchor
+   is fixed to "bottom" in useAisMarkers.ts (popup always opens above the target, tip pointing
+   down) specifically to match obc-toggletip's own bottom-arrow, which has no equivalent for the
+   other three sides. */
+.aisPopup :global(.maplibregl-popup-content) {
+	background: transparent;
+	padding: 0;
+	box-shadow: none;
+	border-radius: 0;
+}
+
+.aisPopup :global(.maplibregl-popup-tip) {
+	display: none;
 }
 
 .waypointLabel {
@@ -80,6 +116,10 @@
 	pointer-events: none;
 }
 
+.controlsToggle {
+	flex-shrink: 0;
+}
+
 .toolbar {
 	position: absolute;
 	left: 0;
@@ -91,14 +131,25 @@
 	align-items: center;
 	gap: 8px;
 	padding: 4px 8px;
-	/* maplibre's own attribution control (required by the CARTO basemap's terms, so it can't just
-	   be covered) sits in the same bottom-right corner with a higher default z-index than this bar.
-	   Reserve room for it so a 4th toolbar group doesn't reach into its footprint at typical tile
-	   widths -- past this point flex-wrap already pushes overflow onto its own row instead. */
-	padding-right: 240px;
 	min-height: var(--app-components-tool-bar-touch-target-size, 40px);
 	border-top: 1px solid var(--border-divider-color);
 	background: var(--container-section-color);
 	box-shadow: var(--shadow-flat-x) var(--shadow-flat-y) var(--shadow-flat-blur)
 		var(--shadow-flat-spread) var(--shadow-flat-color);
+}
+
+/* Collapsed (controls hidden): only the toggle button itself remains. The bar's own chrome
+   (background, border, shadow, min-height) is stripped entirely here, not just shrunk --
+   otherwise it left a visible box-behind-the-button remnant of the bar. The button supplies its
+   own background (normal variant, not flat -- flat's background is fully transparent in every
+   theme, see its own CSS custom property), so nothing else needs to render; only the positioning
+   (left/bottom-anchored, matching the expanded bar's own corner so the button doesn't jump
+   position between states) carries over. */
+.toolbar[data-collapsed] {
+	right: auto;
+	width: fit-content;
+	min-height: 0;
+	border-top: none;
+	background: none;
+	box-shadow: none;
 }

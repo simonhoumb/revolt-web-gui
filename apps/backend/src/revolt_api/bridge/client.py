@@ -1,3 +1,10 @@
+"""RosBridgeClient: the WebSocket connection to rosbridge_suite and the per-topic transform layer.
+
+One instance lives for the application lifetime, connecting to either the physical vessel or
+simulation target, decoding each subscribed topic's wire message into a typed BridgeMessage, and
+fanning it out to every frontend WebSocket connection's queue.
+"""
+
 import asyncio
 import base64
 import contextlib
@@ -9,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+import numpy as np
 import structlog
 from websockets.asyncio.client import connect
 
@@ -36,6 +44,8 @@ from revolt_api.bridge.contracts import (
 	MissionExecutionStatusMsg,
 	MissionSendStatus,
 	MissionSendStatusMsg,
+	PointCloudMsg,
+	RadarPointCloudMsg,
 	RadarSpokeMsg,
 	RcRemoteMsg,
 	SimGnssVelocityMsg,
@@ -60,21 +70,46 @@ from revolt_api.geo import latlon_to_local_cartesian, local_cartesian_to_latlon
 
 logger = structlog.get_logger(__name__)
 
-# The vessel's radar (Furuno DRS4D-NXT) emits 8,192 raw spokes per revolution (confirmed via
-# Furuno's NavNet API spec: "A frame of image consists of 8,192 lines of sweep", bundled in
-# Hardware/radar/RadarSDK/), which at a typical 24-48 RPM rotation speed is several thousand raw
-# spoke messages per second -- far too high to forward 1:1 over the browser WebSocket. Raw spokes
-# are instead aggregated per-connection-independent (this state is global to the bridge, not
-# per-subscriber) into this many coarser azimuth bins, merging intensity by taking the max across
-# every raw spoke that lands in the same bin, and only forwarded once the antenna moves on to the
-# next bin (see _handle_radar_spoke). This keeps full 360-degree coverage every rotation at a
-# bounded message rate, instead of either flooding the browser or dropping azimuth resolution
-# outright. Must match RADAR_NUM_BINS in the frontend's useRadarData.ts.
+# The radar (Furuno DRS4D-NXT) emits ~8,192 raw spokes/revolution, several thousand per second
+# at typical rotation speeds: too high to forward 1:1 over the WebSocket. Raw spokes are instead
+# merged (max intensity) into this many azimuth bins, shared bridge-wide (not per-subscriber), and
+# flushed once the antenna moves to the next bin (see _handle_radar_spoke). Keeps full coverage at
+# a bounded rate. Must match RADAR_NUM_BINS in the frontend's useRadarData.ts.
 RADAR_NUM_BINS = 512
 RADAR_BIN_WIDTH_RAD = (2 * math.pi) / RADAR_NUM_BINS
 # Safety flush if the antenna stalls on one bin for longer than a real rotation would ever take,
 # so a disconnected/stopped radar doesn't leave the last bin's data buffered forever unsent.
 RADAR_ACCUM_MAX_AGE_MS = 3000
+
+# A full VLP-16 sweep is ~28,800 points/frame -- too much to forward 1:1 over the WebSocket at any
+# useful rate. Voxel-grid decimation gives spatially-uniform coverage (dense near returns don't
+# waste budget, sparse far returns aren't over-thinned) and, unlike stride sampling, doesn't
+# collapse the 16 rings together: points from different rings hitting the same wall at different
+# heights land in different z-buckets and both survive, which is what lets the flattened 2D view
+# and the 3D view show more than /scan's single ring.
+VELODYNE_VOXEL_SIZE_M = 0.15
+VELODYNE_MAX_POINTS = 5000
+
+# /radar/points is being evaluated alongside the existing /radar/spoke feed, not replacing it yet
+# (see protocol.py's TopicSpec description) -- decimation here is mostly a safety-net cap, not a
+# load-bearing rate reduction the way it is for Velodyne: a radar sweep's point count is far lower
+# than the VLP-16's ~28,800/frame, and returns are naturally sparser at range. Voxel size is a
+# starting point, not yet tuned against real radar data.
+RADAR_POINTS_VOXEL_SIZE_M = 1.0
+RADAR_POINTS_MAX_POINTS = 5000
+
+# Course over ground comes from atan2 of the GNSS Doppler velocity vector (see
+# _handle_gnss_velocity); near zero speed the noise dominates the signal and the angle swings
+# wildly, so below this threshold course_deg is published as None rather than a meaningless value.
+# Set well under ReVolt's normal transit speed (~0.5-1 kn) so it only suppresses genuine near-zero
+# noise. A placeholder like useAisTargets.ts's STALE_MS/EXPIRE_MS, not a spec'd value; revisit
+# against the VS330's actual noise floor if needed.
+MIN_COG_SPEED_MS = 0.1
+# EMA smoothing on the velocity vector, not the angle (averaging angles breaks at the 0/360
+# wraparound; averaging vector components then taking atan2 is exact), damping residual Doppler
+# noise above MIN_COG_SPEED_MS. Higher alpha tracks course changes faster but smooths less; the
+# same kind of "COG damping" real marine chartplotters/AIS units expose as a filter time constant.
+GNSS_VEL_EMA_ALPHA = 0.3
 
 AckStatus = Literal["acknowledged", "timed_out", "not_connected", "mismatched"]
 
@@ -83,7 +118,7 @@ AckStatus = Literal["acknowledged", "timed_out", "not_connected", "mismatched"]
 class PendingAck:
 	"""Tracks a publish awaiting confirmation via the vessel's echoed waypoint list.
 
-	expected is (sequence_number, x_metres, y_metres) per waypoint, in order — compared
+	expected is (sequence_number, x_metres, y_metres) per waypoint, in order, compared
 	against the next /waypoint_list message that arrives after the publish.
 	"""
 
@@ -97,6 +132,8 @@ ServiceCallError = Literal["not_connected", "timed_out", "service_call_failed"]
 
 @dataclass
 class ServiceCallResult:
+	"""Outcome of a call_service() rosapi introspection call."""
+
 	ok: bool
 	values: dict[str, Any] | None
 	error: ServiceCallError | None
@@ -104,14 +141,40 @@ class ServiceCallResult:
 
 @dataclass
 class PendingServiceCall:
+	"""Tracks a call_service() request awaiting its service_response frame."""
+
 	event: asyncio.Event = field(default_factory=asyncio.Event)
 	result: ServiceCallResult | None = None
 
 
 @dataclass
 class LatestRawMessage:
+	"""The last raw (untransformed) wire message received on a topic, for echo_topic."""
+
 	msg: dict[str, Any]
 	timestamp_ms: int
+
+
+def _voxel_decimate(points: np.ndarray, voxel_size: float, max_points: int) -> np.ndarray:
+	"""Downsample points to at most one point per voxel cell, capped at max_points.
+
+	Args:
+		points: (N, D) array, D >= 3. Voxel bucketing uses only the first 3 columns (x, y, z);
+			any additional columns (e.g. intensity) are carried through unchanged.
+		voxel_size: edge length of each cubic voxel cell, in metres.
+		max_points: hard cap on the number of points returned; a random subset is kept if the
+			voxelized result still exceeds this (rare in practice, a safety net).
+
+	Returns:
+		(M, D) array, M <= max_points.
+	"""
+	voxel_idx = np.floor(points[:, :3] / voxel_size).astype(np.int64)
+	_, unique_idx = np.unique(voxel_idx, axis=0, return_index=True)
+	decimated = points[unique_idx]
+	if decimated.shape[0] > max_points:
+		keep = np.random.default_rng().choice(decimated.shape[0], max_points, replace=False)
+		decimated = decimated[keep]
+	return decimated
 
 
 class RosBridgeClient:
@@ -129,6 +192,7 @@ class RosBridgeClient:
 		gnss_origin_lat: float = 0.0,
 		gnss_origin_lon: float = 0.0,
 	) -> None:
+		"""Build the client; call start() to actually connect."""
 		self._url = url
 		self._target = target
 		self._gnss_origin_lat = gnss_origin_lat
@@ -152,6 +216,10 @@ class RosBridgeClient:
 		self._radar_accum_intensity: list[int] = []
 		self._radar_accum_meta: dict[str, float | int] | None = None
 		self._radar_accum_started_ms: int = 0
+
+		# EMA-smoothed GNSS velocity components, see _handle_gnss_velocity below.
+		self._gnss_vel_ema_vx: float | None = None
+		self._gnss_vel_ema_vy: float | None = None
 
 		# Build a topic → throttle-seconds lookup covering both target inventories so that
 		# _dispatch() can drop messages for high-freq topics before they reach browser queues.
@@ -196,18 +264,22 @@ class RosBridgeClient:
 			"/waypoint_list": self._handle_waypoint_list,
 			"/camera/camera/color/image_raw/compressed": self._handle_camera_frame,
 			"/scan": self._handle_lidar_scan,
+			"/velodyne_points": self._handle_velodyne_points,
 			"/radar/spoke": self._handle_radar_spoke,
+			"/radar/points": self._handle_radar_points,
 			"/ais/decoded_message": self._handle_ais_target,
 			"/imu/data": self._handle_imu,
 		}
 
 	async def start(self) -> None:
+		"""Start the background connect/receive loop and the 1 Hz heartbeat publisher."""
 		self._receive_task = asyncio.create_task(self._run(), name="rosbridge_receive")
 		self._heartbeat_task = asyncio.create_task(
 			self._heartbeat_loop(), name="rosbridge_heartbeat"
 		)
 
 	async def stop(self) -> None:
+		"""Cancel the background tasks started by start(). Called at application shutdown."""
 		for task in (self._receive_task, self._heartbeat_task):
 			if task is not None:
 				task.cancel()
@@ -215,6 +287,7 @@ class RosBridgeClient:
 					await task
 
 	def subscribe(self) -> "asyncio.Queue[BridgeMessage]":
+		"""Register a new frontend connection's queue and prime it with current status."""
 		q: asyncio.Queue[BridgeMessage] = asyncio.Queue(maxsize=100)
 		self._subscribers.add(q)
 		# Push current status immediately so new clients don't have to wait for the next
@@ -225,6 +298,7 @@ class RosBridgeClient:
 		return q
 
 	def unsubscribe(self, q: "asyncio.Queue[BridgeMessage]") -> None:
+		"""Deregister a frontend connection's queue, e.g. on WebSocket disconnect."""
 		self._subscribers.discard(q)
 
 	async def publish(self, topic: str, ros_type: str, msg: dict) -> None:
@@ -246,8 +320,10 @@ class RosBridgeClient:
 	) -> AckStatus:
 		"""Publish, then wait for the mission planner's /waypoint_list echo to confirm it landed.
 
-		There is no ROS2 service/ack for these topics (see CLAUDE.md's phased-transport note) — the
-		only confirmation available is that the sim's own active-list echo matches what was sent.
+		There is no ROS2 service/ack for these topics; the only confirmation available is that
+		waypoint_switcher_node's own active-list echo matches what was sent. Requires the caller's
+		BRIDGE_TARGET to actually subscribe to /waypoint_list (see protocol.py's
+		PHYSICAL_SUBSCRIBE_TOPICS / SIMULATION_SUBSCRIBE_TOPICS) -- both targets do.
 		Only one send can be pending at a time; a second call while one is in flight replaces it.
 		"""
 		if not self._connected:
@@ -274,7 +350,7 @@ class RosBridgeClient:
 	) -> ServiceCallResult:
 		"""Call a rosbridge/rosapi service and await its response via the call_service op.
 
-		Deliberately not built on PendingAck/self._pending_ack -- that mechanism is single-flight
+		Deliberately not built on PendingAck/self._pending_ack; that mechanism is single-flight
 		by design for a specific vessel side-effect (see publish_and_await_ack's docstring: "only
 		one send can be pending at a time"). Service calls have no such constraint (e.g. two
 		browser tabs issuing different introspection commands concurrently), so correlation is by
@@ -322,7 +398,7 @@ class RosBridgeClient:
 		"""The last raw (untransformed) message received on this topic since connect, if any.
 
 		Only ever populated for topics this client actually subscribes to (get_subscribe_topics,
-		applied in _send_subscriptions) -- echo_topic's "must be an already-allow-listed topic"
+		applied in _send_subscriptions), so echo_topic's "must be an already-allow-listed topic"
 		restriction is therefore structural here, not just validated by the caller.
 		"""
 		return self._latest_raw_by_topic.get(topic)
@@ -357,11 +433,11 @@ class RosBridgeClient:
 		)
 
 	def track_mission(self, mission_id: str, total_count: int) -> None:
-		"""Start deriving live execution status (current waypoint, progress) for this mission
-		from subsequent /waypoint_list echoes. Called by the start endpoint before publishing,
-		not after -- so the echo that resolves publish_and_await_ack's own wait attributes
-		correctly to this mission rather than whatever was tracked previously. Defaults to
-		"starting" rather than "active" since the ack hasn't landed yet at this point."""
+		"""Start deriving live execution status for this mission from /waypoint_list echoes.
+
+		See MissionExecutionTracker.track() for the full rationale (call ordering relative to
+		publish_and_await_ack, default state).
+		"""
 		self._mission_tracker.track(mission_id, total_count)
 
 	def untrack_mission(self) -> None:
@@ -375,11 +451,14 @@ class RosBridgeClient:
 		current_waypoint_seq: int | None,
 		remaining_count: int,
 	) -> None:
-		"""Broadcast execution status for the currently tracked mission, filling in total_count
-		from the count captured at track_mission() time (e.g. pause keeps the mission tracked,
-		just relabels its state, so a resumed Start still has the right denominator for
-		progress). No-op if mission_id isn't the one currently tracked -- only one mission is
-		tracked at a time by design, so this guards against broadcasting under the wrong id."""
+		"""Broadcast execution status for the currently tracked mission.
+
+		Fills in total_count from the count captured at track_mission() time (e.g. pause keeps
+		the mission tracked, just relabels its state, so a resumed Start still has the right
+		denominator for progress). No-op if mission_id isn't the one currently tracked; only one
+		mission is tracked at a time by design, so this guards against broadcasting under the
+		wrong id.
+		"""
 		if not self._mission_tracker.set_state_if_tracked(mission_id, state):
 			return
 		self.broadcast_mission_execution_status(
@@ -421,51 +500,65 @@ class RosBridgeClient:
 		self._mission_tracker.set_resume_point(mission_id, remaining)
 
 	def pop_resume_point(self, mission_id: str) -> list[SimWaypoint] | None:
-		"""Consume and discard this mission's resume point, if any. Called on a successful
-		resume-start (the snapshot has now been used) and on terminate (no resume should
-		survive an abort)."""
+		"""Consume and discard this mission's resume point, if any.
+
+		See MissionExecutionTracker.pop_resume_point() for when this is called.
+		"""
 		return self._mission_tracker.pop_resume_point(mission_id)
 
 	def has_resume_points(self) -> bool:
+		"""Whether any mission currently has a paused-queue snapshot to resume from."""
 		return self._mission_tracker.has_resume_points()
 
 	def clear_resume_cache(self) -> list[str]:
-		"""Discard every resume point and return the mission ids that were invalidated. Called
-		when a publish to /update_waypoint_list replaces the vessel's entire queue, since any
-		previously-paused mission's snapshot no longer reflects reality."""
+		"""Discard every resume point and return the mission ids that were invalidated.
+
+		See MissionExecutionTracker.clear_resume_cache() for when this is called.
+		"""
 		return self._mission_tracker.clear_resume_cache()
 
 	def get_camera_frame_count(self, camera_id: str) -> int:
+		"""How many frames have been received for this camera since connect."""
 		return self._camera_frame_counters.get(camera_id, 0)
 
 	def get_camera_frame(self, camera_id: str) -> bytes | None:
+		"""The latest decoded JPEG frame for this camera, if one has arrived."""
 		return self.latest_camera_frames.get(camera_id)
 
 	def latlon_to_cartesian(self, lat: float, lon: float) -> tuple[float, float]:
-		"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North). Inverse of
-		_cartesian_to_latlon, used when serialising outbound waypoints for the sim."""
+		"""Convert WGS84 degrees to local Cartesian metres (X=East, Y=North).
+
+		Inverse of _cartesian_to_latlon, used when serialising outbound waypoints for the sim.
+		"""
 		return latlon_to_local_cartesian(lat, lon, self._gnss_origin_lat, self._gnss_origin_lon)
 
 	@property
 	def connected(self) -> bool:
+		"""Whether the backend currently has a live WebSocket connection to rosbridge."""
 		return self._connected
 
 	@property
 	def target(self) -> str:
+		"""BRIDGE_TARGET this client was constructed with ("physical" or "simulation")."""
 		return self._target
 
 	@property
 	def tracked_mission_id(self) -> str | None:
+		"""The mission id currently being tracked for live execution status, if any."""
 		return self._mission_tracker.tracked_mission_id
 
 	@property
 	def tracked_state(self) -> MissionExecutionState:
+		"""The tracked mission's current execution state."""
 		return self._mission_tracker.tracked_state
 
 	@property
 	def latest_waypoint_list(self) -> list[SimWaypoint] | None:
-		"""Whatever the vessel's queue actually still contains right now, as of the last
-		/waypoint_list echo (already reflects any waypoints it has popped as reached)."""
+		"""The vessel's live waypoint queue.
+
+		Whatever it actually still contains right now, as of the last /waypoint_list echo
+		(already reflects any waypoints it has popped as reached).
+		"""
 		return self._mission_tracker.latest_waypoint_list
 
 	async def _run(self) -> None:
@@ -519,7 +612,7 @@ class RosBridgeClient:
 		if op != "publish":
 			return
 		topic = data.get("topic", "")
-		# Populated unconditionally, before the frontend fan-out throttle below -- echo_topic
+		# Populated unconditionally, before the frontend fan-out throttle below: echo_topic
 		# must reflect the true latest wire message, not whatever the browser-facing throttle
 		# happens to have let through.
 		self._latest_raw_by_topic[topic] = LatestRawMessage(
@@ -549,11 +642,13 @@ class RosBridgeClient:
 			logger.warning("rosbridge_queue_full", dropped=dropped, topic=topic)
 
 	def _transform(self, topic: str, msg: dict) -> BridgeMessage | None:
-		"""Dispatch to the per-topic handler registered in self._topic_handlers (built in
-		__init__), or None for topics this bridge doesn't forward. Replaces what used to be one
-		large match statement -- each handler below is now small and independently callable/
-		testable, and adding a topic means adding one method plus one dict entry rather than
-		growing a single branch further."""
+		"""Dispatch to the per-topic handler registered in self._topic_handlers.
+
+		Returns None for topics this bridge doesn't forward. Replaces what used to be one large
+		match statement; each handler below is now small and independently callable/testable, and
+		adding a topic means adding one method plus one dict entry rather than growing a single
+		branch further.
+		"""
 		handler = self._topic_handlers.get(topic)
 		if handler is None:
 			return None
@@ -764,12 +859,32 @@ class RosBridgeClient:
 		# linear.x = speed*sin(course), linear.y = speed*cos(course).
 		lin = msg["twist"]["linear"]
 		vx, vy = float(lin["x"]), float(lin["y"])
+		speed_ms = math.hypot(vx, vy)
+
+		# EMA on the vector components, not the angle; see GNSS_VEL_EMA_ALPHA's own comment.
+		alpha = GNSS_VEL_EMA_ALPHA
+		ema_vx = (
+			vx
+			if self._gnss_vel_ema_vx is None
+			else alpha * vx + (1 - alpha) * self._gnss_vel_ema_vx
+		)
+		ema_vy = (
+			vy
+			if self._gnss_vel_ema_vy is None
+			else alpha * vy + (1 - alpha) * self._gnss_vel_ema_vy
+		)
+		self._gnss_vel_ema_vx = ema_vx
+		self._gnss_vel_ema_vy = ema_vy
+
+		course_deg = (
+			math.degrees(math.atan2(ema_vx, ema_vy)) % 360 if speed_ms >= MIN_COG_SPEED_MS else None
+		)
 		return GnssVelocityMsg(
 			v="1",
 			type="gnss_velocity",
 			timestamp_ms=now,
-			speed_ms=math.hypot(vx, vy),
-			course_deg=math.degrees(math.atan2(vx, vy)) % 360,
+			speed_ms=speed_ms,
+			course_deg=course_deg,
 		)
 
 	def _handle_sim_gnss_velocity(self, msg: dict, now: int) -> BridgeMessage | None:
@@ -802,6 +917,11 @@ class RosBridgeClient:
 		w, x, y, z = float(q["w"]), float(q["x"]), float(q["y"]), float(q["z"])
 		# Standard quaternion-to-Euler (ZYX order) extraction. The yaw term is the same formula
 		# already validated in _handle_gnss_heading; roll/pitch extend it to the other two axes.
+		# The raw formula's sign, taken at face value, showed the vessel rolling/pitching the
+		# wrong way on ImuWidget's pitch-roll gauge -- confirmed by comparing a rosbag's playback
+		# against that same rosbag's camera feed, not just guessed -- so both are negated here to
+		# match the vessel's actual visible motion (and the maritime convention the gauge assumes:
+		# positive roll = starboard down, positive pitch = bow down).
 		roll_rad = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
 		pitch_rad = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
 		yaw_rad = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
@@ -811,8 +931,8 @@ class RosBridgeClient:
 			v="1",
 			type="imu_data",
 			timestamp_ms=now,
-			roll_deg=math.degrees(roll_rad),
-			pitch_deg=math.degrees(pitch_rad),
+			roll_deg=-math.degrees(roll_rad),
+			pitch_deg=-math.degrees(pitch_rad),
 			yaw_deg=math.degrees(yaw_rad) % 360,
 			accel_x=float(accel["x"]),
 			accel_y=float(accel["y"]),
@@ -850,10 +970,15 @@ class RosBridgeClient:
 		self._check_pending_ack(waypoints)
 		self._mission_tracker.record_waypoint_list_echo(waypoints)
 		tracked_mission_id = self._mission_tracker.tracked_mission_id
-		if tracked_mission_id is not None:
+		tracked_state = self._mission_tracker.tracked_state
+		# Only rebroadcast for an actively-executing mission. A paused/terminated mission's queue
+		# was intentionally emptied by our own pause/terminate command (see mission_service.py);
+		# rebroadcasting that empty echo would show a misleading "0 remaining", indistinguishable
+		# from a genuinely completed route. Skip it and leave the last known progress standing.
+		if tracked_mission_id is not None and tracked_state in ("starting", "active"):
 			self.broadcast_mission_execution_status(
 				tracked_mission_id,
-				self._mission_tracker.tracked_state,
+				tracked_state,
 				waypoints[0]["id"] if waypoints else None,
 				len(waypoints),
 				self._mission_tracker.tracked_total_count,
@@ -890,6 +1015,83 @@ class RosBridgeClient:
 			ranges=ranges,
 		)
 
+	def _handle_velodyne_points(self, msg: dict, now: int) -> BridgeMessage | None:
+		# Field offsets/point_step/endianness are read from the wire message rather than
+		# hardcoded, so this doesn't silently break if velodyne_pointcloud's field layout ever
+		# changes (e.g. a firmware/driver upgrade, or a different Velodyne model). rosbridge_suite
+		# JSON-encodes PointCloud2.data (a uint8[]) as base64, same convention as
+		# _handle_camera_frame/_handle_radar_spoke already rely on.
+		point_step = int(msg["point_step"])
+		endian = ">" if msg.get("is_bigendian", False) else "<"
+		field_offsets = {f["name"]: int(f["offset"]) for f in msg["fields"]}
+		if not all(k in field_offsets for k in ("x", "y", "z")):
+			logger.warning("velodyne_points_missing_xyz_field")
+			return None
+
+		raw = base64.b64decode(msg["data"])
+		dtype = np.dtype(
+			{
+				"names": ["x", "y", "z"],
+				"formats": [f"{endian}f4"] * 3,
+				"offsets": [field_offsets["x"], field_offsets["y"], field_offsets["z"]],
+				"itemsize": point_step,
+			}
+		)
+		points = np.frombuffer(raw, dtype=dtype)
+		xyz = np.stack([points["x"], points["y"], points["z"]], axis=1)
+		xyz = xyz[np.isfinite(xyz).all(axis=1)]  # organized cloud marks invalid returns as NaN
+		if xyz.shape[0] == 0:
+			return None
+
+		decimated = _voxel_decimate(xyz, VELODYNE_VOXEL_SIZE_M, VELODYNE_MAX_POINTS)
+		return PointCloudMsg(
+			v="1",
+			type="point_cloud",
+			timestamp_ms=now,
+			points=[round(float(v), 2) for v in decimated.flatten()],
+			point_count=decimated.shape[0],
+		)
+
+	def _handle_radar_points(self, msg: dict, now: int) -> BridgeMessage | None:
+		# Same generic field-offset parsing as _handle_velodyne_points, extended to also read
+		# intensity: radar echo strength drives the widget's brightness, unlike lidar's flattened
+		# 2D view, which doesn't use one.
+		point_step = int(msg["point_step"])
+		endian = ">" if msg.get("is_bigendian", False) else "<"
+		field_offsets = {f["name"]: int(f["offset"]) for f in msg["fields"]}
+		if not all(k in field_offsets for k in ("x", "y", "z", "intensity")):
+			logger.warning("radar_points_missing_field")
+			return None
+
+		raw = base64.b64decode(msg["data"])
+		dtype = np.dtype(
+			{
+				"names": ["x", "y", "z", "intensity"],
+				"formats": [f"{endian}f4"] * 4,
+				"offsets": [
+					field_offsets["x"],
+					field_offsets["y"],
+					field_offsets["z"],
+					field_offsets["intensity"],
+				],
+				"itemsize": point_step,
+			}
+		)
+		points = np.frombuffer(raw, dtype=dtype)
+		xyzi = np.stack([points["x"], points["y"], points["z"], points["intensity"]], axis=1)
+		xyzi = xyzi[np.isfinite(xyzi).all(axis=1)]
+		if xyzi.shape[0] == 0:
+			return None
+
+		decimated = _voxel_decimate(xyzi, RADAR_POINTS_VOXEL_SIZE_M, RADAR_POINTS_MAX_POINTS)
+		return RadarPointCloudMsg(
+			v="1",
+			type="radar_point_cloud",
+			timestamp_ms=now,
+			points=[round(float(v), 2) for v in decimated.flatten()],
+			point_count=decimated.shape[0],
+		)
+
 	def _finalize_radar_bin(self, now: int) -> BridgeMessage | None:
 		meta = self._radar_accum_meta
 		if meta is None:
@@ -909,7 +1111,7 @@ class RosBridgeClient:
 
 	def _handle_radar_spoke(self, msg: dict, now: int) -> BridgeMessage | None:
 		# rosbridge_suite's JSON wire protocol encodes ROS uint8[] fields as base64 strings, not
-		# plain JSON arrays -- same treatment _handle_camera_frame already gives
+		# plain JSON arrays; same treatment _handle_camera_frame already gives
 		# sensor_msgs/CompressedImage.data. Verify this assumption against real radar hardware
 		# once available; confirmed here only against the mock's matching encoding.
 		intensity = list(base64.b64decode(msg["intensity"]))
@@ -948,24 +1150,54 @@ class RosBridgeClient:
 		return result
 
 	def _handle_ais_target(self, msg: dict, now: int) -> BridgeMessage | None:
-		# custom_msgs/SimpleAISdata.msg documents 102.3 as the AIS protocol's own "speed not
-		# available" sentinel. Hardware/ais/ais/ais_decoder.py additionally falls back to a
-		# 0.00001 placeholder when a decoded message type carries no speed field at all (e.g. a
-		# base station report). Both mean "no sog"; tolerances guard against float roundtrip noise
-		# on the wire rather than requiring an exact match.
+		# 102.3 is custom_msgs/SimpleAISdata's "speed not available" sentinel; ais_decoder.py also
+		# falls back to a 0.00001 placeholder when a message type has no speed field at all. Both
+		# mean "no sog"; the tolerance guards against float roundtrip noise, not an exact match.
 		sog = float(msg["sog"])
 		heading = int(msg["heading"])
 		sog_kn = None if sog >= 102.25 or sog < 0.001 else sog
 		heading_deg = None if heading == 511 else heading
+
+		# .get() with the same sentinel ais_decoder.py itself defaults to, not msg[...]: cog/turn/
+		# status are newer fields than sog/heading, so a not-yet-updated vessel (or an older
+		# recorded rosbag) may still publish SimpleAISdata messages without them at all.
+		# 360.0 is the AIS "course not available" sentinel (and ais_decoder.py's own fallback when
+		# a message type has no course field); genuine courses are always < 360.
+		cog = float(msg.get("cog", 360.0))
+		cog_deg = None if cog >= 359.95 else cog
+
+		# -128 is the AIS "no turn information available" sentinel (and ais_decoder.py's own
+		# fallback when a message type has no turn field). +-127 mean "turning right/left faster
+		# than 5deg/30s, precise rate unavailable" -- still meaningful, passed through as-is
+		# rather than nulled.
+		turn = float(msg.get("turn", -128))
+		turn_deg_per_min = None if turn == -128.0 else turn
+
+		nav_status = int(msg.get("status", 15))
+
+		# ITU-R M.1371 also sentinels missing position as lat=91/lon=181, decoded verbatim by
+		# pyais and genuinely on the wire for targets without a fix yet. This crashed the
+		# frontend's map marker before (maplibre rejects latitude outside -90..90), so it's
+		# checked as a general range rather than the exact sentinel, catching any other corrupted
+		# decode too (same posture as _handle_physical_gnss_fix's check below).
+		lat = float(msg["lat"])
+		lon = float(msg["lon"])
+		if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+			logger.warning("rosbridge_ais_target_invalid_position", lat=lat, lon=lon)
+			return None
+
 		return AisTargetMsg(
 			v="1",
 			type="ais_target",
 			timestamp_ms=now,
 			mmsi=int(msg["mmsi"]),
-			lat=float(msg["lat"]),
-			lon=float(msg["lon"]),
+			lat=lat,
+			lon=lon,
 			sog_kn=sog_kn,
 			heading_deg=heading_deg,
+			cog_deg=cog_deg,
+			turn_deg_per_min=turn_deg_per_min,
+			nav_status=nav_status,
 		)
 
 	def _cartesian_to_latlon(self, x_m: float, y_m: float) -> tuple[float, float]:
@@ -1004,10 +1236,12 @@ class RosBridgeClient:
 				)
 
 	def _push_mission_execution_status_to(self, q: "asyncio.Queue[BridgeMessage]") -> None:
-		"""Push the currently tracked mission's execution status immediately, mirroring
-		_push_status_to/_push_camera_status_to -- otherwise a client that connects (or
+		"""Push the currently tracked mission's execution status immediately.
+
+		Mirrors _push_status_to/_push_camera_status_to; otherwise a client that connects (or
 		reconnects, e.g. on page refresh) after a mission was already started has no way to learn
-		its live state until the next /waypoint_list echo or command broadcast happens to fire."""
+		its live state until the next /waypoint_list echo or command broadcast happens to fire.
+		"""
 		tracked_mission_id = self._mission_tracker.tracked_mission_id
 		if tracked_mission_id is None:
 			return

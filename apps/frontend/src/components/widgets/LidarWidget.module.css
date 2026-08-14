@@ -7,8 +7,10 @@
 	gap: 4px;
 }
 
-/* Fills all space above the controls; observed for canvas sizing */
+/* Fills all space above the controls; observed for canvas sizing. position: relative so the
+   no-signal overlay below can absolutely position itself over just this area. */
 .canvasArea {
+	position: relative;
 	flex: 1;
 	min-height: 0;
 	width: 100%;
@@ -17,12 +19,54 @@
 	justify-content: center;
 }
 
-.canvas {
-	display: block;
+/* Same "last known frame, clearly marked as no longer live" convention as CameraWidget -- a
+   frozen lidar scan looks identical to a live one, so this needs an explicit signal rather than
+   an opacity dim. */
+.overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: var(--overlay-container-background-color, rgba(0, 0, 0, 0.75));
+	z-index: 1;
+	pointer-events: none;
 }
 
+.overlayText {
+	font-size: 0.9rem;
+	color: var(--overlay-element-neutral-color, rgba(255, 255, 255, 0.64));
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+/* canvasSize (the width/height attributes, drawing-buffer resolution) is set async via
+   ResizeObserver, a frame behind the container actually resizing. Without a CSS cap here, the
+   canvas's displayed size is driven purely by those attributes (a canvas defaults to its
+   attribute size like an image), so during that lag it could render larger than .canvasArea's
+   current flex-computed box, overflow, and push .controls (the stepper) out past TileCard's
+   clipped bounds. max-width/max-height decouple "how big it's drawn" from "how big it looks":
+   the canvas always visually fits its container regardless of any timing gap in canvasSize. */
+.canvas {
+	display: block;
+	max-width: 100%;
+	max-height: 100%;
+}
+
+/* r3f's <Canvas> sizes its drawing buffer to this wrapper via its own ResizeObserver, so unlike
+   .canvas above it just needs to fill .canvasArea, not be clamped against a lagging attribute. */
+.canvas3d {
+	width: 100%;
+	height: 100%;
+}
+
+/* flex-shrink: 0 so this never gives up space: without it, once .canvasArea (min-height: 0) has
+   shrunk to nothing, the flex algorithm starts shrinking .controls too, and obc-stepper-box's own
+   shadow-DOM content doesn't shrink gracefully below its natural size, it clips instead. The
+   canvas is the element that should give way as the tile shrinks, not the stepper control. */
 .controls {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	flex-shrink: 0;
 }

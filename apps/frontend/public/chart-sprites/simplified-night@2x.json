@@ -1,0 +1,153 @@
+{
+	"buoy-lateral-port": {
+		"width": 48,
+		"height": 48,
+		"x": 0,
+		"y": 0,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-lateral-stbd": {
+		"width": 48,
+		"height": 48,
+		"x": 48,
+		"y": 0,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-cardinal-north": {
+		"width": 48,
+		"height": 48,
+		"x": 96,
+		"y": 0,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-cardinal-east": {
+		"width": 48,
+		"height": 48,
+		"x": 144,
+		"y": 0,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-cardinal-south": {
+		"width": 48,
+		"height": 48,
+		"x": 192,
+		"y": 0,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-cardinal-west": {
+		"width": 48,
+		"height": 48,
+		"x": 0,
+		"y": 48,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-special-purpose": {
+		"width": 48,
+		"height": 48,
+		"x": 48,
+		"y": 48,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-safe-water": {
+		"width": 48,
+		"height": 48,
+		"x": 96,
+		"y": 48,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"buoy-default": { "width": 48, "height": 48, "x": 144, "y": 48, "pixelRatio": 2, "sdf": false },
+	"beacon-lateral-port": {
+		"width": 48,
+		"height": 48,
+		"x": 192,
+		"y": 48,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-lateral-stbd": {
+		"width": 48,
+		"height": 48,
+		"x": 0,
+		"y": 96,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-cardinal-north": {
+		"width": 48,
+		"height": 48,
+		"x": 48,
+		"y": 96,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-cardinal-east": {
+		"width": 48,
+		"height": 48,
+		"x": 96,
+		"y": 96,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-cardinal-south": {
+		"width": 48,
+		"height": 48,
+		"x": 144,
+		"y": 96,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-cardinal-west": {
+		"width": 48,
+		"height": 48,
+		"x": 192,
+		"y": 96,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-special-purpose": {
+		"width": 48,
+		"height": 48,
+		"x": 0,
+		"y": 144,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-safe-water": {
+		"width": 48,
+		"height": 48,
+		"x": 48,
+		"y": 144,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-isolated-danger": {
+		"width": 48,
+		"height": 48,
+		"x": 96,
+		"y": 144,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"beacon-default": {
+		"width": 48,
+		"height": 48,
+		"x": 144,
+		"y": 144,
+		"pixelRatio": 2,
+		"sdf": false
+	},
+	"light-red": { "width": 48, "height": 48, "x": 192, "y": 144, "pixelRatio": 2, "sdf": false },
+	"light-green": { "width": 48, "height": 48, "x": 0, "y": 192, "pixelRatio": 2, "sdf": false },
+	"light-yellow": { "width": 48, "height": 48, "x": 48, "y": 192, "pixelRatio": 2, "sdf": false },
+	"rock": { "width": 48, "height": 48, "x": 96, "y": 192, "pixelRatio": 2, "sdf": false },
+	"wreck": { "width": 48, "height": 48, "x": 144, "y": 192, "pixelRatio": 2, "sdf": false },
+	"obstruction": { "width": 48, "height": 48, "x": 192, "y": 192, "pixelRatio": 2, "sdf": false }
+}

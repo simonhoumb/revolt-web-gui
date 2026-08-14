@@ -1,3 +1,5 @@
+"""The AuditLog table model, written to by audit.log_action() for every command-issuing endpoint."""
+
 import uuid
 from datetime import datetime
 from typing import Any
@@ -10,6 +12,8 @@ from revolt_api.models.base import Base
 
 
 class AuditLog(Base):
+	"""One logged command-issuing action: who (session_id), what, and the vessel state at the time."""
+
 	__tablename__ = "audit_log"
 
 	id: Mapped[uuid.UUID] = mapped_column(

@@ -1,0 +1,8 @@
+.panel {
+	position: fixed;
+	top: var(--app-components-topbar-touch-target-size);
+	left: 0;
+	bottom: 0;
+	width: 280px;
+	z-index: 100;
+}

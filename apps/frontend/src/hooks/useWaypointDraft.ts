@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { HazardSummary, Waypoint } from "@revolt/shared-types";
-import { useMission } from "../context/MissionContext.js";
-import { useLegHazards } from "../context/LegHazardsContext.js";
+import { useMission } from "../context/useMission.js";
+import { useLegHazards } from "../context/useLegHazards.js";
 import { computeLegPositions, haversineDistanceM, bearingDeg } from "../lib/geo.js";
 
 export interface Leg {
@@ -21,6 +21,7 @@ export interface WaypointDraft {
 // mission (a fresh [] literal would otherwise be a new reference each time).
 const EMPTY_WAYPOINTS: Waypoint[] = [];
 
+/** The active mission's waypoints plus derived per-leg distance/bearing/hazard summaries. */
 export function useWaypointDraft(): WaypointDraft {
 	const { activeMission } = useMission();
 	const { legValidation } = useLegHazards();

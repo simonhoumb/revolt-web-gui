@@ -2,6 +2,64 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	height: 100%;
+	min-height: 0;
+}
+
+.propulsionLayout {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex: 1;
+	min-height: 0;
+}
+
+/* Bow's gauge plus its actuator retracted/deployed addendum below it -- the only reading with no
+   field in obc-azimuth-thruster-labeled itself.
+   No min-height override (left at its auto default) -- unlike .propulsionLayout above, this row
+   must NOT be forced to shrink smaller than its content: see .gaugeWrap's comment for why. */
+.bowRow {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex: 1;
+}
+
+/* Port and starboard: obc-azimuth-thruster-labeled bundles its own label + Angle/Power fields +
+   gauge, so this is just the two components side by side, no separate readout column needed.
+   No min-height override here either, for the same reason as .bowRow. */
+.sternRow {
+	display: flex;
+	gap: 8px;
+	flex: 1;
+}
+
+/* Wraps each gauge so a corner StaleBadge has a position: relative ancestor to anchor to,
+   without needing to touch obc-azimuth-thruster-labeled's own sizing below.
+   min-height is a real floor, not 0: the gauge's own rendered content is always at least ~182px
+   tall (AzimuthThrusterLabeledSize.medium's true minimum, confirmed by measuring it at several
+   explicit heights -- it never renders shorter, regardless of the box it's given). Flooring here
+   keeps that fact honest in the box model instead of forcing a box the content will ignore anyway
+   -- with min-height: 0, the box itself could still be told to collapse to nothing while the
+   content rendered at full height regardless, bleeding down into whatever sat below it (the stern
+   row, for the bow gauge). .bowRow/.sternRow leaving min-height at auto (not 0) is what lets this
+   floor propagate outward instead of being squashed again one level up; if the tile is shorter
+   than everything needs, the overflow now happens once, cleanly, at the bottom of the whole
+   widget (clipped by TileCard's body), not as a collapse-and-bleed between unrelated rows. */
+.gaugeWrap {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	min-height: 182px;
+	display: flex;
+}
+
+/* obc-azimuth-thruster-labeled has no default :host size (its own internal .wrapper is
+   width: 100%; height: 100%, unsized until the host itself is). Shared by all three gauges. */
+.thrusterGauge {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
 }
 
 .badgeRow {
@@ -74,7 +132,22 @@
 	padding-left: 24px;
 }
 
+/* Same status-dot-plus-label shape as .actuatorRow, without its padding-left -- that indent is
+   meant to align under a preceding label in ThrusterRow's stacked detailed-view layout, which
+   readoutContainer (a standalone compact column, see propulsionLayout above) doesn't have. */
+.readoutActuatorRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .actuatorLabel {
 	font-size: 0.75rem;
 	color: var(--element-inactive-color, #9c6a34);
+}
+
+/* Last-known reading whose topic has gone quiet -- still shown (maritime convention), just
+   visually marked as no longer live rather than hidden. */
+.stale {
+	opacity: 0.5;
 }
