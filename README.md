@@ -35,13 +35,24 @@ WebApp/
 └── .env.example
 ```
 
+### Where things live
+
+- **Frontend**: state lives in `src/context/` with one provider per change-reason (session, live bridge data, layout, mission CRUD, chart settings). The dashboard is a grid of tiles defined in `src/components/widgets/registry.ts`; each widget is one component + one CSS module. Shared helpers live in `src/lib/`, data-fetching/subscription logic in `src/hooks/`.
+- **Backend**: `routers/` are thin HTTP boundaries (parse request, fetch or 404, delegate) that hand off to `services/` for actual command orchestration. `bridge/` owns the ROS2 WebSocket connection and message transforms. `models/` are the SQLAlchemy ORM tables, `schemas/` are the Pydantic API shapes.
+
 ## Getting started
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- [Node.js 20](https://nodejs.org/) + pnpm (`npm install -g pnpm@9`)
+- [Docker](https://docs.docker.com/engine/install/) and Docker Compose
+- [Node.js 20](https://nodejs.org/), then enable pnpm via corepack (matches the version pinned in `package.json` and used in CI): `corepack enable && corepack prepare pnpm@9.15.9 --activate`
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
+
+Both pnpm and uv install to `~/.local/bin` on a fresh Ubuntu account, which usually isn't on `PATH` by default, see Troubleshooting below if either command isn't found after installing.
+
+### Editor setup [Optional, but recommended when using VSCode]
+
+Open the repo folder in VS Code and accept the "install recommended extensions" prompt (`.vscode/extensions.json`: ESLint, Prettier, Ruff, Python). Format-on-save is already configured. The Python interpreter is pinned to `apps/backend/.venv/bin/python`, so run the Python install step below before VS Code can resolve backend imports.
 
 ### First-time setup
 
@@ -52,8 +63,8 @@ cp .env.example .env
 # 2. Install Node dependencies and generate lockfile
 pnpm install
 
-# 3. Install Python dependencies
-cd apps/backend && uv sync && cd ../..
+# 3. Install Python dependencies (--extra dev pulls in ruff/pytest, used below)
+cd apps/backend && uv sync --extra dev && cd ../..
 ```
 
 ### Running locally
@@ -69,11 +80,18 @@ docker compose up db
 cd apps/backend && uv run alembic upgrade head && cd ../..
 ```
 
-By default the backend expects a real vessel or simulation to connect to over Tailscale. To get realistic sensor data flowing without either, start the mock bridge instead and point `.env` at it:
+The `.env` you just copied defaults to `VESSEL_HOST=rosbridge-mock`, but that container only starts with `--profile mock`, so plain `docker compose up` on its own has nothing to connect to yet. Pick whichever of these matches your setup:
 
 ```bash
+# Mock bridge: no vessel needed, fake sensor data
 docker compose --profile mock up
-# .env: VESSEL_HOST=rosbridge-mock, BRIDGE_TARGET=physical
+
+# Physical vessel on the same LAN or Wi-Fi (e.g. connected to the vessel's own network):
+# .env: VESSEL_HOST=<vessel IP address>, BRIDGE_TARGET=physical
+docker compose up
+
+# Physical vessel over Tailscale, see Networking (Tailscale) below
+docker compose --profile vessel up
 ```
 
 | Service             | URL                            |
@@ -125,7 +143,9 @@ cd apps/backend && uv run alembic upgrade head && cd ../..
 
 ### Networking (Tailscale)
 
-The backend reaches the physical vessel over Tailscale via a small `vessel-proxy` sidecar, not by joining the tailnet directly from the backend container. `network_mode: "service:tailscale"` on the backend itself breaks Docker's internal DNS (`db` would become unreachable).
+This section only applies if you're using the Tailscale connection mode mentioned above, e.g. because your laptop isn't on the same LAN/Wi-Fi as the vessel. If you're on the same network as the vessel, use the LAN mode instead and skip this section.
+
+If Tailscale is the mode you're using, the backend reaches the physical vessel over it via a small `vessel-proxy` sidecar, not by joining the tailnet directly from the backend container. `network_mode: "service:tailscale"` on the backend itself breaks Docker's internal DNS (`db` would become unreachable).
 
 **To connect to the vessel:**
 
@@ -142,12 +162,14 @@ See [.env.example](.env.example) for the mock, physical-vessel, and simulation c
 
 ### Environment variables
 
-See [.env.example](.env.example) for all required variables. Never commit `.env`.
+See [.env.example](.env.example) for all required variables. Never commit `.env`. For day-to-day local development you can ignore most of it: the database vars, plus whichever one of the three `VESSEL_HOST`/`BRIDGE_TARGET` pairs from Running locally above matches how you're connecting. The Tailscale-specific vars (`TAILSCALE_AUTHKEY`, `TS_HOSTNAME`) only matter for the Tailscale connection mode — see Networking above.
 
 ### Troubleshooting
 
 - **`pnpm`/`uv`: command not found**: both install to `~/.local/bin` rather than system-wide on some setups. If the shell can't find them, run `export PATH="$HOME/.local/bin:$PATH"`.
 - **pytest fails on startup with a `PYTHONPATH` or launch_pytest error**: if ROS2 is sourced in the shell (e.g. `source /opt/ros/.../setup.bash` in your `.bashrc`), its `PYTHONPATH` leaks into the backend's Python environment and conflicts with pytest. Clear it before running: `PYTHONPATH="" uv run pytest`. `test.sh` already does this for you.
+- **`docker compose up` fails with "permission denied" / "Cannot connect to the Docker daemon"**: a fresh Ubuntu account usually isn't in the `docker` group yet. Follow Docker's [post-install steps for Linux](https://docs.docker.com/engine/install/linux-postinstall/), then log out and back in.
+- **A port is already in use (5173/8000/5432/3000)**: usually a `docker compose` stack left running from an earlier session. Run `docker compose down` and try again.
 
 ## Contributing
 
