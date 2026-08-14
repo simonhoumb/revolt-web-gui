@@ -80,11 +80,18 @@ docker compose up db
 cd apps/backend && uv run alembic upgrade head && cd ../..
 ```
 
-By default the backend expects a real vessel or simulation to connect to over Tailscale. To get sensor data flowing without either, start the mock bridge instead and point `.env` at it:
+The `.env` you just copied defaults to `VESSEL_HOST=rosbridge-mock`, but that container only starts with `--profile mock`, so plain `docker compose up` on its own has nothing to connect to yet. Pick whichever of these matches your setup:
 
 ```bash
+# Mock bridge: no vessel needed, fake sensor data
 docker compose --profile mock up
-# .env: VESSEL_HOST=rosbridge-mock, BRIDGE_TARGET=physical
+
+# Physical vessel on the same LAN or Wi-Fi (e.g. connected to the vessel's own network):
+# .env: VESSEL_HOST=<vessel IP address>, BRIDGE_TARGET=physical
+docker compose up
+
+# Physical vessel over Tailscale, see Networking (Tailscale) below
+docker compose --profile vessel up
 ```
 
 | Service             | URL                            |
@@ -136,7 +143,9 @@ cd apps/backend && uv run alembic upgrade head && cd ../..
 
 ### Networking (Tailscale)
 
-The backend reaches the physical vessel over Tailscale via a small `vessel-proxy` sidecar, not by joining the tailnet directly from the backend container. `network_mode: "service:tailscale"` on the backend itself breaks Docker's internal DNS (`db` would become unreachable).
+This section only applies if you're using the Tailscale connection mode mentioned above, e.g. because your laptop isn't on the same LAN/Wi-Fi as the vessel. If you're on the same network as the vessel, use the LAN mode instead and skip this section.
+
+If Tailscale is the mode you're using, the backend reaches the physical vessel over it via a small `vessel-proxy` sidecar, not by joining the tailnet directly from the backend container. `network_mode: "service:tailscale"` on the backend itself breaks Docker's internal DNS (`db` would become unreachable).
 
 **To connect to the vessel:**
 
@@ -153,7 +162,7 @@ See [.env.example](.env.example) for the mock, physical-vessel, and simulation c
 
 ### Environment variables
 
-See [.env.example](.env.example) for all required variables. Never commit `.env`. For day-to-day local development you can ignore most of it: the database vars and the mock-profile defaults are all that's needed to get the app running. The Tailscale/vessel vars (`TAILSCALE_AUTHKEY`, `TS_HOSTNAME`, `VESSEL_HOST=vessel-proxy`) only matter once you're connecting to a real vessel — see Networking above.
+See [.env.example](.env.example) for all required variables. Never commit `.env`. For day-to-day local development you can ignore most of it: the database vars, plus whichever one of the three `VESSEL_HOST`/`BRIDGE_TARGET` pairs from Running locally above matches how you're connecting. The Tailscale-specific vars (`TAILSCALE_AUTHKEY`, `TS_HOSTNAME`) only matter for the Tailscale connection mode — see Networking above.
 
 ### Troubleshooting
 
